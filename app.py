@@ -356,4 +356,33 @@ if st.session_state.get("optimal_global_result") is not None:
         rows = [{"策略": STRATEGY_LABELS.get(r["strategy"], r["strategy"]), "K線": r["timeframe"], "參數": str(r.get("params", {})), "分數": r.get("score")} for r in tbl]
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
+    # Qwen AI 解讀最優策略
+    st.subheader("Qwen AI 解讀最優策略")
+    ai_col = st.container()
+    with ai_col:
+        ai_clicked = st.button("讓 Qwen 分析這組最優策略", key="qwen_analyze_optimal")
+        if ai_clicked:
+            try:
+                from src.ai import qwen_simple
+
+                prompt_lines = [
+                    f"最優策略：{STRATEGY_LABELS.get(gs, gs)}",
+                    f"K 線週期：{gtf}",
+                    f"參數：{gpar}",
+                    f"杠杆倍數：{int(gm.get('leverage', 1))}x",
+                    f"總報酬率：{gm.get('total_return_pct', 0)}%",
+                    f"年化報酬：{gm.get('annual_return_pct', 0)}%",
+                    f"最大回撤：{gm.get('max_drawdown_pct', 0)}%",
+                    f"夏普：{gm.get('sharpe_ratio', 0)}",
+                    f"交易次數：{gm.get('num_trades', 0)}，勝率：{gm.get('win_rate_pct', 0)}%",
+                    "",
+                    "請用繁體中文，幫我：",
+                    "1）簡短說明這組策略的「優點」與「風險點」。",
+                    "2）指出在實際下單時需要特別留意哪些情境（例如連續虧損、爆倉風險、滑點等）。",
+                ]
+                ai_text = qwen_simple("\n".join(prompt_lines))
+                st.markdown(ai_text or "（Qwen 沒有回傳內容）")
+            except Exception as e:
+                st.warning(f\"Qwen 調用失敗：{e}\")
+
 st.caption("免責聲明：本報告僅供學習與研究，不構成投資建議。最優參數為歷史回測結果，不代表未來表現。")
