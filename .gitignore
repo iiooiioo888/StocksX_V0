@@ -1,0 +1,22 @@
+# 緩存與資料
+data/
+cache/
+*.db
+*.sqlite
+*.sqlite3
+
+# 環境
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,7 @@
+# 通用回測平台 MVP - 加密貨幣數據層 + 回測頁面
+# 免費數據源：Binance / Bybit 透過 CCXT
+
+ccxt>=4.0.0
+python-dotenv>=1.0.0
+streamlit>=1.28.0
+pandas>=2.0.0
