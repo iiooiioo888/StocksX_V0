@@ -87,6 +87,39 @@ with st.sidebar:
             stop_loss_pct = st.number_input("止損 %", min_value=0.0, value=0.0, step=0.5)
         exclude_outliers = st.checkbox("排除插針資料", value=False)
 
+    with st.expander("⚙️ 策略參數自訂", expanded=False):
+        st.caption("調整各策略的參數，留空則使用預設值")
+        custom_params: dict[str, dict] = {}
+        c1, c2 = st.columns(2)
+        with c1:
+            sma_fast = st.number_input("SMA 快線", min_value=2, value=10, step=1, key="sma_f")
+            sma_slow = st.number_input("SMA 慢線", min_value=5, value=30, step=5, key="sma_s")
+        custom_params["sma_cross"] = {"fast": sma_fast, "slow": sma_slow}
+        with c2:
+            rsi_period = st.number_input("RSI 週期", min_value=5, value=14, step=1, key="rsi_p")
+            rsi_ob = st.number_input("RSI 超買", min_value=50, value=70, step=5, key="rsi_ob")
+            rsi_os = st.number_input("RSI 超賣", min_value=10, value=30, step=5, key="rsi_os")
+        custom_params["rsi_signal"] = {"period": rsi_period, "oversold": float(rsi_os), "overbought": float(rsi_ob)}
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            macd_f = st.number_input("MACD 快線", min_value=2, value=12, step=1, key="macd_f")
+            macd_s = st.number_input("MACD 慢線", min_value=5, value=26, step=1, key="macd_s")
+            macd_sig = st.number_input("MACD 信號", min_value=2, value=9, step=1, key="macd_sig")
+        custom_params["macd_cross"] = {"fast": macd_f, "slow": macd_s, "signal": macd_sig}
+        with mc2:
+            boll_p = st.number_input("布林帶週期", min_value=5, value=20, step=1, key="boll_p")
+            boll_std = st.number_input("布林帶倍數", min_value=0.5, value=2.0, step=0.5, key="boll_std")
+        custom_params["bollinger_signal"] = {"period": boll_p, "std_dev": boll_std}
+        custom_params["buy_and_hold"] = {}
+
+    with st.expander("🔄 多標的對比", expanded=False):
+        compare_symbols_str = st.text_input(
+            "輸入要對比的交易對（逗號分隔）",
+            value="", placeholder="例: ETH/USDT:USDT, SOL/USDT:USDT",
+            key="compare_syms",
+        )
+        compare_btn = st.button("📊 執行對比回測", use_container_width=True, key="compare_btn")
+
     run_btn = st.button("🚀 執行回測", type="primary", use_container_width=True)
 
     st.divider()
@@ -118,7 +151,7 @@ if run_btn:
             if rows is not None:
                 st.session_state["ohlcv_rows"] = rows
                 for strategy in ALL_STRATEGIES:
-                    params = (backtest_strategies.STRATEGY_CONFIG.get(strategy, {}).get("defaults") or {}).copy()
+                    params = custom_params.get(strategy) or (backtest_strategies.STRATEGY_CONFIG.get(strategy, {}).get("defaults") or {}).copy()
                     res = _run_backtest_on_rows(
                         rows=rows, exchange_id=exchange_id, symbol=symbol, timeframe=timeframe,
                         since_ms=since_ms, until_ms=until_ms, strategy=strategy, strategy_params=params,
@@ -130,6 +163,29 @@ if run_btn:
         for key in ("optimal_global_result", "optimal_global_strategy", "optimal_global_timeframe",
                      "optimal_global_params", "optimal_global_table", "optimal_global_objective"):
             st.session_state.pop(key, None)
+
+# ────────────────────────── 多標的對比 ──────────────────────────
+if compare_btn and compare_symbols_str.strip():
+    compare_list = [s.strip() for s in compare_symbols_str.split(",") if s.strip()]
+    if symbol not in compare_list:
+        compare_list.insert(0, symbol)
+    with st.spinner(f"正在對比 {len(compare_list)} 個標的…"):
+        compare_results: dict[str, dict] = {}
+        for sym in compare_list:
+            try:
+                fetcher = CryptoDataFetcher(exchange_id)
+                rows = fetcher.get_ohlcv(sym, timeframe, since_ms, until_ms, fill_gaps=True)
+                params_bh = {}
+                res = _run_backtest_on_rows(
+                    rows=rows, exchange_id=exchange_id, symbol=sym, timeframe=timeframe,
+                    since_ms=since_ms, until_ms=until_ms, strategy="buy_and_hold", strategy_params=params_bh,
+                    initial_equity=initial_equity, leverage=leverage,
+                    take_profit_pct=None, stop_loss_pct=None,
+                )
+                compare_results[sym] = {"result": res, "rows": rows}
+            except Exception as e:
+                compare_results[sym] = {"error": str(e)}
+        st.session_state["compare_results"] = compare_results
 
 # ────────────────────────── 最優搜尋 ──────────────────────────
 if optimize_btn and since_ms < until_ms:
@@ -366,6 +422,186 @@ else:
 csv_buf = BytesIO()
 df_perf.to_csv(csv_buf, index=False, encoding="utf-8-sig")
 st.download_button("📥 下載績效摘要 CSV", csv_buf.getvalue(), "backtest_summary.csv", "text/csv")
+
+# ─── 交易損益分佈 + 持倉時長分佈 ───
+all_trades_for_charts = []
+for strategy in ALL_STRATEGIES:
+    if strategy not in backtest_results:
+        continue
+    res = backtest_results[strategy]
+    if res.error or not res.trades:
+        continue
+    for t in res.trades:
+        t_copy = dict(t)
+        t_copy["strategy"] = STRATEGY_LABELS.get(strategy, strategy)
+        all_trades_for_charts.append(t_copy)
+
+if all_trades_for_charts:
+    chart_col1, chart_col2 = st.columns(2)
+
+    with chart_col1:
+        with st.expander("📊 交易損益分佈", expanded=True):
+            pnl_values = [t["pnl_pct"] for t in all_trades_for_charts]
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Histogram(
+                x=pnl_values, nbinsx=30, name="P&L %",
+                marker_color=["#26A69A" if v >= 0 else "#EF5350" for v in sorted(pnl_values)],
+            ))
+            win_count = sum(1 for v in pnl_values if v > 0)
+            loss_count = sum(1 for v in pnl_values if v < 0)
+            avg_win = sum(v for v in pnl_values if v > 0) / win_count if win_count else 0
+            avg_loss = sum(v for v in pnl_values if v < 0) / loss_count if loss_count else 0
+            fig_hist.add_vline(x=0, line_dash="dash", line_color="gray")
+            fig_hist.update_layout(
+                height=300, margin=dict(l=0, r=0, t=30, b=0),
+                xaxis_title="報酬率 %", yaxis_title="次數",
+                title_text=f"盈 {win_count} 筆 (平均 {avg_win:.2f}%) / 虧 {loss_count} 筆 (平均 {avg_loss:.2f}%)",
+                title_font_size=13,
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+    with chart_col2:
+        with st.expander("⏱️ 持倉時長分佈", expanded=True):
+            durations_h = [(t["exit_ts"] - t["entry_ts"]) / 3600000 for t in all_trades_for_charts]
+            fig_dur = go.Figure()
+            fig_dur.add_trace(go.Histogram(
+                x=durations_h, nbinsx=20, name="持倉時長",
+                marker_color="rgba(99,110,250,0.7)",
+            ))
+            avg_dur = sum(durations_h) / len(durations_h) if durations_h else 0
+            fig_dur.add_vline(x=avg_dur, line_dash="dash", line_color="#FF9800",
+                              annotation_text=f"平均 {avg_dur:.1f}h")
+            fig_dur.update_layout(
+                height=300, margin=dict(l=0, r=0, t=30, b=0),
+                xaxis_title="持倉時長 (小時)", yaxis_title="次數",
+                title_text=f"共 {len(durations_h)} 筆交易，平均持倉 {avg_dur:.1f} 小時",
+                title_font_size=13,
+            )
+            st.plotly_chart(fig_dur, use_container_width=True)
+
+# ─── 週報酬率熱力圖 ───
+if curves_ok and valid_results:
+    with st.expander("🗓️ 每日報酬率熱力圖", expanded=False):
+        heatmap_strategy = st.selectbox(
+            "選擇策略", list(valid_results.keys()), index=0,
+            format_func=lambda x: STRATEGY_LABELS.get(x, x), key="heatmap_strat"
+        )
+        hr = valid_results[heatmap_strategy]
+        if hr.equity_curve and len(hr.equity_curve) > 1:
+            eq_ts = pd.to_datetime([e["timestamp"] for e in hr.equity_curve], unit="ms", utc=True)
+            eq_vals = [e["equity"] for e in hr.equity_curve]
+            eq_series = pd.Series(eq_vals, index=eq_ts)
+            daily_eq = eq_series.resample("D").last().dropna()
+            daily_ret = daily_eq.pct_change().dropna() * 100
+
+            if len(daily_ret) > 0:
+                df_daily = pd.DataFrame({"date": daily_ret.index, "return": daily_ret.values})
+                df_daily["week"] = df_daily["date"].dt.isocalendar().week.astype(int)
+                df_daily["weekday"] = df_daily["date"].dt.weekday
+                weekday_names = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
+                df_daily["weekday_name"] = df_daily["weekday"].map(lambda x: weekday_names[x])
+
+                pivot = df_daily.pivot_table(index="weekday", columns="week", values="return", aggfunc="mean")
+                pivot = pivot.reindex(range(7))
+                pivot.index = [weekday_names[i] for i in pivot.index]
+
+                fig_hm = go.Figure(data=go.Heatmap(
+                    z=pivot.values, x=[f"W{c}" for c in pivot.columns],
+                    y=pivot.index, colorscale="RdYlGn", zmid=0,
+                    hovertemplate="週: %{x}<br>%{y}<br>報酬: %{z:.2f}%<extra></extra>",
+                    colorbar_title="日報酬%",
+                ))
+                fig_hm.update_layout(
+                    height=280, margin=dict(l=0, r=0, t=10, b=0),
+                    yaxis=dict(autorange="reversed"),
+                )
+                st.plotly_chart(fig_hm, use_container_width=True)
+            else:
+                st.info("資料不足以產生熱力圖（需至少 2 天）")
+
+# ─── 多標的對比結果 ───
+if st.session_state.get("compare_results"):
+    st.divider()
+    st.markdown("## 🔄 多標的對比")
+    compare_data = st.session_state["compare_results"]
+    fig_cmp = go.Figure()
+    cmp_table_rows = []
+    cmp_colors = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#FF6692", "#B6E880"]
+    for i, (sym, data) in enumerate(compare_data.items()):
+        if "error" in data:
+            cmp_table_rows.append({"標的": sym, "報酬率%": "-", "最大回撤%": "-", "備註": data["error"]})
+            continue
+        res = data["result"]
+        if res.error or not res.equity_curve:
+            cmp_table_rows.append({"標的": sym, "報酬率%": "-", "最大回撤%": "-", "備註": res.error or "無數據"})
+            continue
+        eq = [e["equity"] for e in res.equity_curve]
+        idx = pd.to_datetime([e["timestamp"] for e in res.equity_curve], unit="ms", utc=True)
+        eq_norm = [e / eq[0] * 100 for e in eq]
+        color = cmp_colors[i % len(cmp_colors)]
+        fig_cmp.add_trace(go.Scatter(x=idx, y=eq_norm, mode="lines", name=sym,
+                                     line=dict(color=color, width=2)))
+        m = res.metrics
+        cmp_table_rows.append({
+            "標的": sym, "報酬率%": m.get("total_return_pct"), "年化%": m.get("annual_return_pct"),
+            "最大回撤%": m.get("max_drawdown_pct"), "夏普": m.get("sharpe_ratio"), "備註": "",
+        })
+
+    fig_cmp.add_hline(y=100, line_dash="dash", line_color="gray")
+    fig_cmp.update_layout(
+        height=400, margin=dict(l=0, r=0, t=30, b=0),
+        yaxis_title="正規化權益 (%)", legend=dict(orientation="h", y=1.05),
+        hovermode="x unified",
+    )
+    st.plotly_chart(fig_cmp, use_container_width=True)
+    st.dataframe(pd.DataFrame(cmp_table_rows), use_container_width=True, hide_index=True)
+
+# ─── 策略信號選擇器 + K 線疊加 ───
+if ohlcv_rows and len(ohlcv_rows) > 1 and valid_results:
+    with st.expander("🔔 策略信號視覺化", expanded=False):
+        sig_strategy = st.selectbox(
+            "選擇策略查看信號", [s for s in ALL_STRATEGIES if s != "buy_and_hold" and s in valid_results],
+            format_func=lambda x: STRATEGY_LABELS.get(x, x), key="sig_strat"
+        )
+        sig_params = custom_params.get(sig_strategy) or (backtest_strategies.STRATEGY_CONFIG.get(sig_strategy, {}).get("defaults") or {})
+        signals = backtest_strategies.get_signal(sig_strategy, ohlcv_rows, **sig_params)
+
+        real_bars = [r for r in ohlcv_rows if not r.get("filled")]
+        if real_bars:
+            df_sig = pd.DataFrame(real_bars)
+            df_sig["time"] = pd.to_datetime(df_sig["timestamp"], unit="ms", utc=True)
+
+            sig_map = {}
+            for i, r in enumerate(ohlcv_rows):
+                if i < len(signals):
+                    sig_map[r["timestamp"]] = signals[i]
+            df_sig["signal"] = df_sig["timestamp"].map(sig_map).fillna(0).astype(int)
+
+            buy_pts = df_sig[(df_sig["signal"] == 1) & (df_sig["signal"].shift(1) != 1)]
+            sell_pts = df_sig[(df_sig["signal"] == -1) & (df_sig["signal"].shift(1) != -1)]
+
+            fig_sig = go.Figure()
+            fig_sig.add_trace(go.Scatter(
+                x=df_sig["time"], y=df_sig["close"], mode="lines", name="收盤價",
+                line=dict(color="#888", width=1),
+            ))
+            bg_colors = df_sig["signal"].map({1: "rgba(38,166,154,0.1)", -1: "rgba(239,83,80,0.1)", 0: "rgba(0,0,0,0)"})
+            if len(buy_pts) > 0:
+                fig_sig.add_trace(go.Scatter(
+                    x=buy_pts["time"], y=buy_pts["close"], mode="markers", name="做多信號",
+                    marker=dict(symbol="triangle-up", size=10, color="#26A69A"),
+                ))
+            if len(sell_pts) > 0:
+                fig_sig.add_trace(go.Scatter(
+                    x=sell_pts["time"], y=sell_pts["close"], mode="markers", name="做空信號",
+                    marker=dict(symbol="triangle-down", size=10, color="#EF5350"),
+                ))
+            fig_sig.update_layout(
+                height=380, margin=dict(l=0, r=0, t=30, b=0),
+                title_text=f"{STRATEGY_LABELS.get(sig_strategy, sig_strategy)} 信號 — ▲多 ▼空",
+                title_font_size=14, legend=dict(orientation="h", y=1.05),
+            )
+            st.plotly_chart(fig_sig, use_container_width=True)
 
 # ─── 交易明細 ───
 with st.expander("📝 交易明細（各策略）", expanded=False):
