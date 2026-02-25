@@ -1,6 +1,7 @@
 # 緩存與資料
-data/
+/data/
 cache/
+!src/data/
 *.db
 *.sqlite
 *.sqlite3

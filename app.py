@@ -383,6 +383,6 @@ if st.session_state.get("optimal_global_result") is not None:
                 ai_text = qwen_simple("\n".join(prompt_lines))
                 st.markdown(ai_text or "（Qwen 沒有回傳內容）")
             except Exception as e:
-                st.warning(f\"Qwen 調用失敗：{e}\")
+                st.warning(f"Qwen 調用失敗：{e}")
 
 st.caption("免責聲明：本報告僅供學習與研究，不構成投資建議。最優參數為歷史回測結果，不代表未來表現。")
