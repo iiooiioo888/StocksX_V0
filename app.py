@@ -47,22 +47,59 @@ STRATEGY_COLORS = {
     "bollinger_signal": "#FFA15A",
 }
 
-SYMBOL_OPTIONS = [
-    "BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT", "SOL/USDT:USDT",
-    "XRP/USDT:USDT", "DOGE/USDT:USDT", "ADA/USDT:USDT", "AVAX/USDT:USDT",
-    "LINK/USDT:USDT", "DOT/USDT:USDT", "LTC/USDT:USDT", "UNI/USDT:USDT",
-    "ATOM/USDT:USDT", "NEAR/USDT:USDT", "APT/USDT:USDT", "ARB/USDT:USDT",
-    "OP/USDT:USDT", "SUI/USDT:USDT", "INJ/USDT:USDT", "TIA/USDT:USDT",
-    "其他（自填）",
-]
+MARKET_CATEGORIES = {
+    "🔥 主流永續": [
+        "BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT", "SOL/USDT:USDT",
+        "XRP/USDT:USDT", "DOGE/USDT:USDT", "ADA/USDT:USDT", "AVAX/USDT:USDT",
+        "LINK/USDT:USDT", "DOT/USDT:USDT", "LTC/USDT:USDT",
+    ],
+    "💎 主流現貨": [
+        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
+        "DOGE/USDT", "ADA/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT", "LTC/USDT",
+    ],
+    "🌐 DeFi": [
+        "UNI/USDT", "AAVE/USDT", "LINK/USDT", "ATOM/USDT", "INJ/USDT",
+        "UNI/USDT:USDT", "AAVE/USDT:USDT",
+    ],
+    "🚀 Layer2 / 新幣": [
+        "ARB/USDT", "OP/USDT", "SUI/USDT", "SEI/USDT", "TIA/USDT",
+        "APT/USDT", "NEAR/USDT", "WLD/USDT", "JUP/USDT", "STRK/USDT",
+        "ARB/USDT:USDT", "OP/USDT:USDT", "SUI/USDT:USDT", "SEI/USDT:USDT",
+        "TIA/USDT:USDT", "APT/USDT:USDT", "NEAR/USDT:USDT",
+    ],
+    "🐸 Meme": [
+        "DOGE/USDT", "SHIB/USDT", "PEPE/USDT", "BONK/USDT", "WIF/USDT", "FLOKI/USDT",
+        "DOGE/USDT:USDT", "SHIB/USDT:USDT", "PEPE/USDT:USDT", "BONK/USDT:USDT",
+        "WIF/USDT:USDT", "FLOKI/USDT:USDT",
+    ],
+}
+
+EXCHANGE_OPTIONS = {
+    "okx": "OKX",
+    "bitget": "Bitget",
+    "gate": "Gate.io",
+    "kucoin": "KuCoin（僅現貨）",
+    "mexc": "MEXC",
+    "htx": "HTX (火幣)",
+    "bingx": "BingX",
+    "woo": "WOO X",
+    "binance": "Binance（受地區限制）",
+    "bybit": "Bybit（受地區限制）",
+    "cryptocom": "Crypto.com（僅現貨）",
+}
 
 # ────────────────────────── 側邊欄 ──────────────────────────
 with st.sidebar:
     st.markdown("## 📊 StocksX 回測")
 
     with st.expander("🔧 基本設定", expanded=True):
-        exchange_id = st.selectbox("交易所", ["binance", "bybit", "okx"], index=0)
-        symbol_choice = st.selectbox("標的（永續合約）", SYMBOL_OPTIONS, index=0)
+        exchange_id = st.selectbox(
+            "交易所", list(EXCHANGE_OPTIONS.keys()), index=0,
+            format_func=lambda x: EXCHANGE_OPTIONS[x],
+        )
+        market_cat = st.selectbox("市場分類", list(MARKET_CATEGORIES.keys()), index=0)
+        cat_symbols = MARKET_CATEGORIES[market_cat] + ["其他（自填）"]
+        symbol_choice = st.selectbox("交易對", cat_symbols, index=0)
         if symbol_choice == "其他（自填）":
             symbol = st.text_input("自訂交易對", value="BTC/USDT:USDT", key="symbol_custom")
         else:
