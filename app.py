@@ -55,23 +55,27 @@ else:
     st.divider()
 
     # 快速導航
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown("### 📊 執行回測")
-        st.caption("五大策略 × 多市場一鍵回測")
+        st.caption("五大策略 × 多市場")
         st.page_link(_backtest_page, label="前往回測", icon="📊")
     with col2:
-        st.markdown("### 📜 歷史 & 收藏")
-        st.caption("查看記錄、管理收藏、偏好設定")
-        st.page_link(_history_page, label="前往歷史", icon="📜")
+        st.markdown("### 📡 策略監控")
+        st.caption("訂閱策略即時信號")
+        st.page_link("pages/5_📡_監控.py", label="前往監控", icon="📡")
     with col3:
+        st.markdown("### 📜 歷史 & 收藏")
+        st.caption("記錄、收藏、預設、提醒")
+        st.page_link(_history_page, label="前往歷史", icon="📜")
+    with col4:
         if user["role"] == "admin":
             st.markdown("### 🛠️ 管理後台")
-            st.caption("用戶管理、系統統計、快取管理")
+            st.caption("用戶管理、系統統計")
             st.page_link(_admin_page, label="前往管理", icon="🛠️")
         else:
             st.markdown("### ⚙️ 設定")
-            st.caption("修改暱稱、密碼、預設參數")
+            st.caption("修改暱稱、密碼")
             st.page_link(_history_page, label="前往設定", icon="⚙️")
 
     # 最近回測記錄

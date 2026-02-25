@@ -50,6 +50,25 @@ CREATE TABLE IF NOT EXISTS strategy_presets (
     created_at REAL NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS watchlist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    exchange TEXT DEFAULT 'okx',
+    timeframe TEXT DEFAULT '1h',
+    strategy TEXT NOT NULL,
+    strategy_params TEXT DEFAULT '{}',
+    initial_equity REAL DEFAULT 10000,
+    is_active INTEGER DEFAULT 1,
+    created_at REAL NOT NULL,
+    last_check REAL DEFAULT 0,
+    last_signal INTEGER DEFAULT 0,
+    last_price REAL DEFAULT 0,
+    entry_price REAL DEFAULT 0,
+    position INTEGER DEFAULT 0,
+    pnl_pct REAL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS alerts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -299,3 +318,41 @@ class UserDB:
                     if val and val >= a["threshold"]:
                         triggered.append({**a, "actual": val, "strategy": strategy})
         return triggered
+
+    # ─── 策略訂閱 (Watchlist) ───
+    def add_watch(self, user_id: int, symbol: str, exchange: str, timeframe: str,
+                  strategy: str, strategy_params: dict, initial_equity: float = 10000) -> int:
+        cur = self._conn.execute(
+            """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy, strategy_params, initial_equity, created_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (user_id, symbol, exchange, timeframe, strategy,
+             json.dumps(strategy_params, ensure_ascii=False), initial_equity, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid or 0
+
+    def get_watchlist(self, user_id: int) -> list[dict]:
+        cur = self._conn.execute("SELECT * FROM watchlist WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["strategy_params"] = json.loads(d.get("strategy_params") or "{}")
+            rows.append(d)
+        return rows
+
+    def update_watch(self, watch_id: int, **kwargs: Any) -> None:
+        allowed = {"last_check", "last_signal", "last_price", "entry_price", "position", "pnl_pct", "is_active"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        self._conn.execute(f"UPDATE watchlist SET {set_clause} WHERE id=?", (*updates.values(), watch_id))
+        self._conn.commit()
+
+    def delete_watch(self, watch_id: int) -> None:
+        self._conn.execute("DELETE FROM watchlist WHERE id=?", (watch_id,))
+        self._conn.commit()
+
+    def toggle_watch(self, watch_id: int) -> None:
+        self._conn.execute("UPDATE watchlist SET is_active = 1 - is_active WHERE id=?", (watch_id,))
+        self._conn.commit()
