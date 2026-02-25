@@ -126,7 +126,7 @@ with tab_watch:
 
                 # 顯示面板
                 m1, m2, m3, m4, m5 = st.columns(5)
-                m1.metric("💰 即時價格", f"{w['last_price']:.4g}" if w["last_price"] else "—")
+                m1.metric("💰 即時價格", f"{w['last_price']:,.2f}" if w["last_price"] else "—")
 
                 sig_text = {1: "🟢 做多", -1: "🔴 做空", 0: "⚪ 觀望"}.get(w.get("last_signal", 0), "⚪ 觀望")
                 m2.metric("📡 信號", sig_text)
@@ -139,7 +139,7 @@ with tab_watch:
                 m4.metric("💹 未實現 P&L", f"{pnl_color} {pnl:.2f}%")
 
                 entry = w.get("entry_price", 0)
-                m5.metric("📍 進場價", f"{entry:.4g}" if entry else "—")
+                m5.metric("📍 進場價", f"{entry:,.2f}" if entry else "—")
 
                 # 操作按鈕
                 bc1, bc2, bc3 = st.columns(3)
