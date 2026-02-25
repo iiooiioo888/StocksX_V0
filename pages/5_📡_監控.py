@@ -8,6 +8,7 @@ from src.auth import UserDB
 from src.data.live import get_live_price, get_current_signal, STRATEGY_LABELS
 
 st.set_page_config(page_title="StocksX — 策略監控", page_icon="📡", layout="wide")
+st.markdown('<p style="font-size:0.85rem;color:#888;">🏠 首頁 › 📡 策略監控</p>', unsafe_allow_html=True)
 
 if not st.session_state.get("user"):
     st.warning("⚠️ 請先登入")
@@ -82,7 +83,19 @@ with tab_watch:
             s_label = STRATEGY_LABELS.get(w["strategy"], w["strategy"])
             status_icon = "🟢" if w["is_active"] else "⏸️"
 
-            with st.expander(f"{status_icon} {w['symbol']} × {s_label} — {w['timeframe']}", expanded=w["is_active"]):
+            _w_equity = w.get("initial_equity", 10000)
+            _w_pnl = w.get("pnl_pct", 0)
+            _w_pos = w.get("position", 0)
+            _w_value = _w_equity * (1 + _w_pnl / 100) if _w_pos != 0 else _w_equity
+            _w_sig = {1: "🟢做多", -1: "🔴做空", 0: "⚪觀望"}.get(w.get("last_signal", 0), "⚪觀望")
+            _w_pnl_str = f"{'🟢' if _w_pnl > 0 else '🔴' if _w_pnl < 0 else '⚪'}{_w_pnl:+.2f}%"
+            _w_price_str = f"${w['last_price']:,.2f}" if w.get("last_price") else ""
+
+            _header = f"{status_icon} {w['symbol']} × {s_label}　|　{_w_sig}　|　💰${_w_value:,.0f}　|　{_w_pnl_str}"
+            if _w_price_str:
+                _header += f"　|　{_w_price_str}"
+
+            with st.expander(_header, expanded=False):
                 if refresh and w["is_active"]:
                     with st.spinner(f"更新 {w['symbol']}…"):
                         # 即時價格
