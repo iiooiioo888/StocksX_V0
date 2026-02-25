@@ -610,57 +610,126 @@ with st.expander("📝 交易明細（各策略）", expanded=False):
     if not any_trades:
         st.write("無交易記錄。")
 
-# ─── 最優策略結果 ───
+# ─── 批量回測結果（每個策略×週期的獨立細節） ───
 if st.session_state.get("optimal_global_result") is not None:
     st.divider()
-    st.markdown("## 🏆 最優策略結果")
+    st.markdown("## 🏆 批量回測結果")
     ob = st.session_state.get("optimal_global_objective", "sharpe_ratio")
-    st.caption(f"依「{OBJECTIVES.get(ob, (ob, True))[0]}」窮舉搜尋後的全局最優")
+    ob_label = OBJECTIVES.get(ob, (ob, True))[0]
+    st.caption(f"依「{ob_label}」窮舉搜尋，以下為全局最優與各策略×K線的獨立分析")
+
     gbest = st.session_state["optimal_global_result"]
     gs = st.session_state.get("optimal_global_strategy", "")
     gtf = st.session_state.get("optimal_global_timeframe", "")
     gpar = st.session_state.get("optimal_global_params", {})
+    tbl = st.session_state.get("optimal_global_table", [])
 
-    st.info(f"**策略**: {STRATEGY_LABELS.get(gs, gs)}　|　**K 線週期**: {gtf}　|　**參數**: {gpar}")
+    # ── 全局最優摘要 ──
+    st.info(f"🥇 **全局最優**：{STRATEGY_LABELS.get(gs, gs)} × {gtf}　|　參數：{gpar}")
     gm = gbest.metrics
     g_cols = st.columns(6)
-    g_cols[0].metric("杠杆倍數", f"{int(gm.get('leverage', 1))}x")
-    g_cols[1].metric("總報酬率", f"{gm.get('total_return_pct', 0)}%")
-    g_cols[2].metric("年化報酬", f"{gm.get('annual_return_pct', 0)}%")
-    g_cols[3].metric("最大回撤", f"{gm.get('max_drawdown_pct', 0)}%")
+    g_cols[0].metric("杠杆", f"{int(gm.get('leverage', 1))}x")
+    g_cols[1].metric("總報酬", f"{gm.get('total_return_pct', 0)}%")
+    g_cols[2].metric("年化", f"{gm.get('annual_return_pct', 0)}%")
+    g_cols[3].metric("回撤", f"{gm.get('max_drawdown_pct', 0)}%")
     g_cols[4].metric("夏普", gm.get("sharpe_ratio", 0))
-    g_cols[5].metric("交易次數", gm.get("num_trades", 0))
+    g_cols[5].metric("交易", gm.get("num_trades", 0))
 
-    if gbest.equity_curve:
-        curve = gbest.equity_curve
-        eq = [e["equity"] for e in curve]
-        idx = pd.to_datetime([e["timestamp"] for e in curve], unit="ms", utc=True)
-        fig_opt = go.Figure()
-        fig_opt.add_trace(go.Scatter(x=idx, y=eq, mode="lines", name="最優權益", line=dict(color="#636EFA", width=2)))
-        fig_opt.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), yaxis_title="權益")
-        st.plotly_chart(fig_opt, use_container_width=True)
-
-    tbl = st.session_state.get("optimal_global_table", [])
+    # ── 排行榜表格 ──
     if tbl:
-        st.subheader("各策略×K線 最優分數")
-        opt_rows = [{"策略": STRATEGY_LABELS.get(r["strategy"], r["strategy"]), "K線": r["timeframe"],
-                     "參數": str(r.get("params", {})), "分數": r.get("score")} for r in tbl]
-        df_opt = pd.DataFrame(opt_rows).sort_values("分數", ascending=False)
-        st.dataframe(df_opt, use_container_width=True, hide_index=True)
+        st.subheader("📊 全部組合排行榜")
+        rank_rows = []
+        sorted_tbl = sorted(tbl, key=lambda r: r.get("score") or -9999, reverse=(ob != "max_drawdown_pct"))
+        for rank, r in enumerate(sorted_tbl, 1):
+            rm = r["result"].metrics if r.get("result") else {}
+            is_best = (r["strategy"] == gs and r["timeframe"] == gtf)
+            rank_rows.append({
+                "排名": f"🥇 {rank}" if is_best else str(rank),
+                "策略": STRATEGY_LABELS.get(r["strategy"], r["strategy"]),
+                "K線": r["timeframe"],
+                "參數": str(r.get("params", {})),
+                f"{ob_label}": r.get("score"),
+                "報酬率%": rm.get("total_return_pct"),
+                "回撤%": rm.get("max_drawdown_pct"),
+                "交易數": rm.get("num_trades"),
+                "勝率%": rm.get("win_rate_pct"),
+            })
+        df_rank = pd.DataFrame(rank_rows)
+        st.dataframe(df_rank.style.map(_highlight_perf, subset=[f"{ob_label}", "報酬率%"]),
+                      use_container_width=True, hide_index=True)
 
-    # Qwen AI
-    st.subheader("🤖 Qwen AI 解讀")
-    if st.button("讓 Qwen 分析這組最優策略", key="qwen_btn"):
-        try:
-            from src.ai import qwen_simple
-            prompt_lines = [
-                f"最優策略：{STRATEGY_LABELS.get(gs, gs)}", f"K 線週期：{gtf}", f"參數：{gpar}",
-                f"總報酬率：{gm.get('total_return_pct', 0)}%", f"最大回撤：{gm.get('max_drawdown_pct', 0)}%",
-                f"夏普：{gm.get('sharpe_ratio', 0)}", f"交易次數：{gm.get('num_trades', 0)}",
-                "", "請用繁體中文，簡短分析優缺點與實盤注意事項。"
-            ]
-            st.markdown(qwen_simple("\n".join(prompt_lines)) or "（無回傳）")
-        except Exception as e:
-            st.warning(f"Qwen 調用失敗：{e}")
+        # CSV
+        csv_rank = BytesIO()
+        df_rank.to_csv(csv_rank, index=False, encoding="utf-8-sig")
+        st.download_button("📥 下載排行榜 CSV", csv_rank.getvalue(), "optimizer_ranking.csv", "text/csv",
+                           key="dl_rank")
+
+    # ── 每個策略×週期的獨立細節分析 ──
+    if tbl:
+        st.subheader("🔍 各組合詳細分析")
+        st.caption("點選下方各組合展開查看獨立的指標、權益曲線與交易明細")
+
+        for idx_r, r in enumerate(sorted_tbl):
+            res = r.get("result")
+            if not res or res.error:
+                continue
+            s_name = STRATEGY_LABELS.get(r["strategy"], r["strategy"])
+            tf_name = r["timeframe"]
+            rm = res.metrics
+            is_best = (r["strategy"] == gs and r["timeframe"] == gtf)
+            badge = "🥇 " if is_best else ""
+            score_val = r.get("score", 0)
+
+            with st.expander(
+                f"{badge}{s_name} × {tf_name}　|　{ob_label}={score_val}　報酬={rm.get('total_return_pct', 0)}%",
+                expanded=is_best,
+            ):
+                # 指標卡片
+                mc = st.columns(6)
+                mc[0].metric("報酬率", f"{rm.get('total_return_pct', 0)}%")
+                mc[1].metric("年化", f"{rm.get('annual_return_pct', 0)}%")
+                mc[2].metric("回撤", f"{rm.get('max_drawdown_pct', 0)}%")
+                mc[3].metric("夏普", rm.get("sharpe_ratio", 0))
+                mc[4].metric("Sortino", rm.get("sortino_ratio", 0))
+                mc[5].metric("交易/勝率", f"{rm.get('num_trades', 0)} / {rm.get('win_rate_pct', 0)}%")
+
+                st.caption(f"參數：{r.get('params', {})}")
+
+                # 權益曲線
+                if res.equity_curve:
+                    eq = [e["equity"] for e in res.equity_curve]
+                    eq_idx = pd.to_datetime([e["timestamp"] for e in res.equity_curve], unit="ms", utc=True)
+                    fig_detail = go.Figure()
+                    fig_detail.add_trace(go.Scatter(
+                        x=eq_idx, y=eq, mode="lines", name=f"{s_name} × {tf_name}",
+                        line=dict(color=STRATEGY_COLORS.get(r["strategy"], "#636EFA"), width=2),
+                    ))
+                    fig_detail.add_hline(y=eq[0], line_dash="dash", line_color="gray")
+                    fig_detail.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), yaxis_title="權益")
+                    st.plotly_chart(fig_detail, use_container_width=True, key=f"eq_{idx_r}")
+
+                # 交易明細
+                if res.trades:
+                    df_t = pd.DataFrame(res.trades)
+                    df_t["序號"] = range(1, len(df_t) + 1)
+                    df_t["進場"] = pd.to_datetime(df_t["entry_ts"], unit="ms", utc=True).dt.strftime("%m/%d %H:%M")
+                    df_t["出場"] = pd.to_datetime(df_t["exit_ts"], unit="ms", utc=True).dt.strftime("%m/%d %H:%M")
+                    df_t["方向"] = df_t["side"].map({1: "🟢多", -1: "🔴空"})
+                    df_t["盈虧"] = df_t["profit"].apply(lambda x: "✅" if x > 0 else "❌" if x < 0 else "➖")
+                    show = ["序號", "進場", "出場", "方向", "entry_price", "exit_price", "pnl_pct", "profit", "盈虧"]
+                    show = [c for c in show if c in df_t.columns]
+                    disp_t = df_t[show].rename(columns={
+                        "entry_price": "進場價", "exit_price": "出場價", "pnl_pct": "報酬%", "profit": "獲利"
+                    })
+                    st.dataframe(disp_t, use_container_width=True, hide_index=True)
+                    csv_detail = BytesIO()
+                    disp_t.to_csv(csv_detail, index=False, encoding="utf-8-sig")
+                    st.download_button(
+                        f"📥 下載 {s_name}×{tf_name} 交易明細",
+                        csv_detail.getvalue(), f"trades_{r['strategy']}_{tf_name}.csv", "text/csv",
+                        key=f"dl_detail_{idx_r}",
+                    )
+                else:
+                    st.caption("無交易記錄")
 
 st.caption("⚠️ 免責聲明：本報告僅供學習與研究，不構成投資建議。最優參數為歷史回測結果，不代表未來表現。")
