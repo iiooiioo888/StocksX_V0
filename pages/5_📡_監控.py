@@ -8,6 +8,7 @@ from src.auth import UserDB
 from src.data.live import get_live_price, get_current_signal, STRATEGY_LABELS
 
 st.set_page_config(page_title="StocksX — 策略監控", page_icon="📡", layout="wide")
+st.markdown('<p style="font-size:0.85rem;color:#888;">🏠 首頁 › 📡 策略監控</p>', unsafe_allow_html=True)
 
 if not st.session_state.get("user"):
     st.warning("⚠️ 請先登入")

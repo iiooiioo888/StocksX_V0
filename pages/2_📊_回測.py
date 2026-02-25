@@ -27,7 +27,9 @@ st.markdown("""<style>
 [data-testid="stMetric"] {background:#f8f9fb;border:1px solid #e0e3e8;border-radius:10px;padding:12px 16px;}
 [data-testid="stMetric"] [data-testid="stMetricValue"] {font-size:1.3rem;}
 div[data-testid="stExpander"] {border:1px solid #e0e3e8;border-radius:8px;}
+.breadcrumb {font-size:0.85rem;color:#888;margin-bottom:0.5rem;}
 </style>""", unsafe_allow_html=True)
+st.markdown('<p class="breadcrumb">🏠 首頁 › 📊 回測</p>', unsafe_allow_html=True)
 
 
 def to_ms(d):
@@ -121,16 +123,13 @@ EXCHANGE_OPTIONS = {
 with st.sidebar:
     _u = st.session_state.get("user")
     if _u:
-        st.markdown(f"### 👤 {_u['display_name']}")
-        _sc1, _sc2 = st.columns(2)
-        _sc1.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
+        _uc1, _uc2, _uc3 = st.columns([2, 1, 1])
+        _uc1.markdown(f"**👤 {_u['display_name']}**")
+        _uc2.page_link("pages/3_📜_歷史.py", label="📜", use_container_width=True)
         if _u["role"] == "admin":
-            _sc2.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", use_container_width=True)
-        if st.button("🚪 登出", use_container_width=True, key="sidebar_logout"):
-            st.session_state.pop("user", None)
-            st.switch_page("pages/1_🔐_登入.py")
-        st.divider()
-    st.markdown("## 📊 StocksX 回測")
+            _uc3.page_link("pages/4_🛠️_管理.py", label="🛠️", use_container_width=True)
+    else:
+        st.page_link("pages/1_🔐_登入.py", label="🔐 登入以保存歷史", use_container_width=True)
 
     with st.expander("🔧 基本設定", expanded=True):
         market_type = st.radio("市場大類", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True, key="mkt_type")
@@ -363,12 +362,25 @@ if "backtest_results" not in st.session_state or not st.session_state["backtest_
         best_s = st.session_state.get("optimal_global_strategy", "")
         st.session_state["backtest_results"] = {best_s: st.session_state["optimal_global_result"]}
     else:
-        st.markdown("## 📊 StocksX — 通用回測平台")
-        st.info("👈 請在左側設定參數後點擊「🚀 執行回測」或「🔍 找出最優策略」開始。")
-        col_a, col_b, col_c = st.columns(3)
-        col_a.markdown("#### 🎯 五大策略\n雙均線、買入持有、RSI、MACD、布林帶一鍵回測")
-        col_b.markdown("#### 📈 互動圖表\nK 線圖、權益曲線、回撤分析")
-        col_c.markdown("#### 🏆 最優搜尋\n窮舉策略×週期×參數找全局最優")
+        st.markdown("## 📊 開始回測")
+        st.info("👈 在左側設定參數 → 點擊「🚀 執行回測」")
+        st.divider()
+        st.markdown("### 📋 支援策略一覽")
+        _strat_info = [
+            ("雙均線交叉", "趨勢", "快慢 SMA 交叉做多空"),
+            ("EMA 交叉", "趨勢", "指數均線交叉，反應更快"),
+            ("MACD 交叉", "趨勢", "MACD 線與信號線交叉"),
+            ("RSI", "擺盪", "超買賣反轉信號"),
+            ("布林帶", "均值回歸", "突破上下軌反向交易"),
+            ("唐奇安通道", "突破", "N 期高低突破做多空"),
+            ("超級趨勢", "趨勢", "基於 ATR 的動態趨勢帶"),
+            ("雙推力", "突破", "開盤價 ± Range 突破"),
+            ("VWAP 回歸", "均值回歸", "偏離成交量加權均價反轉"),
+            ("買入持有", "基準", "持續持有作為對照基準"),
+        ]
+        _sc = st.columns(2)
+        for i, (name, cat, desc) in enumerate(_strat_info):
+            _sc[i % 2].markdown(f"**{name}**　`{cat}`　{desc}")
         st.stop()
 
 backtest_results: dict[str, BacktestResult] = st.session_state["backtest_results"]

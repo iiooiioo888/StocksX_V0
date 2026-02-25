@@ -7,6 +7,7 @@ from io import BytesIO
 from src.auth import UserDB
 
 st.set_page_config(page_title="StocksX — 歷史", page_icon="📜", layout="wide")
+st.markdown('<p style="font-size:0.85rem;color:#888;">🏠 首頁 › 📜 我的空間</p>', unsafe_allow_html=True)
 
 if not st.session_state.get("user"):
     st.warning("⚠️ 請先登入")
