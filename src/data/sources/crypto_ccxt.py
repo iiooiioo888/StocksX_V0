@@ -20,15 +20,48 @@ _TIMEFRAME_MS = {
 }
 
 
+_FALLBACK_ORDER = ["okx", "gate", "kucoin", "mexc"]
+
+
+def _create_exchange(exchange_id: str) -> tuple[ccxt.Exchange, str]:
+    """建立交易所實例，若主交易所不可用則自動回退。"""
+    cls = getattr(ccxt, exchange_id, None)
+    if cls is None:
+        raise ValueError(f"不支援的交易所: {exchange_id}")
+    exchange = cls({"enableRateLimit": True})
+    try:
+        exchange.fetch_ohlcv("BTC/USDT:USDT", "1h", limit=1)
+        return exchange, exchange_id
+    except (ccxt.ExchangeNotAvailable, ccxt.RateLimitExceeded, ccxt.NetworkError) as e:
+        logger.warning("交易所 %s 不可用 (%s)，嘗試回退...", exchange_id, e)
+    except Exception as e:
+        if "451" in str(e) or "403" in str(e) or "restricted" in str(e).lower():
+            logger.warning("交易所 %s 地區受限 (%s)，嘗試回退...", exchange_id, e)
+        else:
+            raise
+
+    for fb_id in _FALLBACK_ORDER:
+        if fb_id == exchange_id:
+            continue
+        try:
+            fb_cls = getattr(ccxt, fb_id, None)
+            if fb_cls is None:
+                continue
+            fb_exchange = fb_cls({"enableRateLimit": True})
+            fb_exchange.fetch_ohlcv("BTC/USDT:USDT", "1h", limit=1)
+            logger.info("回退到交易所: %s", fb_id)
+            return fb_exchange, fb_id
+        except Exception:
+            continue
+
+    raise RuntimeError(f"所有交易所均不可用（主: {exchange_id}，回退: {_FALLBACK_ORDER}）")
+
+
 class CcxtOhlcvSource:
     """透過 CCXT 拉取 K 線。"""
 
     def __init__(self, exchange_id: str) -> None:
-        cls = getattr(ccxt, exchange_id, None)
-        if cls is None:
-            raise ValueError(f"不支援的交易所: {exchange_id}")
-        self._exchange: ccxt.Exchange = cls({"enableRateLimit": True})
-        self._exchange_id = exchange_id
+        self._exchange, self._exchange_id = _create_exchange(exchange_id)
 
     def fetch(
         self,
@@ -80,7 +113,7 @@ class CcxtOhlcvSource:
         """批次拉取 [since, until] 區間的全部 K 線。"""
         tf_ms = _TIMEFRAME_MS.get(timeframe, 3_600_000)
         all_rows: list[dict[str, Any]] = []
-        cursor = since
+        cursor = since - (since % tf_ms)
         while cursor < until:
             batch = self.fetch(symbol, timeframe, since=cursor, limit=batch_limit)
             if not batch:
@@ -98,11 +131,7 @@ class CcxtFundingSource:
     """透過 CCXT 拉取資金費率。"""
 
     def __init__(self, exchange_id: str) -> None:
-        cls = getattr(ccxt, exchange_id, None)
-        if cls is None:
-            raise ValueError(f"不支援的交易所: {exchange_id}")
-        self._exchange: ccxt.Exchange = cls({"enableRateLimit": True})
-        self._exchange_id = exchange_id
+        self._exchange, self._exchange_id = _create_exchange(exchange_id)
 
     def fetch(
         self,

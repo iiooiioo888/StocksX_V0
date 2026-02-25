@@ -27,10 +27,10 @@ class CryptoMarketDataService:
     """組合服務：緩存優先 + 自動補齊缺口 + 插針標記。"""
 
     def __init__(self, exchange_id: str, storage: SQLiteMarketDataStorage) -> None:
-        self._exchange_id = exchange_id
         self._storage = storage
         self._ohlcv_source = CcxtOhlcvSource(exchange_id)
         self._funding_source = CcxtFundingSource(exchange_id)
+        self._exchange_id = self._ohlcv_source._exchange_id
 
     def fetch_ohlcv(
         self,
@@ -63,10 +63,11 @@ class CryptoMarketDataService:
         fill_gaps: bool = True,
         exclude_outliers: bool = False,
     ) -> list[dict[str, Any]]:
-        cached = self._storage.load_ohlcv(self._exchange_id, symbol, timeframe, since, until)
-
         tf_ms = _TIMEFRAME_MS.get(timeframe, 3_600_000)
-        expected_bars = max(1, (until - since) // tf_ms)
+        aligned_since = since - (since % tf_ms)
+        cached = self._storage.load_ohlcv(self._exchange_id, symbol, timeframe, aligned_since, until)
+
+        expected_bars = max(1, (until - aligned_since) // tf_ms)
 
         if len(cached) < expected_bars * 0.5:
             logger.info("Cache miss or insufficient, fetching from exchange: %s %s %s", symbol, timeframe, self._exchange_id)
@@ -106,39 +107,37 @@ class CryptoMarketDataService:
         until: int,
         tf_ms: int,
     ) -> list[dict[str, Any]]:
-        """前向填充 (FFill) 缺失 K 線。"""
+        """前向填充 (FFill) 缺失 K 線。O(n) 實作，cursor 對齊時間格線。"""
         if not rows:
             return rows
 
-        ts_set = {r["timestamp"] for r in rows}
-        filled: list[dict[str, Any]] = list(rows)
+        ts_map = {r["timestamp"]: r for r in rows}
+        filled: list[dict[str, Any]] = []
 
-        cursor = since
-        last_bar = rows[0]
+        cursor = since - (since % tf_ms)
+        last_close = rows[0]["close"]
+
         while cursor <= until:
-            if cursor not in ts_set:
-                fill_bar = {
+            bar = ts_map.get(cursor)
+            if bar is not None:
+                last_close = bar["close"]
+                filled.append(bar)
+            else:
+                filled.append({
                     "exchange": self._exchange_id,
                     "symbol": symbol,
                     "timeframe": timeframe,
                     "timestamp": cursor,
-                    "open": last_bar["close"],
-                    "high": last_bar["close"],
-                    "low": last_bar["close"],
-                    "close": last_bar["close"],
+                    "open": last_close,
+                    "high": last_close,
+                    "low": last_close,
+                    "close": last_close,
                     "volume": 0.0,
                     "filled": 1,
                     "is_outlier": 0,
-                }
-                filled.append(fill_bar)
-            else:
-                for r in rows:
-                    if r["timestamp"] == cursor:
-                        last_bar = r
-                        break
+                })
             cursor += tf_ms
 
-        filled.sort(key=lambda x: x["timestamp"])
         return filled
 
     def _mark_outliers(self, rows: list[dict[str, Any]]) -> None:

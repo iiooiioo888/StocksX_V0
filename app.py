@@ -65,7 +65,7 @@ SYMBOL_OPTIONS = [
 
 with st.sidebar:
     st.header("回測參數")
-    exchange_id = st.selectbox("交易所", ["binance", "bybit"], index=0)
+    exchange_id = st.selectbox("交易所", ["binance", "bybit", "okx"], index=0)
     symbol_choice = st.selectbox("標的（永續合約）", SYMBOL_OPTIONS, index=0)
     if symbol_choice == "其他（自填）":
         symbol = st.text_input("自訂交易對", value="BTC/USDT:USDT", key="symbol_custom")
