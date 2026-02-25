@@ -22,15 +22,22 @@ _TIMEFRAME_MS = {
 
 _FALLBACK_ORDER = ["okx", "gate", "kucoin", "mexc"]
 
+_exchange_cache: dict[str, tuple[ccxt.Exchange, str]] = {}
+
 
 def _create_exchange(exchange_id: str) -> tuple[ccxt.Exchange, str]:
-    """建立交易所實例，若主交易所不可用則自動回退。"""
+    """建立交易所實例，快取探測結果避免重複嘗試。"""
+    if exchange_id in _exchange_cache:
+        cached_ex, cached_id = _exchange_cache[exchange_id]
+        return type(cached_ex)({"enableRateLimit": True}), cached_id
+
     cls = getattr(ccxt, exchange_id, None)
     if cls is None:
         raise ValueError(f"不支援的交易所: {exchange_id}")
     exchange = cls({"enableRateLimit": True})
     try:
         exchange.fetch_ohlcv("BTC/USDT:USDT", "1h", limit=1)
+        _exchange_cache[exchange_id] = (exchange, exchange_id)
         return exchange, exchange_id
     except (ccxt.ExchangeNotAvailable, ccxt.RateLimitExceeded, ccxt.NetworkError) as e:
         logger.warning("交易所 %s 不可用 (%s)，嘗試回退...", exchange_id, e)
@@ -50,6 +57,7 @@ def _create_exchange(exchange_id: str) -> tuple[ccxt.Exchange, str]:
             fb_exchange = fb_cls({"enableRateLimit": True})
             fb_exchange.fetch_ohlcv("BTC/USDT:USDT", "1h", limit=1)
             logger.info("回退到交易所: %s", fb_id)
+            _exchange_cache[exchange_id] = (fb_exchange, fb_id)
             return fb_exchange, fb_id
         except Exception:
             continue

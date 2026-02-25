@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 from .engine import BacktestResult, run_backtest, _run_backtest_on_rows
-from . import strategies
+from . import strategies as _strategies_mod
 
 
 OBJECTIVES = {
@@ -55,7 +55,7 @@ def find_optimal(
     on_progress(done, total, current_params, current_result, best_result_so_far, completed_results) 每完成一組即呼叫；
     completed_results 為目前已完成且成功的 [{params, result}, ...]，可畫每組參數一條線。
     """
-    config = strategies.STRATEGY_CONFIG.get(strategy, {})
+    config = _strategies_mod.STRATEGY_CONFIG.get(strategy, {})
     grid = param_grid or config.get("param_grid") or {}
     defaults = config.get("defaults") or {}
     combos = _param_grid_to_list(grid)
@@ -179,7 +179,7 @@ def _build_full_grid(
     """產生 (strategy, timeframe, merged_params) 的完整窮舉清單。"""
     grid = []
     for strategy in strategies_list:
-        config = strategies.STRATEGY_CONFIG.get(strategy, {})
+        config = _strategies_mod.STRATEGY_CONFIG.get(strategy, {})
         defaults = config.get("defaults") or {}
         param_grid = config.get("param_grid") or {}
         combos = _param_grid_to_list(param_grid)
@@ -293,7 +293,9 @@ def find_optimal_global(
         ]
         return global_best_result, global_best_strategy, global_best_timeframe, global_best_params, results_by_combo
 
-    # 同步路徑（沿用原邏輯）
+    # 同步路徑（優化版：按 timeframe 分組，同一 timeframe 只拉取一次 K 線）
+    from src.data.crypto import CryptoDataFetcher
+
     results_by_combo = []
     global_best_result = None
     global_best_strategy = ""
@@ -303,43 +305,79 @@ def find_optimal_global(
     total_combos = len(strategies_list) * len(timeframes)
     done_combos = 0
 
-    for strategy in strategies_list:
-        for timeframe in timeframes:
-            best_result, results_list = find_optimal(
-                exchange_id=exchange_id,
-                symbol=symbol,
-                timeframe=timeframe,
-                since_ms=since_ms,
-                until_ms=until_ms,
-                strategy=strategy,
-                param_grid=None,
-                objective=objective,
-                initial_equity=initial_equity,
-                leverage=leverage,
-                take_profit_pct=take_profit_pct,
-                stop_loss_pct=stop_loss_pct,
-                exclude_outliers=exclude_outliers,
-                max_combos=max_combos_per_strategy,
-                on_progress=None,
-            )
-            done_combos += 1
-            best_params = _best_params_from_results(best_result, results_list)
-            score = best_result.metrics.get(objective) if best_result else None
-            if score is not None:
+    fetcher = CryptoDataFetcher(exchange_id)
+    rows_cache: dict[str, list] = {}
+
+    for timeframe in timeframes:
+        if timeframe not in rows_cache:
+            try:
+                rows_cache[timeframe] = fetcher.get_ohlcv(
+                    symbol, timeframe, since_ms, until_ms,
+                    fill_gaps=True, exclude_outliers=exclude_outliers,
+                )
+            except Exception:
+                rows_cache[timeframe] = []
+
+        rows = rows_cache[timeframe]
+
+        for strategy in strategies_list:
+            config = _strategies_mod.STRATEGY_CONFIG.get(strategy, {})
+            defaults = config.get("defaults") or {}
+            param_grid = config.get("param_grid") or {}
+            combos = _param_grid_to_list(param_grid)
+            if len(combos) > max_combos_per_strategy:
+                combos = combos[:max_combos_per_strategy]
+
+            local_best: BacktestResult | None = None
+            local_best_score = -float("inf")
+            local_best_params: dict[str, Any] = {}
+
+            for params in combos:
+                merged = {**defaults, **params}
+                res = _run_backtest_on_rows(
+                    rows=rows,
+                    exchange_id=exchange_id,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    since_ms=since_ms,
+                    until_ms=until_ms,
+                    strategy=strategy,
+                    strategy_params=merged,
+                    initial_equity=initial_equity,
+                    leverage=leverage,
+                    take_profit_pct=take_profit_pct,
+                    stop_loss_pct=stop_loss_pct,
+                )
+                if res.error:
+                    continue
+                score = res.metrics.get(objective)
+                if score is None:
+                    continue
                 compare_score = -score if objective == "max_drawdown_pct" else score
+                if compare_score > local_best_score:
+                    local_best_score = compare_score
+                    local_best = res
+                    local_best_params = merged
+
+            done_combos += 1
+
+            if local_best is not None:
+                local_score = local_best.metrics.get(objective)
                 results_by_combo.append({
                     "strategy": strategy,
                     "timeframe": timeframe,
-                    "params": best_params,
-                    "result": best_result,
-                    "score": score,
+                    "params": local_best_params,
+                    "result": local_best,
+                    "score": local_score,
                 })
+                compare_score = -local_score if objective == "max_drawdown_pct" else local_score
                 if compare_score > global_best_score:
                     global_best_score = compare_score
-                    global_best_result = best_result
+                    global_best_result = local_best
                     global_best_strategy = strategy
                     global_best_timeframe = timeframe
-                    global_best_params = best_params
+                    global_best_params = local_best_params
+
             if on_global_progress:
                 try:
                     on_global_progress(strategy, timeframe, done_combos, total_combos, global_best_result, global_best_params)
