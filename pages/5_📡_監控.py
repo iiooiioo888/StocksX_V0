@@ -125,21 +125,26 @@ with tab_watch:
                                       "entry_price": entry_price, "position": old_position, "pnl_pct": round(pnl, 4)})
 
                 # 顯示面板
-                m1, m2, m3, m4, m5 = st.columns(5)
-                m1.metric("💰 即時價格", f"{w['last_price']:,.2f}" if w["last_price"] else "—")
+                _equity = w.get("initial_equity", 10000)
+                _pnl = w.get("pnl_pct", 0)
+                _position = w.get("position", 0)
+                _current_value = _equity * (1 + _pnl / 100) if _position != 0 else _equity
+                _profit = _current_value - _equity
 
+                r1, r2, r3 = st.columns(3)
+                r1.metric("💰 即時價格", f"{w['last_price']:,.2f}" if w["last_price"] else "—")
                 sig_text = {1: "🟢 做多", -1: "🔴 做空", 0: "⚪ 觀望"}.get(w.get("last_signal", 0), "⚪ 觀望")
-                m2.metric("📡 信號", sig_text)
+                r2.metric("📡 當前信號", sig_text)
+                pos_text = {1: "🟢 多頭", -1: "🔴 空頭", 0: "⬜ 空倉"}.get(_position, "⬜ 空倉")
+                r3.metric("📊 持倉狀態", pos_text)
 
-                pos_text = {1: "🟢 多頭", -1: "🔴 空頭", 0: "⬜ 空倉"}.get(w.get("position", 0), "⬜ 空倉")
-                m3.metric("📊 持倉", pos_text)
-
-                pnl = w.get("pnl_pct", 0)
-                pnl_color = "🟢" if pnl > 0 else "🔴" if pnl < 0 else "⚪"
-                m4.metric("💹 未實現 P&L", f"{pnl_color} {pnl:.2f}%")
-
+                v1, v2, v3, v4 = st.columns(4)
+                _val_color = "normal" if _profit == 0 else ("off" if _profit < 0 else "normal")
+                v1.metric("🏦 帳戶價值", f"${_current_value:,.2f}", delta=f"{_profit:+,.2f}", delta_color=_val_color)
+                v2.metric("💹 未實現 P&L", f"{_pnl:+.2f}%", delta=f"${_profit:+,.2f}", delta_color=_val_color)
                 entry = w.get("entry_price", 0)
-                m5.metric("📍 進場價", f"{entry:,.2f}" if entry else "—")
+                v3.metric("📍 進場價", f"{entry:,.2f}" if entry else "—")
+                v4.metric("💵 初始資金", f"${_equity:,.2f}")
 
                 # 操作按鈕
                 bc1, bc2, bc3 = st.columns(3)
