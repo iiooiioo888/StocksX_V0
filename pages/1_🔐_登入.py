@@ -7,11 +7,14 @@ st.set_page_config(page_title="StocksX — 登入", page_icon="🔐", layout="ce
 db = UserDB()
 
 if st.session_state.get("user"):
-    st.success(f"✅ 已登入：{st.session_state['user']['display_name']}（{st.session_state['user']['role']}）")
-    if st.button("登出", type="primary"):
+    u = st.session_state["user"]
+    st.success(f"✅ 已登入：{u['display_name']}（{'👑 管理員' if u['role'] == 'admin' else '👤 用戶'}）")
+    col1, col2 = st.columns(2)
+    col1.page_link("pages/2_📊_回測.py", label="📊 前往回測", icon="📊")
+    col2.page_link("pages/3_📜_歷史.py", label="📜 歷史記錄", icon="📜")
+    if st.button("🚪 登出"):
         st.session_state.pop("user", None)
         st.rerun()
-    st.page_link("pages/2_backtest.py", label="前往回測", icon="📊")
     st.stop()
 
 st.markdown("## 🔐 StocksX 登入")
@@ -20,8 +23,8 @@ tab_login, tab_register = st.tabs(["登入", "註冊"])
 
 with tab_login:
     with st.form("login_form"):
-        username = st.text_input("帳號", key="login_user")
-        password = st.text_input("密碼", type="password", key="login_pw")
+        username = st.text_input("帳號")
+        password = st.text_input("密碼", type="password")
         submitted = st.form_submit_button("登入", type="primary", use_container_width=True)
         if submitted:
             if not username or not password:
@@ -30,8 +33,8 @@ with tab_login:
                 user = db.login(username, password)
                 if user:
                     st.session_state["user"] = user
-                    st.success(f"歡迎回來，{user['display_name']}！")
-                    st.rerun()
+                    st.success(f"歡迎，{user['display_name']}！正在跳轉…")
+                    st.switch_page("pages/2_📊_回測.py")
                 else:
                     st.error("帳號或密碼錯誤")
     st.caption("預設管理員：admin / admin123")
@@ -53,6 +56,6 @@ with tab_register:
             else:
                 result = db.register(new_user, new_pw, display_name=new_name)
                 if result:
-                    st.success("註冊成功！請切換到「登入」分頁登入。")
+                    st.success("✅ 註冊成功！請切換到「登入」分頁")
                 else:
                     st.error("帳號已存在")

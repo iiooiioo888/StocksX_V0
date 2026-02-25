@@ -125,9 +125,12 @@ with st.sidebar:
     if _u:
         st.markdown(f"### 👤 {_u['display_name']}")
         _sc1, _sc2 = st.columns(2)
-        _sc1.page_link("pages/3_history.py", label="📜 歷史", use_container_width=True)
+        _sc1.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
         if _u["role"] == "admin":
-            _sc2.page_link("pages/4_admin.py", label="🛠️ 管理", use_container_width=True)
+            _sc2.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", use_container_width=True)
+        if st.button("🚪 登出", use_container_width=True, key="sidebar_logout"):
+            st.session_state.pop("user", None)
+            st.switch_page("pages/1_🔐_登入.py")
         st.divider()
     st.markdown("## 📊 StocksX 回測")
 

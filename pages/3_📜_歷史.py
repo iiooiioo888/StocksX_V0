@@ -9,11 +9,16 @@ st.set_page_config(page_title="StocksX — 歷史", page_icon="📜", layout="wi
 
 if not st.session_state.get("user"):
     st.warning("⚠️ 請先登入")
-    st.page_link("pages/1_login.py", label="前往登入", icon="🔐")
+    st.page_link("pages/1_🔐_登入.py", label="🔐 前往登入", icon="🔐")
     st.stop()
 
 user = st.session_state["user"]
 db = UserDB()
+
+st.sidebar.markdown(f"### 👤 {user['display_name']}")
+st.sidebar.page_link("pages/2_📊_回測.py", label="📊 回測", icon="📊")
+if user["role"] == "admin":
+    st.sidebar.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", icon="🛠️")
 
 st.markdown(f"## 📜 回測歷史 — {user['display_name']}")
 
@@ -23,11 +28,13 @@ with tab_hist:
     history = db.get_history(user["id"])
     if not history:
         st.info("尚無回測歷史。執行回測後會自動保存。")
+        st.page_link("pages/2_📊_回測.py", label="📊 前往回測", icon="📊")
     else:
         st.caption(f"共 {len(history)} 筆記錄")
         rows = []
         for h in history:
             m = h.get("metrics", {})
+            ret = m.get("total_return_pct", 0)
             rows.append({
                 "ID": h["id"],
                 "時間": datetime.fromtimestamp(h["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
@@ -35,14 +42,21 @@ with tab_hist:
                 "交易所": h["exchange"],
                 "週期": h["timeframe"],
                 "策略": h["strategy"],
-                "報酬%": m.get("total_return_pct", "-"),
+                "報酬%": ret,
                 "夏普": m.get("sharpe_ratio", "-"),
                 "回撤%": m.get("max_drawdown_pct", "-"),
                 "⭐": "⭐" if h.get("is_favorite") else "",
-                "備註": h.get("notes", ""),
             })
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        def _color_ret(val):
+            try:
+                v = float(val)
+                return "color:#0d7a0d;font-weight:bold" if v > 0 else "color:#c00;font-weight:bold" if v < 0 else ""
+            except (TypeError, ValueError):
+                return ""
+
+        st.dataframe(df.style.map(_color_ret, subset=["報酬%"]), use_container_width=True, hide_index=True)
 
         csv_buf = BytesIO()
         df.to_csv(csv_buf, index=False, encoding="utf-8-sig")
@@ -56,9 +70,8 @@ with tab_hist:
                 st.rerun()
         with col2:
             del_id = st.number_input("輸入 ID 刪除記錄", min_value=1, step=1, key="del_id")
-            if st.button("🗑️ 刪除", type="secondary"):
+            if st.button("🗑️ 刪除"):
                 db.delete_history(int(del_id))
-                st.success("已刪除")
                 st.rerun()
 
 with tab_fav:
@@ -69,7 +82,8 @@ with tab_fav:
         st.caption(f"共 {len(favs)} 筆收藏")
         for f in favs:
             m = f.get("metrics", {})
-            with st.expander(f"⭐ {f['symbol']} × {f['strategy']} — 報酬 {m.get('total_return_pct', '?')}%"):
+            ret = m.get("total_return_pct", "?")
+            with st.expander(f"⭐ {f['symbol']} × {f['strategy']} — 報酬 {ret}%"):
                 cols = st.columns(5)
                 cols[0].metric("報酬率", f"{m.get('total_return_pct', 0)}%")
                 cols[1].metric("夏普", m.get("sharpe_ratio", 0))
@@ -77,7 +91,6 @@ with tab_fav:
                 cols[3].metric("交易數", m.get("num_trades", 0))
                 cols[4].metric("勝率", f"{m.get('win_rate_pct', 0)}%")
                 st.caption(f"交易所: {f['exchange']} | 週期: {f['timeframe']} | 參數: {f.get('params', {})}")
-                st.caption(f"備註: {f.get('notes', '-')}")
 
 with tab_settings:
     st.subheader("⚙️ 偏好設定")
@@ -91,7 +104,7 @@ with tab_settings:
             db.update_user(user["id"], display_name=new_name)
             st.session_state["user"]["display_name"] = new_name
         db.save_settings(user["id"], {"default_equity": default_equity, "default_leverage": default_leverage})
-        st.success("設定已儲存")
+        st.success("✅ 設定已儲存")
 
     st.divider()
     st.subheader("🔑 修改密碼")
@@ -108,4 +121,4 @@ with tab_settings:
                 st.error("密碼至少 4 個字元")
             else:
                 db.change_password(user["id"], new_pw)
-                st.success("密碼已修改")
+                st.success("✅ 密碼已修改")
