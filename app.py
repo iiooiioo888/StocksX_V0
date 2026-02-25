@@ -256,12 +256,18 @@ if valid_results:
     cols[4].metric("📐 夏普比率", f"{bm.get('sharpe_ratio', 0)}")
     cols[5].metric("🔄 交易次數", f"{bm.get('num_trades', 0)}")
 
-# ─── K 線圖 + 買賣點 ───
 ohlcv_rows = st.session_state.get("ohlcv_rows")
-if ohlcv_rows and len(ohlcv_rows) > 1:
-    real_bars = [r for r in ohlcv_rows if not r.get("filled")]
-    if real_bars:
-        with st.expander("🕯️ K 線走勢圖", expanded=True):
+curves_ok = [(s, r) for s, r in backtest_results.items() if r.equity_curve and not r.error]
+
+# ─── 用 Tabs 分頁，避免同時渲染太多 Plotly 圖表 ───
+tab_names = ["🕯️ K線+權益", "📊 統計分析", "🔔 信號視覺化"]
+tab1, tab2, tab3 = st.tabs(tab_names)
+
+with tab1:
+    # K 線圖 + 買賣點
+    if ohlcv_rows and len(ohlcv_rows) > 1:
+        real_bars = [r for r in ohlcv_rows if not r.get("filled")]
+        if real_bars:
             df_k = pd.DataFrame(real_bars)
             df_k["time"] = pd.to_datetime(df_k["timestamp"], unit="ms", utc=True)
             fig_k = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25],
@@ -275,8 +281,6 @@ if ohlcv_rows and len(ohlcv_rows) > 1:
                 x=df_k["time"], y=df_k["volume"], name="成交量",
                 marker_color="rgba(100,149,237,0.4)",
             ), row=2, col=1)
-
-            # 在 K 線上疊加最佳策略的買賣點
             if valid_results:
                 best_s_name, best_r = best_strategy
                 for t in best_r.trades:
@@ -296,20 +300,15 @@ if ohlcv_rows and len(ohlcv_rows) > 1:
                         name="出場", showlegend=False,
                         hovertemplate=f"出場<br>價格: {t['exit_price']:.2f}<br>P&L: {t['pnl_pct']:.2f}%<extra></extra>"
                     ), row=1, col=1)
-
-            fig_k.update_layout(
-                height=500, xaxis_rangeslider_visible=False,
-                margin=dict(l=0, r=0, t=30, b=0),
-                legend=dict(orientation="h", y=1.02),
-            )
+            fig_k.update_layout(height=500, xaxis_rangeslider_visible=False,
+                                margin=dict(l=0, r=0, t=30, b=0), legend=dict(orientation="h", y=1.02))
             fig_k.update_yaxes(title_text="價格", row=1, col=1)
             fig_k.update_yaxes(title_text="量", row=2, col=1)
             st.plotly_chart(fig_k, use_container_width=True)
 
-# ─── 權益曲線（Plotly 互動圖）───
-curves_ok = [(s, r) for s, r in backtest_results.items() if r.equity_curve and not r.error]
-if curves_ok:
-    with st.expander("📈 權益曲線（全部策略）", expanded=True):
+    # 權益曲線
+    if curves_ok:
+        st.subheader("📈 權益曲線")
         fig_eq = go.Figure()
         for strategy in ALL_STRATEGIES:
             if strategy not in backtest_results:
@@ -322,79 +321,42 @@ if curves_ok:
             eq = [e["equity"] for e in curve]
             label = STRATEGY_LABELS.get(strategy, strategy)
             color = STRATEGY_COLORS.get(strategy, "#888")
-            fig_eq.add_trace(go.Scatter(
-                x=idx, y=eq, mode="lines", name=label,
-                line=dict(color=color, width=2),
-                hovertemplate=f"{label}<br>權益: %{{y:,.0f}}<br>%{{x}}<extra></extra>"
-            ))
+            fig_eq.add_trace(go.Scatter(x=idx, y=eq, mode="lines", name=label,
+                                        line=dict(color=color, width=2),
+                                        hovertemplate=f"{label}<br>權益: %{{y:,.0f}}<br>%{{x}}<extra></extra>"))
         fig_eq.add_hline(y=initial_equity, line_dash="dash", line_color="gray",
                          annotation_text="初始資金", annotation_position="top left")
-        fig_eq.update_layout(
-            height=420, margin=dict(l=0, r=0, t=30, b=0),
-            legend=dict(orientation="h", y=1.05),
-            yaxis_title="權益", xaxis_title="",
-            hovermode="x unified",
-        )
+        fig_eq.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0),
+                             legend=dict(orientation="h", y=1.05), yaxis_title="權益", hovermode="x unified")
         st.plotly_chart(fig_eq, use_container_width=True)
 
-# ─── 回撤曲線 ───
-if curves_ok:
-    with st.expander("📉 回撤分析", expanded=False):
-        fig_dd = go.Figure()
-        for strategy in ALL_STRATEGIES:
-            if strategy not in backtest_results:
-                continue
-            res = backtest_results[strategy]
-            if res.error or not res.equity_curve:
-                continue
-            equities = [e["equity"] for e in res.equity_curve]
-            timestamps = pd.to_datetime([e["timestamp"] for e in res.equity_curve], unit="ms", utc=True)
-            peak = equities[0]
-            drawdowns = []
-            for e in equities:
-                if e > peak:
-                    peak = e
-                dd = (peak - e) / peak * 100 if peak else 0
-                drawdowns.append(-dd)
-            label = STRATEGY_LABELS.get(strategy, strategy)
-            color = STRATEGY_COLORS.get(strategy, "#888")
-            fig_dd.add_trace(go.Scatter(
-                x=timestamps, y=drawdowns, mode="lines", name=label,
-                line=dict(color=color, width=1.5), fill="tozeroy",
-                hovertemplate=f"{label}<br>回撤: %{{y:.2f}}%<br>%{{x}}<extra></extra>"
-            ))
-        fig_dd.update_layout(
-            height=300, margin=dict(l=0, r=0, t=10, b=0),
-            yaxis_title="回撤 %", legend=dict(orientation="h", y=1.08),
-            hovermode="x unified",
-        )
-        st.plotly_chart(fig_dd, use_container_width=True)
-
-# ─── 績效彙總表（色彩化）───
-st.subheader("📋 各策略績效彙總")
-perf_rows = []
-for strategy, res in backtest_results.items():
-    if res.error:
-        perf_rows.append({"策略": STRATEGY_LABELS.get(strategy, strategy), "總報酬率%": None, "年化報酬%": None,
-                          "最大回撤%": None, "夏普": None, "Sortino": None, "Calmar": None,
-                          "交易次數": None, "勝率%": None, "備註": res.error})
-    else:
-        m = res.metrics
-        perf_rows.append({
-            "策略": STRATEGY_LABELS.get(strategy, strategy),
-            "總報酬率%": m.get("total_return_pct"),
-            "年化報酬%": m.get("annual_return_pct"),
-            "最大回撤%": m.get("max_drawdown_pct"),
-            "夏普": m.get("sharpe_ratio"),
-            "Sortino": m.get("sortino_ratio"),
-            "Calmar": m.get("calmar_ratio"),
-            "交易次數": m.get("num_trades"),
-            "勝率%": m.get("win_rate_pct"),
-            "備註": "",
-        })
-
-df_perf = pd.DataFrame(perf_rows)
-
+    # 回撤曲線
+    if curves_ok:
+        with st.expander("📉 回撤分析", expanded=False):
+            fig_dd = go.Figure()
+            for strategy in ALL_STRATEGIES:
+                if strategy not in backtest_results:
+                    continue
+                res = backtest_results[strategy]
+                if res.error or not res.equity_curve:
+                    continue
+                equities = [e["equity"] for e in res.equity_curve]
+                timestamps = pd.to_datetime([e["timestamp"] for e in res.equity_curve], unit="ms", utc=True)
+                peak = equities[0]
+                drawdowns = []
+                for e in equities:
+                    if e > peak:
+                        peak = e
+                    dd = (peak - e) / peak * 100 if peak else 0
+                    drawdowns.append(-dd)
+                label = STRATEGY_LABELS.get(strategy, strategy)
+                color = STRATEGY_COLORS.get(strategy, "#888")
+                fig_dd.add_trace(go.Scatter(x=timestamps, y=drawdowns, mode="lines", name=label,
+                                            line=dict(color=color, width=1.5), fill="tozeroy",
+                                            hovertemplate=f"{label}<br>回撤: %{{y:.2f}}%<br>%{{x}}<extra></extra>"))
+            fig_dd.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0),
+                                 yaxis_title="回撤 %", legend=dict(orientation="h", y=1.08), hovermode="x unified")
+            st.plotly_chart(fig_dd, use_container_width=True)
 
 def _highlight_perf(val):
     if val is None or val == "" or val == "-":
@@ -409,115 +371,106 @@ def _highlight_perf(val):
         pass
     return ""
 
+with tab2:
+    perf_rows = []
+    for strategy, res in backtest_results.items():
+        if res.error:
+            perf_rows.append({"策略": STRATEGY_LABELS.get(strategy, strategy), "總報酬率%": None, "年化報酬%": None,
+                              "最大回撤%": None, "夏普": None, "Sortino": None, "Calmar": None,
+                              "交易次數": None, "勝率%": None, "備註": res.error})
+        else:
+            m = res.metrics
+            perf_rows.append({
+                "策略": STRATEGY_LABELS.get(strategy, strategy),
+                "總報酬率%": m.get("total_return_pct"), "年化報酬%": m.get("annual_return_pct"),
+                "最大回撤%": m.get("max_drawdown_pct"), "夏普": m.get("sharpe_ratio"),
+                "Sortino": m.get("sortino_ratio"), "Calmar": m.get("calmar_ratio"),
+                "交易次數": m.get("num_trades"), "勝率%": m.get("win_rate_pct"), "備註": "",
+            })
+    df_perf = pd.DataFrame(perf_rows)
+    st.subheader("📋 績效彙總")
+    num_cols = ["總報酬率%", "年化報酬%", "夏普", "Sortino", "Calmar"]
+    existing_num_cols = [c for c in num_cols if c in df_perf.columns]
+    if existing_num_cols:
+        st.dataframe(df_perf.style.map(_highlight_perf, subset=existing_num_cols), use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(df_perf, use_container_width=True, hide_index=True)
+    csv_buf = BytesIO()
+    df_perf.to_csv(csv_buf, index=False, encoding="utf-8-sig")
+    st.download_button("📥 下載績效摘要 CSV", csv_buf.getvalue(), "backtest_summary.csv", "text/csv")
 
-num_cols = ["總報酬率%", "年化報酬%", "夏普", "Sortino", "Calmar"]
-existing_num_cols = [c for c in num_cols if c in df_perf.columns]
-if existing_num_cols:
-    styled_perf = df_perf.style.map(_highlight_perf, subset=existing_num_cols)
-    st.dataframe(styled_perf, use_container_width=True, hide_index=True)
-else:
-    st.dataframe(df_perf, use_container_width=True, hide_index=True)
+    all_trades_for_charts = []
+    for strategy in ALL_STRATEGIES:
+        if strategy not in backtest_results:
+            continue
+        res = backtest_results[strategy]
+        if res.error or not res.trades:
+            continue
+        for t in res.trades:
+            t_copy = dict(t)
+            t_copy["strategy"] = STRATEGY_LABELS.get(strategy, strategy)
+            all_trades_for_charts.append(t_copy)
 
-# ─── CSV 下載 ───
-csv_buf = BytesIO()
-df_perf.to_csv(csv_buf, index=False, encoding="utf-8-sig")
-st.download_button("📥 下載績效摘要 CSV", csv_buf.getvalue(), "backtest_summary.csv", "text/csv")
-
-# ─── 交易損益分佈 + 持倉時長分佈 ───
-all_trades_for_charts = []
-for strategy in ALL_STRATEGIES:
-    if strategy not in backtest_results:
-        continue
-    res = backtest_results[strategy]
-    if res.error or not res.trades:
-        continue
-    for t in res.trades:
-        t_copy = dict(t)
-        t_copy["strategy"] = STRATEGY_LABELS.get(strategy, strategy)
-        all_trades_for_charts.append(t_copy)
-
-if all_trades_for_charts:
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        with st.expander("📊 交易損益分佈", expanded=True):
+    if all_trades_for_charts:
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            st.markdown("**📊 交易損益分佈**")
             pnl_values = [t["pnl_pct"] for t in all_trades_for_charts]
             fig_hist = go.Figure()
-            fig_hist.add_trace(go.Histogram(
-                x=pnl_values, nbinsx=30, name="P&L %",
-                marker_color=["#26A69A" if v >= 0 else "#EF5350" for v in sorted(pnl_values)],
-            ))
+            fig_hist.add_trace(go.Histogram(x=pnl_values, nbinsx=30, name="P&L %",
+                                            marker_color="rgba(239,83,80,0.7)"))
             win_count = sum(1 for v in pnl_values if v > 0)
             loss_count = sum(1 for v in pnl_values if v < 0)
             avg_win = sum(v for v in pnl_values if v > 0) / win_count if win_count else 0
             avg_loss = sum(v for v in pnl_values if v < 0) / loss_count if loss_count else 0
             fig_hist.add_vline(x=0, line_dash="dash", line_color="gray")
-            fig_hist.update_layout(
-                height=300, margin=dict(l=0, r=0, t=30, b=0),
-                xaxis_title="報酬率 %", yaxis_title="次數",
-                title_text=f"盈 {win_count} 筆 (平均 {avg_win:.2f}%) / 虧 {loss_count} 筆 (平均 {avg_loss:.2f}%)",
-                title_font_size=13,
-            )
+            fig_hist.update_layout(height=280, margin=dict(l=0, r=0, t=30, b=0),
+                                   xaxis_title="報酬率 %", yaxis_title="次數",
+                                   title_text=f"盈 {win_count} 筆 ({avg_win:.2f}%) / 虧 {loss_count} 筆 ({avg_loss:.2f}%)",
+                                   title_font_size=12)
             st.plotly_chart(fig_hist, use_container_width=True)
-
-    with chart_col2:
-        with st.expander("⏱️ 持倉時長分佈", expanded=True):
+        with chart_col2:
+            st.markdown("**⏱️ 持倉時長分佈**")
             durations_h = [(t["exit_ts"] - t["entry_ts"]) / 3600000 for t in all_trades_for_charts]
             fig_dur = go.Figure()
-            fig_dur.add_trace(go.Histogram(
-                x=durations_h, nbinsx=20, name="持倉時長",
-                marker_color="rgba(99,110,250,0.7)",
-            ))
+            fig_dur.add_trace(go.Histogram(x=durations_h, nbinsx=20, name="時長",
+                                           marker_color="rgba(99,110,250,0.7)"))
             avg_dur = sum(durations_h) / len(durations_h) if durations_h else 0
             fig_dur.add_vline(x=avg_dur, line_dash="dash", line_color="#FF9800",
                               annotation_text=f"平均 {avg_dur:.1f}h")
-            fig_dur.update_layout(
-                height=300, margin=dict(l=0, r=0, t=30, b=0),
-                xaxis_title="持倉時長 (小時)", yaxis_title="次數",
-                title_text=f"共 {len(durations_h)} 筆交易，平均持倉 {avg_dur:.1f} 小時",
-                title_font_size=13,
-            )
+            fig_dur.update_layout(height=280, margin=dict(l=0, r=0, t=30, b=0),
+                                  xaxis_title="持倉時長 (小時)", yaxis_title="次數",
+                                  title_text=f"共 {len(durations_h)} 筆，平均 {avg_dur:.1f}h", title_font_size=12)
             st.plotly_chart(fig_dur, use_container_width=True)
 
-# ─── 週報酬率熱力圖 ───
-if curves_ok and valid_results:
-    with st.expander("🗓️ 每日報酬率熱力圖", expanded=False):
-        heatmap_strategy = st.selectbox(
-            "選擇策略", list(valid_results.keys()), index=0,
-            format_func=lambda x: STRATEGY_LABELS.get(x, x), key="heatmap_strat"
-        )
-        hr = valid_results[heatmap_strategy]
-        if hr.equity_curve and len(hr.equity_curve) > 1:
-            eq_ts = pd.to_datetime([e["timestamp"] for e in hr.equity_curve], unit="ms", utc=True)
-            eq_vals = [e["equity"] for e in hr.equity_curve]
-            eq_series = pd.Series(eq_vals, index=eq_ts)
-            daily_eq = eq_series.resample("D").last().dropna()
-            daily_ret = daily_eq.pct_change().dropna() * 100
-
-            if len(daily_ret) > 0:
-                df_daily = pd.DataFrame({"date": daily_ret.index, "return": daily_ret.values})
-                df_daily["week"] = df_daily["date"].dt.isocalendar().week.astype(int)
-                df_daily["weekday"] = df_daily["date"].dt.weekday
-                weekday_names = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
-                df_daily["weekday_name"] = df_daily["weekday"].map(lambda x: weekday_names[x])
-
-                pivot = df_daily.pivot_table(index="weekday", columns="week", values="return", aggfunc="mean")
-                pivot = pivot.reindex(range(7))
-                pivot.index = [weekday_names[i] for i in pivot.index]
-
-                fig_hm = go.Figure(data=go.Heatmap(
-                    z=pivot.values, x=[f"W{c}" for c in pivot.columns],
-                    y=pivot.index, colorscale="RdYlGn", zmid=0,
-                    hovertemplate="週: %{x}<br>%{y}<br>報酬: %{z:.2f}%<extra></extra>",
-                    colorbar_title="日報酬%",
-                ))
-                fig_hm.update_layout(
-                    height=280, margin=dict(l=0, r=0, t=10, b=0),
-                    yaxis=dict(autorange="reversed"),
-                )
-                st.plotly_chart(fig_hm, use_container_width=True)
-            else:
-                st.info("資料不足以產生熱力圖（需至少 2 天）")
+    if curves_ok and valid_results:
+        with st.expander("🗓️ 每日報酬率熱力圖", expanded=False):
+            heatmap_strategy = st.selectbox("選擇策略", list(valid_results.keys()), index=0,
+                                            format_func=lambda x: STRATEGY_LABELS.get(x, x), key="heatmap_strat")
+            hr = valid_results[heatmap_strategy]
+            if hr.equity_curve and len(hr.equity_curve) > 1:
+                eq_ts = pd.to_datetime([e["timestamp"] for e in hr.equity_curve], unit="ms", utc=True)
+                eq_vals = [e["equity"] for e in hr.equity_curve]
+                eq_series = pd.Series(eq_vals, index=eq_ts)
+                daily_eq = eq_series.resample("D").last().dropna()
+                daily_ret = daily_eq.pct_change().dropna() * 100
+                if len(daily_ret) > 0:
+                    df_daily = pd.DataFrame({"date": daily_ret.index, "return": daily_ret.values})
+                    df_daily["week"] = df_daily["date"].dt.isocalendar().week.astype(int)
+                    df_daily["weekday"] = df_daily["date"].dt.weekday
+                    wn = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
+                    pivot = df_daily.pivot_table(index="weekday", columns="week", values="return", aggfunc="mean")
+                    pivot = pivot.reindex(range(7))
+                    pivot.index = [wn[i] for i in pivot.index]
+                    fig_hm = go.Figure(data=go.Heatmap(
+                        z=pivot.values, x=[f"W{c}" for c in pivot.columns], y=pivot.index,
+                        colorscale="RdYlGn", zmid=0, colorbar_title="日報酬%",
+                        hovertemplate="週: %{x}<br>%{y}<br>報酬: %{z:.2f}%<extra></extra>"))
+                    fig_hm.update_layout(height=250, margin=dict(l=0, r=0, t=10, b=0),
+                                         yaxis=dict(autorange="reversed"))
+                    st.plotly_chart(fig_hm, use_container_width=True)
+                else:
+                    st.info("資料不足以產生熱力圖（需至少 2 天）")
 
 # ─── 多標的對比結果 ───
 if st.session_state.get("compare_results"):
@@ -556,9 +509,8 @@ if st.session_state.get("compare_results"):
     st.plotly_chart(fig_cmp, use_container_width=True)
     st.dataframe(pd.DataFrame(cmp_table_rows), use_container_width=True, hide_index=True)
 
-# ─── 策略信號選擇器 + K 線疊加 ───
-if ohlcv_rows and len(ohlcv_rows) > 1 and valid_results:
-    with st.expander("🔔 策略信號視覺化", expanded=False):
+with tab3:
+    if ohlcv_rows and len(ohlcv_rows) > 1 and valid_results:
         sig_strategy = st.selectbox(
             "選擇策略查看信號", [s for s in ALL_STRATEGIES if s != "buy_and_hold" and s in valid_results],
             format_func=lambda x: STRATEGY_LABELS.get(x, x), key="sig_strat"
@@ -585,7 +537,6 @@ if ohlcv_rows and len(ohlcv_rows) > 1 and valid_results:
                 x=df_sig["time"], y=df_sig["close"], mode="lines", name="收盤價",
                 line=dict(color="#888", width=1),
             ))
-            bg_colors = df_sig["signal"].map({1: "rgba(38,166,154,0.1)", -1: "rgba(239,83,80,0.1)", 0: "rgba(0,0,0,0)"})
             if len(buy_pts) > 0:
                 fig_sig.add_trace(go.Scatter(
                     x=buy_pts["time"], y=buy_pts["close"], mode="markers", name="做多信號",
@@ -602,6 +553,8 @@ if ohlcv_rows and len(ohlcv_rows) > 1 and valid_results:
                 title_font_size=14, legend=dict(orientation="h", y=1.05),
             )
             st.plotly_chart(fig_sig, use_container_width=True)
+    else:
+        st.info("需先執行回測才能顯示策略信號")
 
 # ─── 交易明細 ───
 with st.expander("📝 交易明細（各策略）", expanded=False):
