@@ -136,16 +136,20 @@ with st.sidebar:
         is_traditional = (market_type == "🏛️ 傳統市場")
 
         if is_traditional:
-            sub_cat = st.selectbox("細類", list(TRADITIONAL_CATEGORIES.keys()), index=0)
-            cat_symbols = TRADITIONAL_CATEGORIES[sub_cat] + ["其他（自填）"]
+            trad_keys = list(TRADITIONAL_CATEGORIES.keys())
+            sub_cat = st.selectbox("細類", trad_keys, index=0, key="sub_cat_trad")
+            cat_symbols = TRADITIONAL_CATEGORIES.get(sub_cat, trad_keys and TRADITIONAL_CATEGORIES[trad_keys[0]] or [])
+            cat_symbols = list(cat_symbols) + ["其他（自填）"]
             exchange_id = "yfinance"
             st.caption("📊 數據來源：Yahoo Finance")
         else:
-            sub_cat = st.selectbox("細類", list(CRYPTO_CATEGORIES.keys()), index=0)
-            cat_symbols = CRYPTO_CATEGORIES[sub_cat] + ["其他（自填）"]
+            crypto_keys = list(CRYPTO_CATEGORIES.keys())
+            sub_cat = st.selectbox("細類", crypto_keys, index=0, key="sub_cat_crypto")
+            cat_symbols = CRYPTO_CATEGORIES.get(sub_cat, crypto_keys and CRYPTO_CATEGORIES[crypto_keys[0]] or [])
+            cat_symbols = list(cat_symbols) + ["其他（自填）"]
             exchange_id = st.selectbox(
                 "交易所", list(EXCHANGE_OPTIONS.keys()), index=0,
-                format_func=lambda x: EXCHANGE_OPTIONS[x],
+                format_func=lambda x: EXCHANGE_OPTIONS.get(x, x),
             )
 
         symbol_choice = st.selectbox("交易對 / 股票代碼", cat_symbols, index=0)
@@ -155,7 +159,7 @@ with st.sidebar:
             if not symbol:
                 symbol = "AAPL" if is_traditional else "BTC/USDT:USDT"
         else:
-            symbol = symbol_choice
+            symbol = symbol_choice or ("AAPL" if is_traditional else "BTC/USDT:USDT")
         if is_traditional:
             timeframe = st.selectbox("K 線週期", ["1h", "1d"], index=1)
         else:
@@ -238,8 +242,10 @@ if run_btn:
                 if is_traditional:
                     fetcher = TraditionalDataFetcher()
                 else:
-                    fetcher = CryptoDataFetcher(exchange_id)
-                rows = fetcher.get_ohlcv(symbol, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
+                    _eid = exchange_id or "okx"
+                    fetcher = CryptoDataFetcher(_eid)
+                _sym = symbol or "BTC/USDT:USDT"
+                rows = fetcher.get_ohlcv(_sym, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
             except Exception as e:
                 st.error(f"數據拉取失敗：{e}")
                 rows = None
