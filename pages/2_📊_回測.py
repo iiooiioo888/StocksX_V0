@@ -267,15 +267,19 @@ if run_btn:
         for key in ("optimal_global_result", "optimal_global_strategy", "optimal_global_timeframe",
                      "optimal_global_params", "optimal_global_table", "optimal_global_objective"):
             st.session_state.pop(key, None)
-        # 自動保存回測歷史
+        # 自動保存回測歷史 + 檢查提醒
         _cur_user = st.session_state.get("user")
         if _cur_user and results:
             for _strat, _res in results.items():
                 if not _res.error:
                     _user_db.save_backtest(
-                        _cur_user["id"], symbol, exchange_id, timeframe, _strat,
+                        _cur_user["id"], symbol, exchange_id or "okx", timeframe, _strat,
                         custom_params.get(_strat, {}), _res.metrics,
                     )
+            triggered = _user_db.check_alerts(_cur_user["id"], results)
+            if triggered:
+                for t in triggered:
+                    st.toast(f"🔔 提醒觸發！{t['symbol']} — {t['strategy']}：{t['condition_type']} 實際值={t['actual']:.2f}%", icon="🔔")
 
 # ────────────────────────── 多標的對比 ──────────────────────────
 if compare_btn and compare_symbols_str.strip():
