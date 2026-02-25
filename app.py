@@ -655,8 +655,7 @@ if st.session_state.get("optimal_global_result") is not None:
                 "勝率%": rm.get("win_rate_pct"),
             })
         df_rank = pd.DataFrame(rank_rows)
-        st.dataframe(df_rank.style.map(_highlight_perf, subset=[f"{ob_label}", "報酬率%"]),
-                      use_container_width=True, hide_index=True)
+        st.dataframe(df_rank, use_container_width=True, hide_index=True)
 
         # CSV
         csv_rank = BytesIO()
@@ -684,6 +683,17 @@ if st.session_state.get("optimal_global_result") is not None:
                 f"{badge}{s_name} × {tf_name}　|　{ob_label}={score_val}　報酬={rm.get('total_return_pct', 0)}%",
                 expanded=is_best,
             ):
+                _show_detail = st.checkbox("載入圖表", value=is_best, key=f"show_{idx_r}")
+                if not _show_detail:
+                    st.caption("勾選上方「載入圖表」以顯示權益曲線")
+                    mc = st.columns(6)
+                    mc[0].metric("報酬率", f"{rm.get('total_return_pct', 0)}%")
+                    mc[1].metric("年化", f"{rm.get('annual_return_pct', 0)}%")
+                    mc[2].metric("回撤", f"{rm.get('max_drawdown_pct', 0)}%")
+                    mc[3].metric("夏普", rm.get("sharpe_ratio", 0))
+                    mc[4].metric("Sortino", rm.get("sortino_ratio", 0))
+                    mc[5].metric("交易/勝率", f"{rm.get('num_trades', 0)} / {rm.get('win_rate_pct', 0)}%")
+                    continue
                 # 指標卡片
                 mc = st.columns(6)
                 mc[0].metric("報酬率", f"{rm.get('total_return_pct', 0)}%")
