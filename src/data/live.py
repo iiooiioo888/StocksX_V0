@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 STRATEGY_LABELS = {
     "sma_cross": "雙均線交叉", "buy_and_hold": "買入持有",
     "rsi_signal": "RSI", "macd_cross": "MACD 交叉", "bollinger_signal": "布林帶",
+    "ema_cross": "EMA 交叉", "donchian_channel": "唐奇安通道",
+    "supertrend": "超級趨勢", "dual_thrust": "雙推力", "vwap_reversion": "VWAP 回歸",
 }
 
 

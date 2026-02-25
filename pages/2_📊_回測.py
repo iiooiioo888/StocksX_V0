@@ -37,18 +37,16 @@ def to_ms(d):
 
 ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
 STRATEGY_LABELS = {
-    "sma_cross": "雙均線交叉",
-    "buy_and_hold": "買入持有",
-    "rsi_signal": "RSI",
-    "macd_cross": "MACD 交叉",
-    "bollinger_signal": "布林帶",
+    "sma_cross": "雙均線交叉", "buy_and_hold": "買入持有",
+    "rsi_signal": "RSI", "macd_cross": "MACD 交叉", "bollinger_signal": "布林帶",
+    "ema_cross": "EMA 交叉", "donchian_channel": "唐奇安通道",
+    "supertrend": "超級趨勢", "dual_thrust": "雙推力", "vwap_reversion": "VWAP 回歸",
 }
 STRATEGY_COLORS = {
-    "sma_cross": "#636EFA",
-    "buy_and_hold": "#00CC96",
-    "rsi_signal": "#EF553B",
-    "macd_cross": "#AB63FA",
-    "bollinger_signal": "#FFA15A",
+    "sma_cross": "#636EFA", "buy_and_hold": "#00CC96", "rsi_signal": "#EF553B",
+    "macd_cross": "#AB63FA", "bollinger_signal": "#FFA15A", "ema_cross": "#19D3F3",
+    "donchian_channel": "#FF6692", "supertrend": "#B6E880", "dual_thrust": "#FF97FF",
+    "vwap_reversion": "#FECB52",
 }
 
 CRYPTO_CATEGORIES = {
@@ -210,6 +208,22 @@ with st.sidebar:
             boll_std = st.number_input("布林帶倍數", min_value=0.5, value=2.0, step=0.5, key="boll_std")
         custom_params["bollinger_signal"] = {"period": boll_p, "std_dev": boll_std}
         custom_params["buy_and_hold"] = {}
+        st.divider()
+        st.caption("新策略參數")
+        nc1, nc2 = st.columns(2)
+        with nc1:
+            ema_f = st.number_input("EMA 快線", min_value=2, value=12, step=1, key="ema_f")
+            ema_s = st.number_input("EMA 慢線", min_value=5, value=26, step=1, key="ema_s")
+            dc_p = st.number_input("唐奇安週期", min_value=5, value=20, step=1, key="dc_p")
+        custom_params["ema_cross"] = {"fast": ema_f, "slow": ema_s}
+        custom_params["donchian_channel"] = {"period": dc_p, "breakout_mode": 1}
+        with nc2:
+            st_p = st.number_input("Supertrend 週期", min_value=5, value=10, step=1, key="st_p")
+            st_m = st.number_input("Supertrend 倍數", min_value=1.0, value=3.0, step=0.5, key="st_m")
+            dt_p = st.number_input("雙推力週期", min_value=2, value=4, step=1, key="dt_p")
+        custom_params["supertrend"] = {"period": st_p, "multiplier": st_m}
+        custom_params["dual_thrust"] = {"period": dt_p, "k1": 0.5, "k2": 0.5}
+        custom_params["vwap_reversion"] = {"period": 20, "threshold": 2.0}
 
     with st.expander("🔄 多標的對比", expanded=False):
         compare_symbols_str = st.text_input(
