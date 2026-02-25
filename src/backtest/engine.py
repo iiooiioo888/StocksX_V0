@@ -216,7 +216,14 @@ def _run_backtest_on_rows(
             entry_price = close
             entry_ts_prev = ts
 
-        equity_curve.append({"timestamp": ts, "equity": round(equity, 2), "position": position})
+        # Mark-to-market：持倉期間按當前收盤價計算未實現盈虧
+        if position != 0 and entry_price:
+            direction = position
+            unrealized_return = (close - entry_price) / entry_price * direction
+            mtm_equity = equity * (1 + unrealized_return * leverage)
+        else:
+            mtm_equity = equity
+        equity_curve.append({"timestamp": ts, "equity": round(mtm_equity, 2), "position": position})
 
     if not liquidated and position != 0 and entry_price and rows:
         # 最後一根 K 線強制平倉（依方向支援多 / 空）
@@ -241,6 +248,10 @@ def _run_backtest_on_rows(
             "profit": round(profit, 2),
             "liquidation": equity == 0,
         })
+        # 更新最後一筆權益曲線為平倉後的實際權益
+        if equity_curve:
+            equity_curve[-1]["equity"] = round(equity, 2)
+            equity_curve[-1]["position"] = 0
 
     out.equity_curve = equity_curve
     out.trades = trades
