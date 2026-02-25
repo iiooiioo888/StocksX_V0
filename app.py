@@ -16,6 +16,7 @@ from src.backtest.engine import _run_backtest_on_rows
 from src.backtest.optimizer import DEFAULT_STRATEGIES_GLOBAL, DEFAULT_TIMEFRAMES_GLOBAL, OBJECTIVES
 from src.backtest import strategies as backtest_strategies
 from src.data.crypto import CryptoDataFetcher
+from src.data.traditional import TraditionalDataFetcher
 
 st.set_page_config(page_title="StocksX — 通用回測", page_icon="📊", layout="wide")
 
@@ -72,7 +73,33 @@ MARKET_CATEGORIES = {
         "DOGE/USDT:USDT", "SHIB/USDT:USDT", "PEPE/USDT:USDT", "BONK/USDT:USDT",
         "WIF/USDT:USDT", "FLOKI/USDT:USDT",
     ],
+    "📈 美股": [
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "INTC",
+        "NFLX", "CRM", "ORCL", "ADBE", "PYPL", "COIN", "MSTR", "PLTR", "UBER",
+    ],
+    "🇹🇼 台股": [
+        "2330.TW", "2317.TW", "2454.TW", "2308.TW", "2881.TW", "2882.TW",
+        "2303.TW", "3711.TW", "2412.TW", "1301.TW",
+    ],
+    "🏦 ETF": [
+        "SPY", "QQQ", "IWM", "DIA", "VTI",
+        "GLD", "SLV", "USO", "TLT", "HYG",
+        "ARKK", "SOXX", "XLF", "XLE", "XLK",
+        "0050.TW", "00878.TW", "00919.TW",
+    ],
+    "🛢️ 期貨 / 商品": [
+        "GC=F", "SI=F", "CL=F", "NG=F",
+        "ES=F", "NQ=F", "YM=F", "RTY=F",
+        "ZB=F", "ZN=F", "ZC=F", "ZS=F",
+    ],
+    "🌍 指數": [
+        "^GSPC", "^DJI", "^IXIC", "^RUT",
+        "^FTSE", "^GDAXI", "^N225", "^HSI",
+        "^TWII",
+    ],
 }
+
+TRADITIONAL_CATEGORIES = {"📈 美股", "🇹🇼 台股", "🏦 ETF", "🛢️ 期貨 / 商品", "🌍 指數"}
 
 EXCHANGE_OPTIONS = {
     "okx": "OKX",
@@ -93,18 +120,29 @@ with st.sidebar:
     st.markdown("## 📊 StocksX 回測")
 
     with st.expander("🔧 基本設定", expanded=True):
-        exchange_id = st.selectbox(
-            "交易所", list(EXCHANGE_OPTIONS.keys()), index=0,
-            format_func=lambda x: EXCHANGE_OPTIONS[x],
-        )
         market_cat = st.selectbox("市場分類", list(MARKET_CATEGORIES.keys()), index=0)
+        is_traditional = market_cat in TRADITIONAL_CATEGORIES
+        if not is_traditional:
+            exchange_id = st.selectbox(
+                "交易所", list(EXCHANGE_OPTIONS.keys()), index=0,
+                format_func=lambda x: EXCHANGE_OPTIONS[x],
+            )
+        else:
+            exchange_id = "yfinance"
+            st.caption("📊 傳統市場使用 Yahoo Finance 數據")
         cat_symbols = MARKET_CATEGORIES[market_cat] + ["其他（自填）"]
-        symbol_choice = st.selectbox("交易對", cat_symbols, index=0)
+        symbol_choice = st.selectbox("交易對 / 股票代碼", cat_symbols, index=0)
         if symbol_choice == "其他（自填）":
-            symbol = st.text_input("自訂交易對", value="BTC/USDT:USDT", key="symbol_custom")
+            placeholder = "例: AAPL, 2330.TW, GC=F" if is_traditional else "例: BTC/USDT:USDT"
+            symbol = st.text_input("自訂代碼", value="", placeholder=placeholder, key="symbol_custom")
+            if not symbol:
+                symbol = "AAPL" if is_traditional else "BTC/USDT:USDT"
         else:
             symbol = symbol_choice
-        timeframe = st.selectbox("K 線週期", ["1m", "5m", "15m", "1h", "4h", "1d"], index=3)
+        if is_traditional:
+            timeframe = st.selectbox("K 線週期", ["1h", "1d"], index=1)
+        else:
+            timeframe = st.selectbox("K 線週期", ["1m", "5m", "15m", "1h", "4h", "1d"], index=3)
 
     with st.expander("📅 時間範圍", expanded=True):
         today = datetime.now(timezone.utc)
@@ -180,7 +218,10 @@ if run_btn:
         with st.spinner("回測中…（拉取數據一次，全部策略共用）"):
             results = {}
             try:
-                fetcher = CryptoDataFetcher(exchange_id)
+                if is_traditional:
+                    fetcher = TraditionalDataFetcher()
+                else:
+                    fetcher = CryptoDataFetcher(exchange_id)
                 rows = fetcher.get_ohlcv(symbol, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
             except Exception as e:
                 st.error(f"數據拉取失敗：{e}")
