@@ -309,7 +309,8 @@ if run_btn:
                     f'最佳：<b>{STRATEGY_LABELS.get(_best[0], _best[0])}</b> {_ret:+.2f}%　|　'
                     f'{len(rows)} 根 K 線 × {len(ALL_STRATEGIES)} 策略</div>',
                     unsafe_allow_html=True)
-                st.balloons() if _ret > 10 else None
+                if _ret > 10:
+                    st.balloons()
         st.session_state["backtest_results"] = results
         for key in ("optimal_global_result", "optimal_global_strategy", "optimal_global_timeframe",
                      "optimal_global_params", "optimal_global_table", "optimal_global_objective"):
