@@ -42,6 +42,44 @@ CREATE TABLE IF NOT EXISTS user_settings (
     settings TEXT DEFAULT '{}',
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS strategy_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    config TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS watchlist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    exchange TEXT DEFAULT 'okx',
+    timeframe TEXT DEFAULT '1h',
+    strategy TEXT NOT NULL,
+    strategy_params TEXT DEFAULT '{}',
+    initial_equity REAL DEFAULT 10000,
+    is_active INTEGER DEFAULT 1,
+    created_at REAL NOT NULL,
+    last_check REAL DEFAULT 0,
+    last_signal INTEGER DEFAULT 0,
+    last_price REAL DEFAULT 0,
+    entry_price REAL DEFAULT 0,
+    position INTEGER DEFAULT 0,
+    pnl_pct REAL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    condition_type TEXT NOT NULL,
+    threshold REAL NOT NULL,
+    message TEXT DEFAULT '',
+    is_triggered INTEGER DEFAULT 0,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 """
 
 
@@ -64,7 +102,15 @@ class UserDB:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._migrate()
         self._ensure_admin()
+
+    def _migrate(self) -> None:
+        try:
+            self._conn.execute("ALTER TABLE backtest_history ADD COLUMN tags TEXT DEFAULT ''")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
     def _ensure_admin(self) -> None:
         cur = self._conn.execute("SELECT id FROM users WHERE username='admin'")
@@ -125,15 +171,19 @@ class UserDB:
 
     # ─── 回測歷史 ───
     def save_backtest(self, user_id: int, symbol: str, exchange: str, timeframe: str,
-                      strategy: str, params: dict, metrics: dict, notes: str = "") -> int:
+                      strategy: str, params: dict, metrics: dict, notes: str = "", tags: str = "") -> int:
         cur = self._conn.execute(
-            """INSERT INTO backtest_history (user_id, created_at, symbol, exchange, timeframe, strategy, params, metrics, notes)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO backtest_history (user_id, created_at, symbol, exchange, timeframe, strategy, params, metrics, notes, tags)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (user_id, time.time(), symbol, exchange, timeframe, strategy,
-             json.dumps(params, ensure_ascii=False), json.dumps(metrics, ensure_ascii=False), notes),
+             json.dumps(params, ensure_ascii=False), json.dumps(metrics, ensure_ascii=False), notes, tags),
         )
         self._conn.commit()
         return cur.lastrowid or 0
+
+    def update_notes(self, record_id: int, notes: str, tags: str = "") -> None:
+        self._conn.execute("UPDATE backtest_history SET notes=?, tags=? WHERE id=?", (notes, tags, record_id))
+        self._conn.commit()
 
     def get_history(self, user_id: int, limit: int = 50) -> list[dict]:
         cur = self._conn.execute(
@@ -201,3 +251,108 @@ class UserDB:
             "recent_backtests_24h": recent_backtests,
             "top_symbols": [{"symbol": r["symbol"], "count": r["cnt"]} for r in top_symbols],
         }
+
+    # ─── 策略預設 ───
+    def save_preset(self, user_id: int, name: str, config: dict) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO strategy_presets (user_id, name, config, created_at) VALUES (?,?,?,?)",
+            (user_id, name, json.dumps(config, ensure_ascii=False), time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid or 0
+
+    def get_presets(self, user_id: int) -> list[dict]:
+        cur = self._conn.execute("SELECT * FROM strategy_presets WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["config"] = json.loads(d.get("config") or "{}")
+            rows.append(d)
+        return rows
+
+    def delete_preset(self, preset_id: int) -> None:
+        self._conn.execute("DELETE FROM strategy_presets WHERE id=?", (preset_id,))
+        self._conn.commit()
+
+    # ─── 提醒 ───
+    def add_alert(self, user_id: int, symbol: str, condition_type: str, threshold: float, message: str = "") -> int:
+        cur = self._conn.execute(
+            "INSERT INTO alerts (user_id, symbol, condition_type, threshold, message, created_at) VALUES (?,?,?,?,?,?)",
+            (user_id, symbol, condition_type, threshold, message, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid or 0
+
+    def get_alerts(self, user_id: int) -> list[dict]:
+        cur = self._conn.execute("SELECT * FROM alerts WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        return [dict(r) for r in cur.fetchall()]
+
+    def delete_alert(self, alert_id: int) -> None:
+        self._conn.execute("DELETE FROM alerts WHERE id=?", (alert_id,))
+        self._conn.commit()
+
+    def check_alerts(self, user_id: int, results: dict) -> list[dict]:
+        """檢查回測結果是否觸發用戶設定的提醒"""
+        alerts = self.get_alerts(user_id)
+        triggered = []
+        for a in alerts:
+            for strategy, res in results.items():
+                if res.error:
+                    continue
+                m = res.metrics
+                val = None
+                if a["condition_type"] == "return_above":
+                    val = m.get("total_return_pct", 0)
+                    if val and val >= a["threshold"]:
+                        triggered.append({**a, "actual": val, "strategy": strategy})
+                elif a["condition_type"] == "return_below":
+                    val = m.get("total_return_pct", 0)
+                    if val and val <= a["threshold"]:
+                        triggered.append({**a, "actual": val, "strategy": strategy})
+                elif a["condition_type"] == "drawdown_above":
+                    val = m.get("max_drawdown_pct", 0)
+                    if val and val >= a["threshold"]:
+                        triggered.append({**a, "actual": val, "strategy": strategy})
+                elif a["condition_type"] == "sharpe_above":
+                    val = m.get("sharpe_ratio", 0)
+                    if val and val >= a["threshold"]:
+                        triggered.append({**a, "actual": val, "strategy": strategy})
+        return triggered
+
+    # ─── 策略訂閱 (Watchlist) ───
+    def add_watch(self, user_id: int, symbol: str, exchange: str, timeframe: str,
+                  strategy: str, strategy_params: dict, initial_equity: float = 10000) -> int:
+        cur = self._conn.execute(
+            """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy, strategy_params, initial_equity, created_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (user_id, symbol, exchange, timeframe, strategy,
+             json.dumps(strategy_params, ensure_ascii=False), initial_equity, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid or 0
+
+    def get_watchlist(self, user_id: int) -> list[dict]:
+        cur = self._conn.execute("SELECT * FROM watchlist WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["strategy_params"] = json.loads(d.get("strategy_params") or "{}")
+            rows.append(d)
+        return rows
+
+    def update_watch(self, watch_id: int, **kwargs: Any) -> None:
+        allowed = {"last_check", "last_signal", "last_price", "entry_price", "position", "pnl_pct", "is_active"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        self._conn.execute(f"UPDATE watchlist SET {set_clause} WHERE id=?", (*updates.values(), watch_id))
+        self._conn.commit()
+
+    def delete_watch(self, watch_id: int) -> None:
+        self._conn.execute("DELETE FROM watchlist WHERE id=?", (watch_id,))
+        self._conn.commit()
+
+    def toggle_watch(self, watch_id: int) -> None:
+        self._conn.execute("UPDATE watchlist SET is_active = 1 - is_active WHERE id=?", (watch_id,))
+        self._conn.commit()

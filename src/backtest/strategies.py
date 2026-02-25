@@ -153,7 +153,179 @@ def bollinger_signal(
     return signals
 
 
-# 策略名稱與可優化參數網格（供 optimizer 使用）
+def ema_cross(rows: list[dict[str, Any]], fast: int = 12, slow: int = 26) -> list[int]:
+    """
+    指數均線交叉（EMA Cross）：
+    - 快 EMA > 慢 EMA → 做多
+    - 快 EMA < 慢 EMA → 做空
+    """
+    n = len(rows)
+    if n < slow:
+        return [0] * n
+    closes = [r["close"] for r in rows]
+    ema_f = _ema(closes, fast)
+    ema_s = _ema(closes, slow)
+    signals: list[int] = [0] * slow
+    for i in range(slow, n):
+        if ema_f[i] > ema_s[i] and ema_f[i - 1] <= ema_s[i - 1]:
+            s = 1
+        elif ema_f[i] < ema_s[i] and ema_f[i - 1] >= ema_s[i - 1]:
+            s = -1
+        else:
+            s = signals[-1] if signals else 0
+        signals.append(s)
+    return signals
+
+
+def donchian_channel(
+    rows: list[dict[str, Any]], period: int = 20, breakout_mode: int = 1,
+) -> list[int]:
+    """
+    唐奇安通道突破：
+    - 收盤突破上軌（period 根最高價）→ 做多
+    - 收盤跌破下軌（period 根最低價）→ 做空
+    - breakout_mode=1: 突破即持倉；=0: 突破僅觸發，回到中線平倉
+    """
+    n = len(rows)
+    if n < period:
+        return [0] * n
+    signals: list[int] = [0] * period
+    for i in range(period, n):
+        highs = [rows[j]["high"] for j in range(i - period, i)]
+        lows = [rows[j]["low"] for j in range(i - period, i)]
+        upper = max(highs)
+        lower = min(lows)
+        close = rows[i]["close"]
+        prev_s = signals[-1]
+        if close >= upper:
+            s = 1
+        elif close <= lower:
+            s = -1
+        else:
+            s = prev_s if breakout_mode else 0
+        signals.append(s)
+    return signals
+
+
+def supertrend(
+    rows: list[dict[str, Any]], period: int = 10, multiplier: float = 3.0,
+) -> list[int]:
+    """
+    超級趨勢（Supertrend）：
+    基於 ATR 的趨勢跟蹤，價格突破上/下帶切換多空。
+    """
+    n = len(rows)
+    if n < period + 1:
+        return [0] * n
+    closes = [r["close"] for r in rows]
+    highs = [r["high"] for r in rows]
+    lows = [r["low"] for r in rows]
+
+    tr_list = [0.0]
+    for i in range(1, n):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        tr_list.append(tr)
+
+    atr = [0.0] * n
+    atr[period] = sum(tr_list[1:period + 1]) / period
+    for i in range(period + 1, n):
+        atr[i] = (atr[i - 1] * (period - 1) + tr_list[i]) / period
+
+    upper_band = [0.0] * n
+    lower_band = [0.0] * n
+    direction = [1] * n
+    signals: list[int] = [0] * n
+
+    for i in range(period, n):
+        hl2 = (highs[i] + lows[i]) / 2
+        basic_upper = hl2 + multiplier * atr[i]
+        basic_lower = hl2 - multiplier * atr[i]
+        upper_band[i] = min(basic_upper, upper_band[i - 1]) if upper_band[i - 1] != 0 and closes[i - 1] <= upper_band[i - 1] else basic_upper
+        lower_band[i] = max(basic_lower, lower_band[i - 1]) if lower_band[i - 1] != 0 and closes[i - 1] >= lower_band[i - 1] else basic_lower
+
+        if closes[i] > upper_band[i]:
+            direction[i] = 1
+        elif closes[i] < lower_band[i]:
+            direction[i] = -1
+        else:
+            direction[i] = direction[i - 1]
+
+        if direction[i] != direction[i - 1]:
+            signals[i] = direction[i]
+        else:
+            signals[i] = signals[i - 1]
+    return signals
+
+
+def dual_thrust(
+    rows: list[dict[str, Any]], period: int = 4, k1: float = 0.5, k2: float = 0.5,
+) -> list[int]:
+    """
+    雙推力（Dual Thrust）：
+    基於前 N 根 K 線的 Range 計算上下閾值，突破做多/做空。
+    """
+    n = len(rows)
+    if n < period + 1:
+        return [0] * n
+    signals: list[int] = [0] * (period + 1)
+    for i in range(period + 1, n):
+        hh = max(rows[j]["high"] for j in range(i - period, i))
+        ll = min(rows[j]["low"] for j in range(i - period, i))
+        hc = max(rows[j]["close"] for j in range(i - period, i))
+        lc = min(rows[j]["close"] for j in range(i - period, i))
+        range_val = max(hh - lc, hc - ll)
+        open_price = rows[i]["open"]
+        close = rows[i]["close"]
+        upper = open_price + k1 * range_val
+        lower = open_price - k2 * range_val
+        prev_s = signals[-1]
+        if close > upper:
+            s = 1
+        elif close < lower:
+            s = -1
+        else:
+            s = prev_s
+        signals.append(s)
+    return signals
+
+
+def vwap_reversion(
+    rows: list[dict[str, Any]], period: int = 20, threshold: float = 2.0,
+) -> list[int]:
+    """
+    VWAP 均值回歸：
+    - 價格偏離 VWAP 超過 threshold 個標準差 → 反向交易
+    - 高於 VWAP+threshold*std → 做空（超買回歸）
+    - 低於 VWAP-threshold*std → 做多（超賣回歸）
+    """
+    n = len(rows)
+    if n < period:
+        return [0] * n
+    signals: list[int] = [0] * period
+    for i in range(period, n):
+        window = rows[i - period:i + 1]
+        cum_vol = sum(r["volume"] for r in window) or 1
+        cum_pv = sum(r["close"] * r["volume"] for r in window)
+        vwap = cum_pv / cum_vol
+        prices = [r["close"] for r in window]
+        mean_p = sum(prices) / len(prices)
+        var_p = sum((p - mean_p) ** 2 for p in prices) / len(prices)
+        std_p = var_p ** 0.5 if var_p > 0 else 1
+        close = rows[i]["close"]
+        z = (close - vwap) / std_p if std_p > 0 else 0
+        prev_s = signals[-1]
+        if z < -threshold:
+            s = 1
+        elif z > threshold:
+            s = -1
+        elif abs(z) < 0.5:
+            s = 0
+        else:
+            s = prev_s
+        signals.append(s)
+    return signals
+
+
 STRATEGY_CONFIG = {
     "sma_cross": {
         "params": ["fast", "slow"],
@@ -180,19 +352,52 @@ STRATEGY_CONFIG = {
         "param_grid": {"period": [15, 20, 25], "std_dev": [1.5, 2.0, 2.5]},
         "defaults": {"period": 20, "std_dev": 2.0},
     },
+    "ema_cross": {
+        "params": ["fast", "slow"],
+        "param_grid": {"fast": [8, 12, 15], "slow": [21, 26, 34]},
+        "defaults": {"fast": 12, "slow": 26},
+    },
+    "donchian_channel": {
+        "params": ["period", "breakout_mode"],
+        "param_grid": {"period": [10, 20, 30], "breakout_mode": [1]},
+        "defaults": {"period": 20, "breakout_mode": 1},
+    },
+    "supertrend": {
+        "params": ["period", "multiplier"],
+        "param_grid": {"period": [7, 10, 14], "multiplier": [2.0, 3.0, 4.0]},
+        "defaults": {"period": 10, "multiplier": 3.0},
+    },
+    "dual_thrust": {
+        "params": ["period", "k1", "k2"],
+        "param_grid": {"period": [3, 4, 5], "k1": [0.4, 0.5, 0.6], "k2": [0.4, 0.5, 0.6]},
+        "defaults": {"period": 4, "k1": 0.5, "k2": 0.5},
+    },
+    "vwap_reversion": {
+        "params": ["period", "threshold"],
+        "param_grid": {"period": [15, 20, 30], "threshold": [1.5, 2.0, 2.5]},
+        "defaults": {"period": 20, "threshold": 2.0},
+    },
+}
+
+_STRATEGY_FUNCS = {
+    "sma_cross": sma_cross,
+    "buy_and_hold": buy_and_hold,
+    "rsi_signal": rsi_signal,
+    "macd_cross": macd_cross,
+    "bollinger_signal": bollinger_signal,
+    "ema_cross": ema_cross,
+    "donchian_channel": donchian_channel,
+    "supertrend": supertrend,
+    "dual_thrust": dual_thrust,
+    "vwap_reversion": vwap_reversion,
 }
 
 
 def get_signal(strategy: str, rows: list[dict[str, Any]], **kwargs: Any) -> list[int]:
     """依策略名稱與參數產生信號。"""
-    if strategy == "sma_cross":
-        return sma_cross(rows, **kwargs)
-    if strategy == "buy_and_hold":
-        return buy_and_hold(rows)
-    if strategy == "rsi_signal":
-        return rsi_signal(rows, **kwargs)
-    if strategy == "macd_cross":
-        return macd_cross(rows, **kwargs)
-    if strategy == "bollinger_signal":
-        return bollinger_signal(rows, **kwargs)
+    func = _STRATEGY_FUNCS.get(strategy)
+    if func:
+        if strategy == "buy_and_hold":
+            return func(rows)
+        return func(rows, **kwargs)
     return [0] * len(rows)

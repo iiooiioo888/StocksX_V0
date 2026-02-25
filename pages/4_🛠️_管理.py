@@ -10,7 +10,7 @@ user = st.session_state.get("user")
 if not user or user.get("role") != "admin":
     st.error("⛔ 僅管理員可訪問此頁面")
     if not user:
-        st.page_link("pages/1_login.py", label="前往登入", icon="🔐")
+        st.page_link("pages/1_🔐_登入.py", label="前往登入", icon="🔐")
     st.stop()
 
 db = UserDB()

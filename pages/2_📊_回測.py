@@ -37,18 +37,16 @@ def to_ms(d):
 
 ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
 STRATEGY_LABELS = {
-    "sma_cross": "雙均線交叉",
-    "buy_and_hold": "買入持有",
-    "rsi_signal": "RSI",
-    "macd_cross": "MACD 交叉",
-    "bollinger_signal": "布林帶",
+    "sma_cross": "雙均線交叉", "buy_and_hold": "買入持有",
+    "rsi_signal": "RSI", "macd_cross": "MACD 交叉", "bollinger_signal": "布林帶",
+    "ema_cross": "EMA 交叉", "donchian_channel": "唐奇安通道",
+    "supertrend": "超級趨勢", "dual_thrust": "雙推力", "vwap_reversion": "VWAP 回歸",
 }
 STRATEGY_COLORS = {
-    "sma_cross": "#636EFA",
-    "buy_and_hold": "#00CC96",
-    "rsi_signal": "#EF553B",
-    "macd_cross": "#AB63FA",
-    "bollinger_signal": "#FFA15A",
+    "sma_cross": "#636EFA", "buy_and_hold": "#00CC96", "rsi_signal": "#EF553B",
+    "macd_cross": "#AB63FA", "bollinger_signal": "#FFA15A", "ema_cross": "#19D3F3",
+    "donchian_channel": "#FF6692", "supertrend": "#B6E880", "dual_thrust": "#FF97FF",
+    "vwap_reversion": "#FECB52",
 }
 
 CRYPTO_CATEGORIES = {
@@ -125,9 +123,12 @@ with st.sidebar:
     if _u:
         st.markdown(f"### 👤 {_u['display_name']}")
         _sc1, _sc2 = st.columns(2)
-        _sc1.page_link("pages/3_history.py", label="📜 歷史", use_container_width=True)
+        _sc1.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
         if _u["role"] == "admin":
-            _sc2.page_link("pages/4_admin.py", label="🛠️ 管理", use_container_width=True)
+            _sc2.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", use_container_width=True)
+        if st.button("🚪 登出", use_container_width=True, key="sidebar_logout"):
+            st.session_state.pop("user", None)
+            st.switch_page("pages/1_🔐_登入.py")
         st.divider()
     st.markdown("## 📊 StocksX 回測")
 
@@ -136,16 +137,20 @@ with st.sidebar:
         is_traditional = (market_type == "🏛️ 傳統市場")
 
         if is_traditional:
-            sub_cat = st.selectbox("細類", list(TRADITIONAL_CATEGORIES.keys()), index=0)
-            cat_symbols = TRADITIONAL_CATEGORIES[sub_cat] + ["其他（自填）"]
+            trad_keys = list(TRADITIONAL_CATEGORIES.keys())
+            sub_cat = st.selectbox("細類", trad_keys, index=0, key="sub_cat_trad")
+            cat_symbols = TRADITIONAL_CATEGORIES.get(sub_cat, trad_keys and TRADITIONAL_CATEGORIES[trad_keys[0]] or [])
+            cat_symbols = list(cat_symbols) + ["其他（自填）"]
             exchange_id = "yfinance"
             st.caption("📊 數據來源：Yahoo Finance")
         else:
-            sub_cat = st.selectbox("細類", list(CRYPTO_CATEGORIES.keys()), index=0)
-            cat_symbols = CRYPTO_CATEGORIES[sub_cat] + ["其他（自填）"]
+            crypto_keys = list(CRYPTO_CATEGORIES.keys())
+            sub_cat = st.selectbox("細類", crypto_keys, index=0, key="sub_cat_crypto")
+            cat_symbols = CRYPTO_CATEGORIES.get(sub_cat, crypto_keys and CRYPTO_CATEGORIES[crypto_keys[0]] or [])
+            cat_symbols = list(cat_symbols) + ["其他（自填）"]
             exchange_id = st.selectbox(
                 "交易所", list(EXCHANGE_OPTIONS.keys()), index=0,
-                format_func=lambda x: EXCHANGE_OPTIONS[x],
+                format_func=lambda x: EXCHANGE_OPTIONS.get(x, x),
             )
 
         symbol_choice = st.selectbox("交易對 / 股票代碼", cat_symbols, index=0)
@@ -155,7 +160,7 @@ with st.sidebar:
             if not symbol:
                 symbol = "AAPL" if is_traditional else "BTC/USDT:USDT"
         else:
-            symbol = symbol_choice
+            symbol = symbol_choice or ("AAPL" if is_traditional else "BTC/USDT:USDT")
         if is_traditional:
             timeframe = st.selectbox("K 線週期", ["1h", "1d"], index=1)
         else:
@@ -203,6 +208,22 @@ with st.sidebar:
             boll_std = st.number_input("布林帶倍數", min_value=0.5, value=2.0, step=0.5, key="boll_std")
         custom_params["bollinger_signal"] = {"period": boll_p, "std_dev": boll_std}
         custom_params["buy_and_hold"] = {}
+        st.divider()
+        st.caption("新策略參數")
+        nc1, nc2 = st.columns(2)
+        with nc1:
+            ema_f = st.number_input("EMA 快線", min_value=2, value=12, step=1, key="ema_f")
+            ema_s = st.number_input("EMA 慢線", min_value=5, value=26, step=1, key="ema_s")
+            dc_p = st.number_input("唐奇安週期", min_value=5, value=20, step=1, key="dc_p")
+        custom_params["ema_cross"] = {"fast": ema_f, "slow": ema_s}
+        custom_params["donchian_channel"] = {"period": dc_p, "breakout_mode": 1}
+        with nc2:
+            st_p = st.number_input("Supertrend 週期", min_value=5, value=10, step=1, key="st_p")
+            st_m = st.number_input("Supertrend 倍數", min_value=1.0, value=3.0, step=0.5, key="st_m")
+            dt_p = st.number_input("雙推力週期", min_value=2, value=4, step=1, key="dt_p")
+        custom_params["supertrend"] = {"period": st_p, "multiplier": st_m}
+        custom_params["dual_thrust"] = {"period": dt_p, "k1": 0.5, "k2": 0.5}
+        custom_params["vwap_reversion"] = {"period": 20, "threshold": 2.0}
 
     with st.expander("🔄 多標的對比", expanded=False):
         compare_symbols_str = st.text_input(
@@ -238,8 +259,10 @@ if run_btn:
                 if is_traditional:
                     fetcher = TraditionalDataFetcher()
                 else:
-                    fetcher = CryptoDataFetcher(exchange_id)
-                rows = fetcher.get_ohlcv(symbol, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
+                    _eid = exchange_id or "okx"
+                    fetcher = CryptoDataFetcher(_eid)
+                _sym = symbol or "BTC/USDT:USDT"
+                rows = fetcher.get_ohlcv(_sym, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
             except Exception as e:
                 st.error(f"數據拉取失敗：{e}")
                 rows = None
@@ -258,15 +281,19 @@ if run_btn:
         for key in ("optimal_global_result", "optimal_global_strategy", "optimal_global_timeframe",
                      "optimal_global_params", "optimal_global_table", "optimal_global_objective"):
             st.session_state.pop(key, None)
-        # 自動保存回測歷史
+        # 自動保存回測歷史 + 檢查提醒
         _cur_user = st.session_state.get("user")
         if _cur_user and results:
             for _strat, _res in results.items():
                 if not _res.error:
                     _user_db.save_backtest(
-                        _cur_user["id"], symbol, exchange_id, timeframe, _strat,
+                        _cur_user["id"], symbol, exchange_id or "okx", timeframe, _strat,
                         custom_params.get(_strat, {}), _res.metrics,
                     )
+            triggered = _user_db.check_alerts(_cur_user["id"], results)
+            if triggered:
+                for t in triggered:
+                    st.toast(f"🔔 提醒觸發！{t['symbol']} — {t['strategy']}：{t['condition_type']} 實際值={t['actual']:.2f}%", icon="🔔")
 
 # ────────────────────────── 多標的對比 ──────────────────────────
 if compare_btn and compare_symbols_str.strip():
