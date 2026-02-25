@@ -48,7 +48,7 @@ STRATEGY_COLORS = {
     "bollinger_signal": "#FFA15A",
 }
 
-MARKET_CATEGORIES = {
+CRYPTO_CATEGORIES = {
     "🔥 主流永續": [
         "BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT", "SOL/USDT:USDT",
         "XRP/USDT:USDT", "DOGE/USDT:USDT", "ADA/USDT:USDT", "AVAX/USDT:USDT",
@@ -73,6 +73,9 @@ MARKET_CATEGORIES = {
         "DOGE/USDT:USDT", "SHIB/USDT:USDT", "PEPE/USDT:USDT", "BONK/USDT:USDT",
         "WIF/USDT:USDT", "FLOKI/USDT:USDT",
     ],
+}
+
+TRADITIONAL_CATEGORIES = {
     "📈 美股": [
         "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "INTC",
         "NFLX", "CRM", "ORCL", "ADBE", "PYPL", "COIN", "MSTR", "PLTR", "UBER",
@@ -99,8 +102,6 @@ MARKET_CATEGORIES = {
     ],
 }
 
-TRADITIONAL_CATEGORIES = {"📈 美股", "🇹🇼 台股", "🏦 ETF", "🛢️ 期貨 / 商品", "🌍 指數"}
-
 EXCHANGE_OPTIONS = {
     "okx": "OKX",
     "bitget": "Bitget",
@@ -120,17 +121,22 @@ with st.sidebar:
     st.markdown("## 📊 StocksX 回測")
 
     with st.expander("🔧 基本設定", expanded=True):
-        market_cat = st.selectbox("市場分類", list(MARKET_CATEGORIES.keys()), index=0)
-        is_traditional = market_cat in TRADITIONAL_CATEGORIES
-        if not is_traditional:
+        market_type = st.radio("市場大類", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True, key="mkt_type")
+        is_traditional = (market_type == "🏛️ 傳統市場")
+
+        if is_traditional:
+            sub_cat = st.selectbox("細類", list(TRADITIONAL_CATEGORIES.keys()), index=0)
+            cat_symbols = TRADITIONAL_CATEGORIES[sub_cat] + ["其他（自填）"]
+            exchange_id = "yfinance"
+            st.caption("📊 數據來源：Yahoo Finance")
+        else:
+            sub_cat = st.selectbox("細類", list(CRYPTO_CATEGORIES.keys()), index=0)
+            cat_symbols = CRYPTO_CATEGORIES[sub_cat] + ["其他（自填）"]
             exchange_id = st.selectbox(
                 "交易所", list(EXCHANGE_OPTIONS.keys()), index=0,
                 format_func=lambda x: EXCHANGE_OPTIONS[x],
             )
-        else:
-            exchange_id = "yfinance"
-            st.caption("📊 傳統市場使用 Yahoo Finance 數據")
-        cat_symbols = MARKET_CATEGORIES[market_cat] + ["其他（自填）"]
+
         symbol_choice = st.selectbox("交易對 / 股票代碼", cat_symbols, index=0)
         if symbol_choice == "其他（自填）":
             placeholder = "例: AAPL, 2330.TW, GC=F" if is_traditional else "例: BTC/USDT:USDT"
