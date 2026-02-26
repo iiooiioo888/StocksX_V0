@@ -1,6 +1,7 @@
-# 回測結果渲染共用邏輯
+# 回測結果渲染 — 專業級圖表
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -15,6 +16,13 @@ from src.config import STRATEGY_LABELS, STRATEGY_COLORS
 from src.chart_theme import apply_dark_theme
 
 ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
+
+# 專業配色
+_UP = "#26A69A"
+_DOWN = "#EF5350"
+_GRID = "rgba(50,50,90,0.2)"
+_VOL_UP = "rgba(38,166,154,0.35)"
+_VOL_DOWN = "rgba(239,83,80,0.35)"
 
 
 def run_all_strategies(rows, exchange_id, symbol, timeframe, since_ms, until_ms,
@@ -37,7 +45,7 @@ def run_all_strategies(rows, exchange_id, symbol, timeframe, since_ms, until_ms,
 
 
 def render_summary_line(results: dict[str, BacktestResult]):
-    """渲染一行式回測摘要"""
+    """渲染回測摘要"""
     valid = {s: r for s, r in results.items() if not r.error}
     if not valid:
         st.warning("所有策略均回測失敗")
@@ -56,55 +64,147 @@ def render_summary_line(results: dict[str, BacktestResult]):
 
 
 def render_kline_chart(ohlcv_rows, best_strategy_result=None):
-    """渲染 K 線圖"""
+    """專業 K 線圖：漲跌色成交量 + MA + 買賣標記"""
     real_bars = [r for r in ohlcv_rows if not r.get("filled")]
     if not real_bars:
         return
-    df_k = pd.DataFrame(real_bars)
-    df_k["time"] = pd.to_datetime(df_k["timestamp"], unit="ms", utc=True)
-    fig_k = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
-    fig_k.add_trace(go.Candlestick(
-        x=df_k["time"], open=df_k["open"], high=df_k["high"], low=df_k["low"], close=df_k["close"],
-        name="K 線", increasing_line_color="#26A69A", decreasing_line_color="#EF5350",
+    df = pd.DataFrame(real_bars)
+    df["time"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    df["color"] = df.apply(lambda r: _VOL_UP if r["close"] >= r["open"] else _VOL_DOWN, axis=1)
+
+    # 計算 MA
+    for p in [20, 60]:
+        if len(df) >= p:
+            df[f"MA{p}"] = df["close"].rolling(p).mean()
+
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
+                        row_heights=[0.6, 0.2, 0.2], vertical_spacing=0.02,
+                        subplot_titles=("", "成交量", ""))
+
+    # K 線
+    fig.add_trace(go.Candlestick(
+        x=df["time"], open=df["open"], high=df["high"], low=df["low"], close=df["close"],
+        name="", increasing=dict(line=dict(color=_UP, width=1), fillcolor=_UP),
+        decreasing=dict(line=dict(color=_DOWN, width=1), fillcolor=_DOWN),
+        whiskerwidth=0.5,
     ), row=1, col=1)
-    fig_k.add_trace(go.Bar(x=df_k["time"], y=df_k["volume"], name="成交量",
-                            marker_color="rgba(100,149,237,0.4)"), row=2, col=1)
-    if best_strategy_result and best_strategy_result[1].trades:
-        for t in best_strategy_result[1].trades:
-            entry_t = pd.to_datetime(t["entry_ts"], unit="ms", utc=True)
-            exit_t = pd.to_datetime(t["exit_ts"], unit="ms", utc=True)
-            side_label = "多" if t["side"] == 1 else "空"
-            fig_k.add_trace(go.Scatter(
-                x=[entry_t], y=[t["entry_price"]], mode="markers",
-                marker=dict(symbol="triangle-up" if t["side"] == 1 else "triangle-down",
-                            size=10, color="#26A69A" if t["side"] == 1 else "#EF5350"),
-                name=f"進場({side_label})", showlegend=False,
+
+    # MA
+    for p, color in [(20, "#FFD700"), (60, "#FF69B4")]:
+        col = f"MA{p}"
+        if col in df.columns:
+            fig.add_trace(go.Scatter(
+                x=df["time"], y=df[col], mode="lines", name=f"MA{p}",
+                line=dict(color=color, width=1.2, dash="dot"),
             ), row=1, col=1)
-    fig_k.update_layout(height=450, xaxis_rangeslider_visible=False, margin=dict(l=0, r=0, t=30, b=0))
-    fig_k.update_yaxes(title_text="價格", row=1, col=1)
-    fig_k.update_yaxes(title_text="量", row=2, col=1)
-    st.plotly_chart(apply_dark_theme(fig_k), use_container_width=True)
+
+    # 成交量（漲跌色）
+    fig.add_trace(go.Bar(
+        x=df["time"], y=df["volume"], name="成交量",
+        marker_color=df["color"].tolist(), showlegend=False,
+    ), row=2, col=1)
+
+    # 買賣標記
+    if best_strategy_result and best_strategy_result[1].trades:
+        entries_long, entries_short, exits = [], [], []
+        for t in best_strategy_result[1].trades:
+            et = pd.to_datetime(t["entry_ts"], unit="ms", utc=True)
+            xt = pd.to_datetime(t["exit_ts"], unit="ms", utc=True)
+            if t["side"] == 1:
+                entries_long.append((et, t["entry_price"]))
+            else:
+                entries_short.append((et, t["entry_price"]))
+            exits.append((xt, t["exit_price"], t.get("pnl_pct", 0)))
+
+        if entries_long:
+            fig.add_trace(go.Scatter(
+                x=[e[0] for e in entries_long], y=[e[1] for e in entries_long],
+                mode="markers", name="做多進場", showlegend=True,
+                marker=dict(symbol="triangle-up", size=11, color=_UP, line=dict(width=1, color="white")),
+                hovertemplate="做多進場<br>%{y:,.2f}<extra></extra>",
+            ), row=1, col=1)
+        if entries_short:
+            fig.add_trace(go.Scatter(
+                x=[e[0] for e in entries_short], y=[e[1] for e in entries_short],
+                mode="markers", name="做空進場", showlegend=True,
+                marker=dict(symbol="triangle-down", size=11, color=_DOWN, line=dict(width=1, color="white")),
+                hovertemplate="做空進場<br>%{y:,.2f}<extra></extra>",
+            ), row=1, col=1)
+        if exits:
+            fig.add_trace(go.Scatter(
+                x=[e[0] for e in exits], y=[e[1] for e in exits],
+                mode="markers", name="出場", showlegend=True,
+                marker=dict(symbol="x", size=8, color="#FFB74D", line=dict(width=1.5, color="#FFB74D")),
+                hovertemplate="出場 %{y:,.2f}<extra></extra>",
+            ), row=1, col=1)
+
+    # RSI 副圖（簡化）
+    if len(df) > 14:
+        delta = df["close"].diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        fig.add_trace(go.Scatter(x=df["time"], y=rsi, mode="lines", name="RSI(14)",
+                                  line=dict(color="#7B68EE", width=1.2)), row=3, col=1)
+        fig.add_hline(y=70, line=dict(color="rgba(239,83,80,0.3)", width=1, dash="dash"), row=3, col=1)
+        fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.3)", width=1, dash="dash"), row=3, col=1)
+        fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
+
+    fig.update_layout(
+        height=600, xaxis_rangeslider_visible=False,
+        legend=dict(orientation="h", y=1.02, x=0, xanchor="left"),
+        annotations=[dict(text="", showarrow=False)] * 3,
+    )
+    fig.update_yaxes(title_text="", row=1, col=1)
+    fig.update_yaxes(title_text="", row=2, col=1)
+    st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
 
 def render_equity_curves(results: dict[str, BacktestResult], initial_equity: float):
-    """渲染權益曲線"""
-    fig_eq = go.Figure()
-    for strategy in ALL_STRATEGIES:
-        if strategy not in results:
-            continue
-        res = results[strategy]
-        if res.error or not res.equity_curve:
-            continue
+    """專業權益曲線 + 回撤副圖"""
+    curves = [(s, r) for s, r in results.items() if r.equity_curve and not r.error]
+    if not curves:
+        return
+
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3],
+                        vertical_spacing=0.03)
+
+    for strategy, res in curves:
         curve = res.equity_curve
         idx = pd.to_datetime([e["timestamp"] for e in curve], unit="ms", utc=True)
         eq = [e["equity"] for e in curve]
         label = STRATEGY_LABELS.get(strategy, strategy)
         color = STRATEGY_COLORS.get(strategy, "#888")
-        fig_eq.add_trace(go.Scatter(x=idx, y=eq, mode="lines", name=label, line=dict(color=color, width=2)))
-    fig_eq.add_hline(y=initial_equity, line_dash="dash", line_color="gray", annotation_text="初始資金")
-    fig_eq.update_layout(height=380, margin=dict(l=0, r=0, t=30, b=0), yaxis_title="權益", hovermode="x unified",
-                         legend=dict(orientation="h", y=1.05))
-    st.plotly_chart(apply_dark_theme(fig_eq), use_container_width=True)
+
+        fig.add_trace(go.Scatter(
+            x=idx, y=eq, mode="lines", name=label,
+            line=dict(color=color, width=2),
+            hovertemplate=f"{label}<br>權益: %{{y:,.0f}}<extra></extra>",
+        ), row=1, col=1)
+
+        # 回撤
+        peak = eq[0]
+        dd = []
+        for e in eq:
+            if e > peak:
+                peak = e
+            dd.append(-(peak - e) / peak * 100 if peak else 0)
+        fig.add_trace(go.Scatter(
+            x=idx, y=dd, mode="lines", name=f"{label} DD", showlegend=False,
+            line=dict(color=color, width=1), fill="tozeroy",
+            fillcolor=color.replace(")", ",0.1)").replace("rgb", "rgba") if "rgb" in color else f"rgba(100,100,100,0.1)",
+        ), row=2, col=1)
+
+    fig.add_hline(y=initial_equity, line=dict(color="rgba(150,150,200,0.4)", width=1, dash="dash"),
+                  annotation_text="初始資金", annotation_font_color="#9090b0", row=1, col=1)
+
+    fig.update_layout(
+        height=500, legend=dict(orientation="h", y=1.02, x=0, xanchor="left"),
+    )
+    fig.update_yaxes(title_text="權益", row=1, col=1)
+    fig.update_yaxes(title_text="回撤%", row=2, col=1)
+    st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
 
 def render_performance_table(results: dict[str, BacktestResult]):
@@ -112,7 +212,7 @@ def render_performance_table(results: dict[str, BacktestResult]):
     def _hl(val):
         try:
             v = float(val)
-            return "color:#0d7a0d;font-weight:bold" if v > 0 else "color:#c00;font-weight:bold" if v < 0 else ""
+            return "color:#26A69A;font-weight:bold" if v > 0 else "color:#EF5350;font-weight:bold" if v < 0 else ""
         except (TypeError, ValueError):
             return ""
 
@@ -127,11 +227,12 @@ def render_performance_table(results: dict[str, BacktestResult]):
                 "報酬%": m.get("total_return_pct"), "年化%": m.get("annual_return_pct"),
                 "回撤%": m.get("max_drawdown_pct"), "夏普": m.get("sharpe_ratio"),
                 "Sortino": m.get("sortino_ratio"), "PF": m.get("profit_factor"),
-                "交易": m.get("num_trades"), "勝率%": m.get("win_rate_pct"),
+                "Omega": m.get("omega_ratio"), "勝率%": m.get("win_rate_pct"),
+                "交易": m.get("num_trades"), "連虧": m.get("max_consec_loss"),
                 "手續費": m.get("total_fees", 0), "備註": "",
             })
     df = pd.DataFrame(rows)
-    hl_cols = [c for c in ["報酬%", "年化%", "夏普", "Sortino"] if c in df.columns]
+    hl_cols = [c for c in ["報酬%", "年化%", "夏普", "Sortino", "PF", "Omega"] if c in df.columns]
     if hl_cols:
         st.dataframe(df.style.map(_hl, subset=hl_cols), use_container_width=True, hide_index=True)
     else:
