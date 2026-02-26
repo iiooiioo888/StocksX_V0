@@ -151,6 +151,11 @@ def render_kline_chart(ohlcv_rows, best_strategy_result=None):
         fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.3)", width=1, dash="dash"), row=3, col=1)
         fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1)
 
+    # 鎖定 X 軸範圍到實際數據區間，避免被標記拉開
+    _t_min = df["time"].min()
+    _t_max = df["time"].max()
+    fig.update_xaxes(range=[_t_min, _t_max])
+
     fig.update_layout(
         height=600, xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", y=1.02, x=0, xanchor="left"),
@@ -193,7 +198,7 @@ def render_equity_curves(results: dict[str, BacktestResult], initial_equity: flo
         fig.add_trace(go.Scatter(
             x=idx, y=dd, mode="lines", name=f"{label} DD", showlegend=False,
             line=dict(color=color, width=1), fill="tozeroy",
-            fillcolor=color.replace(")", ",0.1)").replace("rgb", "rgba") if "rgb" in color else f"rgba(100,100,100,0.1)",
+            fillcolor="rgba(100,100,150,0.08)",
         ), row=2, col=1)
 
     fig.add_hline(y=initial_equity, line=dict(color="rgba(150,150,200,0.4)", width=1, dash="dash"),
@@ -204,6 +209,12 @@ def render_equity_curves(results: dict[str, BacktestResult], initial_equity: flo
     )
     fig.update_yaxes(title_text="權益", row=1, col=1)
     fig.update_yaxes(title_text="回撤%", row=2, col=1)
+
+    # 修復回撤 fillcolor
+    for trace in fig.data:
+        if hasattr(trace, 'fillcolor') and trace.fillcolor and 'rgba' not in str(trace.fillcolor):
+            trace.fillcolor = "rgba(100,100,150,0.08)"
+
     st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
 
