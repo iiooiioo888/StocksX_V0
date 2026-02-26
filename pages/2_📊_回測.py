@@ -56,14 +56,10 @@ ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
 # ────────────────────────── 側邊欄 ──────────────────────────
 with st.sidebar:
     _u = st.session_state.get("user")
-    _top1, _top2 = st.columns([3, 1])
     if _u:
-        _top1.markdown(f"**👤 {_u['display_name']}**")
+        st.markdown(f"**👤 {_u['display_name']}**")
     else:
-        _top1.page_link("pages/1_🔐_登入.py", label="🔐 登入", use_container_width=True)
-    if _top2.button("🌙" if not _dark else "☀️", key="theme_toggle"):
-        st.session_state["dark_mode"] = not _dark
-        st.rerun()
+        st.page_link("pages/1_🔐_登入.py", label="🔐 登入", use_container_width=True)
     if _u:
         _nc1, _nc2 = st.columns(2)
         _nc1.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
