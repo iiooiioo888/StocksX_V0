@@ -1,126 +1,140 @@
-# StocksX_V0 — 通用回測平台 MVP（免費數據源版）
+# StocksX — 通用回測平台
 
-本專案提供**加密貨幣數據採集模塊**，透過 CCXT 統一取得 Binance、Bybit 永續合約的 K 線與資金費率，並以 SQLite 本地緩存、限流保護與數據清洗，供後續回測使用。
+跨市場策略回測平台，支援加密貨幣、美股、台股、ETF、期貨、指數。內建 10 種交易策略、23 個交易所手續費資料庫、即時策略監控、用戶系統與管理員後台。
 
-## 功能摘要
+## 功能總覽
 
-- **多交易所**：支援 Binance、Bybit（永續合約），透過 CCXT 統一接口。
-- **本地緩存**：首次拉取後寫入 SQLite（鍵：`exchange_symbol_timeframe`），之後優先讀本地，減少 API 請求。
-- **數據內容**：K 線 (OHLCV)、資金費率 (funding rate)，可選 open_interest、mark_price。
-- **數據清洗**：時間戳統一 UTC 毫秒、去重、缺失 K 線前向填充 (FFill)、插針標記（偏離均價 5% 可標記為異常）。
-- **限流保護**：遇 HTTP 429 自動指數退避重試。
+### 📊 回測引擎
+- **10 種策略**：雙均線交叉、EMA 交叉、MACD 交叉、RSI、布林帶、唐奇安通道、超級趨勢、雙推力、VWAP 回歸、買入持有
+- **Mark-to-Market**：權益曲線即時反映未實現盈虧
+- **手續費系統**：23 個交易所/協議費率（CEX、DEX、傳統市場），含滑點模擬
+- **批量最優搜尋**：窮舉 策略 × K線週期 × 參數，找出全局最優組合
+- **自訂策略參數**：每個策略的參數均可在 UI 中調整
+
+### 🌍 多市場支援
+
+| 大類 | 細類 | 數據來源 |
+|------|------|----------|
+| ₿ 加密貨幣 | 主流永續、主流現貨、DeFi、Layer2/新幣、Meme | CCXT（11 交易所） |
+| 🏛️ 傳統市場 | 美股、台股、ETF、期貨/商品、指數 | Yahoo Finance |
+
+**支援交易所**：OKX、Bitget、Gate.io、KuCoin、MEXC、HTX、BingX、WOO X、Crypto.com、Binance*、Bybit*（*受地區限制，自動回退）
+
+### 📈 互動圖表
+- Plotly K 線圖（Candlestick）+ 成交量 + 買賣點標記
+- 多策略權益曲線對比
+- 回撤分析圖
+- 交易損益分佈直方圖
+- 持倉時長分佈圖
+- 每日報酬率熱力圖
+- 策略信號視覺化
+
+### 👤 用戶系統
+- 註冊/登入（PBKDF2 密碼雜湊、帳號鎖定、Rate Limiting）
+- 回測歷史自動保存、備註標籤
+- 策略收藏 & 對比圖
+- 策略參數預設儲存/載入
+- 回測提醒（報酬率/回撤/夏普閾值通知）
+- 偏好設定、修改密碼
+
+### 📡 策略監控
+- 訂閱任意交易對 × 策略組合
+- 即時價格、策略信號、持倉狀態
+- 帳戶價值 & 未實現 P&L 追蹤
+- 暫停/啟用/刪除訂閱
+
+### 🛠️ 管理員後台
+- 系統統計（用戶數、回測數、熱門標的）
+- 用戶 CRUD（新增、修改角色、重設密碼、停用、刪除）
+- 安全日誌（登入記錄、失敗次數）
+- 數據快取管理
+
+### 🔒 安全防護
+- PBKDF2 密碼雜湊（100k 迭代）
+- 登入失敗 5 次鎖定 5 分鐘
+- 輸入消毒（XSS/SQL Injection 防護）
+- Session 1 小時自動過期
+- Rate Limiting（登入 10次/分、註冊 5次/5分）
 
 ## 安裝
 
 ```bash
-cd e:\Jerry_python\doc\StocksX_V0
 pip install -r requirements.txt
 ```
 
-依賴：`ccxt`、`python-dotenv`（可選）。
+依賴：`ccxt`、`streamlit`、`pandas`、`plotly`、`yfinance`、`python-dotenv`、`dashscope`（可選）
 
-## 使用範例
-
-### 拉取 BTC/USDT 永續 K 線與資金費率並寫入緩存
-
-```python
-from src.data.crypto import CryptoDataFetcher
-import time
-
-# Binance 永續
-fetcher = CryptoDataFetcher("binance")
-symbol = "BTC/USDT:USDT"
-
-# 拉取最近 500 根 1h K 線（首次會請求交易所，之後可從緩存讀）
-since_ms = int((time.time() - 30 * 86400) * 1000)  # 約 30 天前
-fetcher.fetch_ohlcv(symbol, "1h", since=since_ms, limit=500)
-
-# 拉取資金費率
-fetcher.fetch_funding_rate(symbol, since=since_ms, limit=200)
-```
-
-### 緩存優先讀取（缺段自動補拉）
-
-```python
-# 讀取 [since, until] 區間，若本地有缺口會自動向交易所補拉
-since_ms = int((time.time() - 7 * 86400) * 1000)
-until_ms = int(time.time() * 1000)
-rows = fetcher.get_ohlcv(
-    symbol,
-    "1h",
-    since=since_ms,
-    until=until_ms,
-    fill_gaps=True,       # 缺失 K 線用前一根收盤價填充（filled=1）
-    exclude_outliers=False  # 若 True 則排除插針標記的資料
-)
-print(f"共 {len(rows)} 根 K 線")
-```
-
-### 僅從本地緩存讀取（不發 API）
-
-```python
-cached = fetcher.get_cached_ohlcv(symbol, "1h", since_ms, until_ms, fill_gaps=True)
-```
-
-## 回測頁面與報告
-
-在專案根目錄執行：
+## 啟動
 
 ```bash
 streamlit run app.py
 ```
 
-瀏覽器會開啟回測頁面，可設定：
-
-- **交易所**：Binance / Bybit  
-- **標的**：永續合約代碼（如 `BTC/USDT:USDT`）  
-- **K 線週期**、**開始/結束日期**  
-- **策略**：雙均線交叉、買入持有、**RSI**、**MACD 交叉**、**布林帶**（各有參數可調）  
-- **初始資金**、是否**排除插針資料**
-
-執行後會顯示**回測報告**：總報酬、年化報酬、最大回撤、夏普、Sortino、Calmar、交易次數與勝率、權益曲線圖、交易明細表。
-
-**找出最優策略**：側邊欄可選擇「優化目標」（夏普、總報酬、年化報酬、Calmar、Sortino、最小回撤），點擊「找出最優策略」後會**並行窮舉所有可能性**（所有策略 × 所有 K 線週期 × 各策略參數網格），以多進程加速計算，找出全局最優並顯示最優組合與各策略×K線的比較表。若在搜尋過程中關閉瀏覽器分頁或重新整理，終端可能會出現多筆 `WebSocketClosedError`，可忽略或重啟 `streamlit run app.py`。
+瀏覽器開啟後：
+1. 預設管理員帳號：`admin` / `admin123`
+2. 選擇市場大類（加密貨幣 / 傳統市場）→ 細類 → 交易對
+3. 點擊「🚀 執行回測」
 
 ## 專案結構
 
 ```
 StocksX_V0/
-├── app.py                    # Streamlit 回測頁面與報告
+├── app.py                        # 多頁面入口（Landing Page）
+├── pages/
+│   ├── 1_🔐_登入.py              # 登入/註冊
+│   ├── 2_📊_回測.py              # 回測主頁（10策略、K線圖、績效分析）
+│   ├── 3_📜_歷史.py              # 回測歷史、收藏、預設、提醒、設定
+│   ├── 4_🛠️_管理.py             # 管理員後台
+│   └── 5_📡_監控.py              # 策略訂閱 & 即時監控
 ├── src/
-│   ├── data/                 # 數據層（與回測引擎解耦）
-│   │   ├── models.py         # OhlcvBar, FundingRateRecord 等領域模型
-│   │   ├── storage/          # 儲存實作（目前為 SQLite）
-│   │   │   ├── base.py       # MarketDataStorage 介面（Protocol）
-│   │   │   └── sqlite_storage.py  # SQLiteMarketDataStorage
-│   │   ├── sources/          # 外部資料來源
-│   │   │   └── crypto_ccxt.py     # CcxtOhlcvSource, CcxtFundingSource
-│   │   └── crypto/           # 加密貨幣專用組合服務與兼容層
-│   │       ├── __init__.py   # 匯出 CryptoDataFetcher
-│   │       ├── db.py         # SQLite schema/init
-│   │       ├── fetcher.py    # 對外兼容層（舊 API），內部呼叫 service
-│   │       ├── rate_limiter.py
-│   │       └── service.py    # CryptoMarketDataService（緩存 + 缺口補齊 + 插針）
-│   └── backtest/             # 回測引擎
-│       ├── __init__.py
-│       ├── engine.py         # run_backtest, BacktestResult
-│       └── strategies.py     # sma_cross, buy_and_hold, rsi_signal, macd_cross, bollinger_signal
-├── cache/                    # SQLite 緩存（crypto_cache.sqlite）
-├── examples/
+│   ├── auth/                     # 用戶認證系統
+│   │   └── user_db.py            # SQLite 用戶 DB、登入日誌、Rate Limiting
+│   ├── backtest/                 # 回測引擎
+│   │   ├── engine.py             # 回測核心（含手續費、Mark-to-Market）
+│   │   ├── strategies.py         # 10 種交易策略
+│   │   ├── optimizer.py          # 批量最優搜尋
+│   │   └── fees.py               # 23 交易所手續費資料庫
+│   ├── data/                     # 數據層
+│   │   ├── crypto/               # 加密貨幣數據（CCXT + SQLite 快取）
+│   │   ├── traditional/          # 傳統市場數據（Yahoo Finance + SQLite 快取）
+│   │   ├── sources/              # 數據來源（CCXT、yfinance）
+│   │   ├── storage/              # SQLite 儲存層
+│   │   └── live.py               # 即時價格 & 策略信號
+│   └── ai/                       # Qwen AI 客戶端（可選）
+├── cache/                        # SQLite 快取（gitignored）
 ├── requirements.txt
+├── AGENTS.md                     # Cloud Agent 開發指引
 └── README.md
 ```
 
-## 數據存儲 Schema（SQLite）
+## 交易策略
 
-- **ohlcv**：`exchange`, `symbol`, `timeframe`, `timestamp` (UTC 毫秒), `open`, `high`, `low`, `close`, `volume`, `filled`, `is_outlier`；主鍵 `(exchange, symbol, timeframe, timestamp)`。
-- **funding_rates**：`exchange`, `symbol`, `timestamp`, `funding_rate`, `open_interest`, `mark_price`；主鍵 `(exchange, symbol, timestamp)`。
+| 策略 | 類型 | 說明 |
+|------|------|------|
+| 雙均線交叉 | 趨勢 | 快慢 SMA 交叉做多空 |
+| EMA 交叉 | 趨勢 | 指數均線交叉，反應更快 |
+| MACD 交叉 | 趨勢 | MACD 線與信號線交叉 |
+| RSI | 擺盪 | 超買賣反轉信號 |
+| 布林帶 | 均值回歸 | 突破上下軌反向交易 |
+| 唐奇安通道 | 突破 | N 期高低突破做多空 |
+| 超級趨勢 | 趨勢 | 基於 ATR 的動態趨勢帶 |
+| 雙推力 | 突破 | 開盤價 ± Range 突破 |
+| VWAP 回歸 | 均值回歸 | 偏離成交量加權均價反轉 |
+| 買入持有 | 基準 | 持續持有作為對照基準 |
 
-## 免責聲明與風險提示
+## 手續費
 
-- **數據差異**：不同交易所價格存在價差，回測結果僅代表該交易所之表現。
-- **免費限制**：歷史數據深度可能受限（例如部分交易所分鐘級數據年份有限），請以各交易所官方說明為準。
-- **免費數據可能存在誤差，實盤交易請以交易所為準。** 本模塊僅供學習與回測研究使用。
+回測引擎支援真實手續費模擬，每筆交易扣除 `(手續費 + 滑點) × 2`（開倉+平倉）。
+
+內建 23 個交易所/協議費率：
+- **CEX**：Binance 0.04%、OKX 0.05%、MEXC 0.03%…
+- **DEX**：Uniswap 0.3%、Curve 0.04%、GMX 0.07%…
+- **DEX-Perp**：dYdX 0.05%、Hyperliquid 0.035%…
+- **傳統**：美股零佣金、台股 0.1425%+0.3%稅
+
+## 免責聲明
+
+本專案僅供學習與回測研究使用，不構成投資建議。回測結果基於歷史數據，不代表未來表現。實盤交易請以交易所為準。
 
 ## 授權
 
