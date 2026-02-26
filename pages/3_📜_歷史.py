@@ -22,8 +22,8 @@ st.sidebar.page_link("pages/2_📊_回測.py", label="📊 回測", icon="📊")
 
 st.markdown(f"## 📜 我的空間 — {user['display_name']}")
 
-tab_hist, tab_fav, tab_preset, tab_alert, tab_settings = st.tabs(
-    ["📋 回測歷史", "⭐ 收藏 & 對比", "💾 策略預設", "🔔 提醒設定", "⚙️ 偏好"]
+tab_hist, tab_fav, tab_products, tab_preset, tab_alert, tab_settings = st.tabs(
+    ["📋 回測歷史", "⭐ 收藏 & 對比", "📦 我的產品庫", "💾 策略預設", "🔔 提醒設定", "⚙️ 偏好"]
 )
 
 # ─── 回測歷史（含筆記/標籤） ───
@@ -147,6 +147,51 @@ with tab_fav:
                     st.markdown(f"📝 {f['notes']}")
 
 # ─── 策略預設 ───
+with tab_products:
+    st.subheader("📦 我的產品庫")
+    st.caption("管理你關注的交易對和股票，訂閱時可直接選擇")
+
+    _my_products = db.get_products(user["id"])
+    _sys_count = sum(1 for p in _my_products if p.get("is_system"))
+    _user_count = sum(1 for p in _my_products if not p.get("is_system"))
+    st.metric("產品總數", f"{len(_my_products)} 個（系統 {_sys_count} + 自訂 {_user_count}）")
+
+    with st.form("add_product"):
+        st.markdown("**➕ 新增自訂產品**")
+        _ap1, _ap2 = st.columns(2)
+        with _ap1:
+            _ap_symbol = st.text_input("代碼", placeholder="例: DOGE/USDT:USDT 或 TSLA", key="ap_sym")
+            _ap_name = st.text_input("名稱", placeholder="例: Dogecoin 永續", key="ap_name")
+            _ap_market = st.selectbox("市場", ["crypto", "traditional"], key="ap_mkt")
+        with _ap2:
+            _ap_exchange = st.text_input("交易所", value="binance", key="ap_ex")
+            _ap_cat = st.text_input("分類", placeholder="例: Meme, 美股, ETF", key="ap_cat")
+        if st.form_submit_button("➕ 新增", type="primary"):
+            if _ap_symbol:
+                result = db.add_product(_ap_symbol, _ap_name, _ap_exchange, _ap_market, _ap_cat, user["id"])
+                if isinstance(result, int):
+                    st.success(f"✅ 已新增 {_ap_symbol}")
+                    st.rerun()
+                else:
+                    st.error(result)
+
+    if _my_products:
+        _user_prods = [p for p in _my_products if not p.get("is_system")]
+        if _user_prods:
+            st.markdown("**我的自訂產品：**")
+            for p in _user_prods:
+                _pc1, _pc2, _pc3 = st.columns([3, 1, 1])
+                _pc1.markdown(f"**{p['symbol']}** — {p['name']}　`{p['category']}`　{p['exchange']}")
+                if _pc3.button("🗑️", key=f"del_prod_{p['id']}"):
+                    db.delete_product(p["id"])
+                    st.rerun()
+
+        with st.expander("📋 系統預設產品", expanded=False):
+            _sys_prods = [p for p in _my_products if p.get("is_system")]
+            _sys_df = pd.DataFrame([{"代碼": p["symbol"], "名稱": p["name"], "分類": p["category"],
+                                     "交易所": p["exchange"]} for p in _sys_prods])
+            st.dataframe(_sys_df, use_container_width=True, hide_index=True)
+
 with tab_preset:
     st.subheader("💾 我的策略預設")
     st.caption("儲存常用的回測參數組合，一鍵載入使用")

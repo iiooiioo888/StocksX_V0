@@ -18,7 +18,7 @@ db = UserDB()
 st.markdown("## 🛠️ 管理後台")
 st.caption(f"管理員：{user['display_name']}")
 
-tab_stats, tab_users, tab_security, tab_data = st.tabs(["📊 系統統計", "👥 用戶管理", "🔒 安全日誌", "🗄️ 數據管理"])
+tab_stats, tab_users, tab_products_admin, tab_security, tab_data = st.tabs(["📊 系統統計", "👥 用戶管理", "📦 產品庫", "🔒 安全日誌", "🗄️ 數據管理"])
 
 # ─── 系統統計 ───
 with tab_stats:
@@ -109,6 +109,56 @@ with tab_users:
             st.rerun()
 
 # ─── 數據管理 ───
+with tab_products_admin:
+    st.subheader("📦 系統產品庫管理")
+
+    all_prods = db.get_all_products_admin()
+    sys_prods = [p for p in all_prods if p.get("is_system")]
+    user_prods = [p for p in all_prods if not p.get("is_system")]
+    active_prods = [p for p in all_prods if p.get("is_active")]
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("系統產品", len(sys_prods))
+    m2.metric("用戶自訂", len(user_prods))
+    m3.metric("啟用中", len(active_prods))
+
+    with st.form("admin_add_product"):
+        st.markdown("**➕ 新增系統產品**")
+        _apc1, _apc2 = st.columns(2)
+        with _apc1:
+            _admin_sym = st.text_input("代碼", key="admin_p_sym")
+            _admin_name = st.text_input("名稱", key="admin_p_name")
+            _admin_market = st.selectbox("市場", ["crypto", "traditional"], key="admin_p_mkt")
+        with _apc2:
+            _admin_ex = st.text_input("交易所", value="binance", key="admin_p_ex")
+            _admin_cat = st.text_input("分類", key="admin_p_cat")
+        if st.form_submit_button("➕ 新增系統產品", type="primary"):
+            if _admin_sym:
+                result = db.add_product(_admin_sym, _admin_name, _admin_ex, _admin_market, _admin_cat, user_id=0, is_system=True)
+                if isinstance(result, int):
+                    st.success(f"✅ 已新增 {_admin_sym}")
+                    st.rerun()
+                else:
+                    st.error(result)
+
+    st.divider()
+    st.markdown("**所有產品：**")
+    prod_rows = []
+    for p in all_prods:
+        prod_rows.append({
+            "ID": p["id"], "代碼": p["symbol"], "名稱": p["name"],
+            "類型": "🔧 系統" if p["is_system"] else f"👤 用戶#{p['user_id']}",
+            "市場": p["market_type"], "分類": p["category"], "交易所": p["exchange"],
+            "狀態": "✅" if p["is_active"] else "⛔",
+        })
+    st.dataframe(pd.DataFrame(prod_rows), use_container_width=True, hide_index=True)
+
+    del_prod_id = st.number_input("刪除產品 ID", min_value=1, step=1, key="admin_del_prod")
+    if st.button("🗑️ 停用產品"):
+        db.delete_product(int(del_prod_id))
+        st.success("已停用")
+        st.rerun()
+
 with tab_security:
     st.subheader("🔒 登入安全日誌")
     login_logs = db.get_login_log(limit=100)

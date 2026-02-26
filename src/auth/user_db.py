@@ -69,6 +69,19 @@ CREATE TABLE IF NOT EXISTS watchlist (
     pnl_pct REAL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    name TEXT DEFAULT '',
+    exchange TEXT DEFAULT '',
+    market_type TEXT DEFAULT 'crypto',
+    category TEXT DEFAULT '',
+    is_system INTEGER DEFAULT 0,
+    user_id INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at REAL NOT NULL,
+    UNIQUE(symbol, exchange, user_id)
+);
 CREATE TABLE IF NOT EXISTS login_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
@@ -143,6 +156,7 @@ class UserDB:
         self._conn.commit()
         self._migrate()
         self._ensure_admin()
+        self._init_system_products()
         self._rate_limits: dict[str, list[float]] = {}
 
     def _migrate(self) -> None:
@@ -156,6 +170,110 @@ class UserDB:
         cur = self._conn.execute("SELECT id FROM users WHERE username='admin'")
         if not cur.fetchone():
             self.register("admin", "admin123", display_name="管理員", role="admin")
+
+    def _init_system_products(self) -> None:
+        cur = self._conn.execute("SELECT COUNT(*) as c FROM products WHERE is_system=1")
+        if cur.fetchone()["c"] > 0:
+            return
+        now = time.time()
+        _sys = [
+            # 加密主流
+            ("BTC/USDT:USDT", "Bitcoin 永續", "binance", "crypto", "主流永續"),
+            ("ETH/USDT:USDT", "Ethereum 永續", "binance", "crypto", "主流永續"),
+            ("SOL/USDT:USDT", "Solana 永續", "binance", "crypto", "主流永續"),
+            ("BNB/USDT:USDT", "BNB 永續", "binance", "crypto", "主流永續"),
+            ("XRP/USDT:USDT", "XRP 永續", "binance", "crypto", "主流永續"),
+            ("DOGE/USDT:USDT", "Dogecoin 永續", "binance", "crypto", "主流永續"),
+            ("ADA/USDT:USDT", "Cardano 永續", "binance", "crypto", "主流永續"),
+            # 加密現貨
+            ("BTC/USDT", "Bitcoin 現貨", "binance", "crypto", "主流現貨"),
+            ("ETH/USDT", "Ethereum 現貨", "binance", "crypto", "主流現貨"),
+            ("SOL/USDT", "Solana 現貨", "binance", "crypto", "主流現貨"),
+            # DeFi
+            ("UNI/USDT", "Uniswap", "binance", "crypto", "DeFi"),
+            ("AAVE/USDT", "Aave", "binance", "crypto", "DeFi"),
+            ("LINK/USDT", "Chainlink", "binance", "crypto", "DeFi"),
+            # Meme
+            ("PEPE/USDT", "Pepe", "binance", "crypto", "Meme"),
+            ("SHIB/USDT", "Shiba Inu", "binance", "crypto", "Meme"),
+            ("WIF/USDT", "dogwifhat", "binance", "crypto", "Meme"),
+            ("BONK/USDT", "Bonk", "binance", "crypto", "Meme"),
+            # Layer2
+            ("ARB/USDT", "Arbitrum", "binance", "crypto", "Layer2"),
+            ("OP/USDT", "Optimism", "binance", "crypto", "Layer2"),
+            ("SUI/USDT", "Sui", "binance", "crypto", "Layer2"),
+            # 美股
+            ("AAPL", "Apple", "yfinance", "traditional", "美股"),
+            ("MSFT", "Microsoft", "yfinance", "traditional", "美股"),
+            ("GOOGL", "Google", "yfinance", "traditional", "美股"),
+            ("AMZN", "Amazon", "yfinance", "traditional", "美股"),
+            ("NVDA", "NVIDIA", "yfinance", "traditional", "美股"),
+            ("TSLA", "Tesla", "yfinance", "traditional", "美股"),
+            ("META", "Meta", "yfinance", "traditional", "美股"),
+            # 台股
+            ("2330.TW", "台積電", "yfinance", "traditional", "台股"),
+            ("2317.TW", "鴻海", "yfinance", "traditional", "台股"),
+            ("2454.TW", "聯發科", "yfinance", "traditional", "台股"),
+            # ETF
+            ("SPY", "S&P 500 ETF", "yfinance", "traditional", "ETF"),
+            ("QQQ", "Nasdaq 100 ETF", "yfinance", "traditional", "ETF"),
+            ("GLD", "黃金 ETF", "yfinance", "traditional", "ETF"),
+            ("0050.TW", "元大台灣50", "yfinance", "traditional", "ETF"),
+            # 期貨
+            ("GC=F", "黃金期貨", "yfinance", "traditional", "期貨"),
+            ("CL=F", "原油期貨", "yfinance", "traditional", "期貨"),
+            ("ES=F", "S&P 500 期貨", "yfinance", "traditional", "期貨"),
+        ]
+        for sym, name, ex, mt, cat in _sys:
+            try:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO products (symbol, name, exchange, market_type, category, is_system, user_id, is_active, created_at) VALUES (?,?,?,?,?,1,0,1,?)",
+                    (sym, name, ex, mt, cat, now))
+            except Exception:
+                pass
+        self._conn.commit()
+
+    # ─── 產品庫 CRUD ───
+    def get_products(self, user_id: int = 0, market_type: str = "", category: str = "") -> list[dict]:
+        q = "SELECT * FROM products WHERE is_active=1 AND (is_system=1 OR user_id=?)"
+        params: list = [user_id]
+        if market_type:
+            q += " AND market_type=?"
+            params.append(market_type)
+        if category:
+            q += " AND category=?"
+            params.append(category)
+        q += " ORDER BY is_system DESC, category, symbol"
+        return [dict(r) for r in self._conn.execute(q, params).fetchall()]
+
+    def get_product_categories(self, market_type: str = "") -> list[str]:
+        q = "SELECT DISTINCT category FROM products WHERE is_active=1"
+        params: list = []
+        if market_type:
+            q += " AND market_type=?"
+            params.append(market_type)
+        q += " ORDER BY category"
+        return [r["category"] for r in self._conn.execute(q, params).fetchall()]
+
+    def add_product(self, symbol: str, name: str, exchange: str, market_type: str,
+                    category: str, user_id: int = 0, is_system: bool = False) -> int | str:
+        try:
+            cur = self._conn.execute(
+                "INSERT INTO products (symbol, name, exchange, market_type, category, is_system, user_id, is_active, created_at) VALUES (?,?,?,?,?,?,?,1,?)",
+                (_sanitize(symbol, 50), _sanitize(name, 100), _sanitize(exchange, 20),
+                 _sanitize(market_type, 20), _sanitize(category, 50),
+                 1 if is_system else 0, user_id, time.time()))
+            self._conn.commit()
+            return cur.lastrowid or 0
+        except sqlite3.IntegrityError:
+            return "產品已存在"
+
+    def delete_product(self, product_id: int) -> None:
+        self._conn.execute("UPDATE products SET is_active=0 WHERE id=?", (product_id,))
+        self._conn.commit()
+
+    def get_all_products_admin(self) -> list[dict]:
+        return [dict(r) for r in self._conn.execute("SELECT * FROM products ORDER BY market_type, category, symbol").fetchall()]
 
     def check_rate_limit(self, key: str, max_calls: int = 10, period: float = 60) -> bool:
         """回傳 True 表示未超限，False 表示已超限"""

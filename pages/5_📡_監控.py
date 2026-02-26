@@ -35,13 +35,27 @@ with tab_add:
         with wc1:
             w_market = st.radio("市場", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True)
             is_trad = w_market == "🏛️ 傳統市場"
+            _mt = "traditional" if is_trad else "crypto"
+            _cats = db.get_product_categories(_mt)
+            _sel_cat = st.selectbox("分類", _cats if _cats else ["全部"], key="w_cat")
+            _products = db.get_products(user["id"], market_type=_mt, category=_sel_cat if _sel_cat != "全部" else "")
+            _prod_options = [f"{p['symbol']} — {p['name']}" for p in _products]
+            _prod_options.append("✏️ 自訂輸入")
+            _sel_prod = st.selectbox("產品", _prod_options, key="w_prod")
+
+            if _sel_prod == "✏️ 自訂輸入":
+                w_symbol = st.text_input("代碼", value="BTC/USDT:USDT" if not is_trad else "AAPL", key="w_sym_custom")
+                w_exchange = "yfinance" if is_trad else st.selectbox("交易所", ["binance", "okx", "bitget", "gate", "mexc", "htx"], key="w_ex")
+            else:
+                _idx = _prod_options.index(_sel_prod)
+                _p = _products[_idx]
+                w_symbol = _p["symbol"]
+                w_exchange = _p["exchange"]
+                st.caption(f"交易所: {w_exchange}")
+
             if is_trad:
-                w_symbol = st.text_input("股票代碼", value="AAPL", placeholder="AAPL, 2330.TW, SPY")
-                w_exchange = "yfinance"
                 w_timeframe = st.selectbox("週期", ["1h", "1d"], index=1, key="w_tf")
             else:
-                w_symbol = st.text_input("交易對", value="BTC/USDT:USDT")
-                w_exchange = st.selectbox("交易所", ["binance", "okx", "bitget", "gate", "mexc", "htx", "bybit", "bingx", "woo"], key="w_ex")
                 w_timeframe = st.selectbox("週期", ["5m", "15m", "1h", "4h", "1d"], index=2, key="w_tf_c")
         with wc2:
             w_strategy = st.selectbox("策略", list(STRATEGY_LABELS.keys()),
