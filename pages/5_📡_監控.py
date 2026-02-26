@@ -18,9 +18,13 @@ if not st.session_state.get("user"):
 user = st.session_state["user"]
 db = UserDB()
 
-st.sidebar.markdown(f"### 👤 {user['display_name']}")
-st.sidebar.page_link("pages/2_📊_回測.py", label="📊 回測", icon="📊")
-st.sidebar.page_link("pages/3_📜_歷史.py", label="📜 歷史", icon="📜")
+st.sidebar.markdown(f"**👤 {user['display_name']}**")
+_sc1, _sc2 = st.sidebar.columns(2)
+_sc1.page_link("pages/2_📊_回測.py", label="📊 回測", use_container_width=True)
+_sc2.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
+if st.sidebar.button("🚪 登出", use_container_width=True, key="mon_logout"):
+    st.session_state.pop("user", None)
+    st.switch_page("pages/1_🔐_登入.py")
 
 st.markdown("## 📡 策略訂閱 & 即時監控")
 st.caption("訂閱策略後，即時查看信號、持倉狀態和損益")

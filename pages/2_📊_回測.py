@@ -201,8 +201,11 @@ with st.sidebar:
             end = st.date_input("結束", value=today)
 
     with st.expander("💰 資金與風控", expanded=False):
-        initial_equity = st.number_input("初始資金", min_value=100.0, value=10000.0, step=500.0)
-        leverage = st.number_input("杠杆倍數", min_value=1.0, value=1.0, step=1.0, max_value=125.0)
+        _user_settings = _user_db.get_settings(st.session_state["user"]["id"]) if st.session_state.get("user") else {}
+        _def_equity = float(_user_settings.get("default_equity", 10000))
+        _def_leverage = float(_user_settings.get("default_leverage", 1))
+        initial_equity = st.number_input("初始資金", min_value=100.0, value=_def_equity, step=500.0)
+        leverage = st.number_input("杠杆倍數", min_value=1.0, value=_def_leverage, step=1.0, max_value=125.0)
         col_tp, col_sl = st.columns(2)
         with col_tp:
             take_profit_pct = st.number_input("止盈 %", min_value=0.0, value=0.0, step=0.5)
@@ -363,7 +366,10 @@ if compare_btn and compare_symbols_str.strip():
         compare_results: dict[str, dict] = {}
         for sym in compare_list:
             try:
-                fetcher = CryptoDataFetcher(exchange_id)
+                if is_traditional:
+                    fetcher = TraditionalDataFetcher()
+                else:
+                    fetcher = CryptoDataFetcher(exchange_id or "okx")
                 rows = fetcher.get_ohlcv(sym, timeframe, since_ms, until_ms, fill_gaps=True)
                 params_bh = {}
                 res = _run_backtest_on_rows(
@@ -401,7 +407,8 @@ if optimize_btn and since_ms < until_ms:
             objective=objective, initial_equity=initial_equity, leverage=leverage,
             take_profit_pct=take_profit_pct or None, stop_loss_pct=stop_loss_pct or None,
             exclude_outliers=exclude_outliers, max_combos_per_strategy=999,
-            use_async=False, on_global_progress=on_global_progress,
+            use_async=False, fee_rate=user_fee, slippage=user_slip,
+            on_global_progress=on_global_progress,
         )
         global_progress.progress(1.0, text="✅ 已完成")
         global_status.caption("窮舉搜尋完成。")
@@ -623,7 +630,8 @@ with tab2:
                 "最大回撤%": m.get("max_drawdown_pct"), "夏普": m.get("sharpe_ratio"),
                 "Sortino": m.get("sortino_ratio"), "Calmar": m.get("calmar_ratio"),
                 "交易次數": m.get("num_trades"), "勝率%": m.get("win_rate_pct"),
-                "手續費$": m.get("total_fees", 0), "備註": "",
+                "Profit Factor": m.get("profit_factor", 0), "Omega": m.get("omega_ratio", 0),
+                "連虧": m.get("max_consec_loss", 0), "手續費$": m.get("total_fees", 0), "備註": "",
             })
     df_perf = pd.DataFrame(perf_rows)
     st.subheader("📋 績效彙總")
