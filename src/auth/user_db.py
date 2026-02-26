@@ -82,6 +82,24 @@ CREATE TABLE IF NOT EXISTS products (
     created_at REAL NOT NULL,
     UNIQUE(symbol, exchange, user_id)
 );
+CREATE TABLE IF NOT EXISTS trade_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    watch_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    action TEXT NOT NULL,
+    side INTEGER NOT NULL,
+    price REAL NOT NULL,
+    equity_before REAL DEFAULT 0,
+    equity_after REAL DEFAULT 0,
+    pnl_pct REAL DEFAULT 0,
+    pnl_amount REAL DEFAULT 0,
+    fee REAL DEFAULT 0,
+    reason TEXT DEFAULT '',
+    created_at REAL NOT NULL,
+    FOREIGN KEY (watch_id) REFERENCES watchlist(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS login_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
@@ -585,3 +603,45 @@ class UserDB:
     def toggle_watch(self, watch_id: int) -> None:
         self._conn.execute("UPDATE watchlist SET is_active = 1 - is_active WHERE id=?", (watch_id,))
         self._conn.commit()
+
+    # ─── 模擬交易記錄 ───
+    def log_trade(self, watch_id: int, user_id: int, symbol: str, action: str,
+                  side: int, price: float, equity_before: float, equity_after: float,
+                  pnl_pct: float = 0, pnl_amount: float = 0, fee: float = 0, reason: str = "") -> int:
+        cur = self._conn.execute(
+            """INSERT INTO trade_log (watch_id, user_id, symbol, action, side, price,
+               equity_before, equity_after, pnl_pct, pnl_amount, fee, reason, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (watch_id, user_id, symbol, action, side, price,
+             equity_before, equity_after, pnl_pct, pnl_amount, fee, reason, time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid or 0
+
+    def get_trade_log(self, watch_id: int = 0, user_id: int = 0, limit: int = 100) -> list[dict]:
+        if watch_id:
+            cur = self._conn.execute(
+                "SELECT * FROM trade_log WHERE watch_id=? ORDER BY created_at DESC LIMIT ?", (watch_id, limit))
+        elif user_id:
+            cur = self._conn.execute(
+                "SELECT * FROM trade_log WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
+        else:
+            return []
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_trade_stats(self, watch_id: int) -> dict:
+        logs = self.get_trade_log(watch_id=watch_id, limit=999)
+        closes = [t for t in logs if t["action"] == "平倉"]
+        if not closes:
+            return {"total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0,
+                    "total_pnl": 0, "total_fees": 0, "avg_pnl": 0}
+        wins = [t for t in closes if t["pnl_amount"] > 0]
+        losses = [t for t in closes if t["pnl_amount"] < 0]
+        total_pnl = sum(t["pnl_amount"] for t in closes)
+        total_fees = sum(t["fee"] for t in closes)
+        return {
+            "total_trades": len(closes), "wins": len(wins), "losses": len(losses),
+            "win_rate": round(len(wins) / len(closes) * 100, 1) if closes else 0,
+            "total_pnl": round(total_pnl, 2), "total_fees": round(total_fees, 2),
+            "avg_pnl": round(total_pnl / len(closes), 2) if closes else 0,
+        }

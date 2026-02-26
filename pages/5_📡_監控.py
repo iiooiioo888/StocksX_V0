@@ -124,31 +124,52 @@ with tab_watch:
             with st.expander(_header, expanded=False):
                 if refresh and w["is_active"]:
                     with st.spinner(f"更新 {w['symbol']}…"):
-                        # 即時價格
                         live = get_live_price(w["symbol"], w["exchange"])
-                        # 策略信號
                         sig_data = get_current_signal(
                             w["symbol"], w["exchange"], w["timeframe"],
                             w["strategy"], w["strategy_params"],
                         )
-
                         if live:
                             price = live["price"]
-                            # 更新持倉邏輯
                             new_signal = sig_data.get("signal", 0)
                             old_position = w["position"]
                             entry_price = w["entry_price"]
+                            _eq = w.get("initial_equity", 10000)
                             pnl = 0.0
+                            _fee_rate = 0.05
 
+                            # 開倉
                             if old_position == 0 and new_signal != 0:
                                 entry_price = price
                                 old_position = new_signal
+                                _side_txt = "做多" if new_signal == 1 else "做空"
+                                db.log_trade(w["id"], user["id"], w["symbol"], "開倉",
+                                             new_signal, price, _eq, _eq, reason=f"信號 → {_side_txt}")
+                                st.toast(f"📌 {w['symbol']} 開倉 {_side_txt} @ {price:,.2f}", icon="📌")
+
+                            # 反轉或平倉
                             elif old_position != 0 and new_signal != old_position:
                                 if entry_price > 0:
                                     pnl = (price - entry_price) / entry_price * old_position * 100
+                                    _cost = _fee_rate * 2
+                                    _net_pnl = pnl - _cost
+                                    _pnl_amt = _eq * _net_pnl / 100
+                                    _fee_amt = _eq * _cost / 100
+                                    _eq_after = _eq + _pnl_amt
+                                    _old_side = "多" if old_position == 1 else "空"
+                                    db.log_trade(w["id"], user["id"], w["symbol"], "平倉",
+                                                 old_position, price, _eq, round(_eq_after, 2),
+                                                 round(_net_pnl, 2), round(_pnl_amt, 2),
+                                                 round(_fee_amt, 2), f"平{_old_side} P&L:{_net_pnl:+.2f}%")
+                                    _icon = "🟢" if _pnl_amt > 0 else "🔴"
+                                    st.toast(f"{_icon} {w['symbol']} 平{_old_side}倉 P&L {_net_pnl:+.2f}% (${_pnl_amt:+,.0f})", icon=_icon)
+
                                 if new_signal != 0:
                                     entry_price = price
                                     old_position = new_signal
+                                    _side_txt = "做多" if new_signal == 1 else "做空"
+                                    db.log_trade(w["id"], user["id"], w["symbol"], "開倉",
+                                                 new_signal, price, _eq, _eq, reason=f"反轉 → {_side_txt}")
                                 else:
                                     entry_price = 0
                                     old_position = 0
@@ -268,6 +289,40 @@ with tab_watch:
                 if bc3.button("🗑️ 刪除", key=f"del_{w['id']}"):
                     db.delete_watch(w["id"])
                     st.rerun()
+
+                # 交易績效統計
+                _stats = db.get_trade_stats(w["id"])
+                if _stats["total_trades"] > 0:
+                    st.divider()
+                    _st1, _st2, _st3, _st4, _st5 = st.columns(5)
+                    _st1.metric("📊 總交易", _stats["total_trades"])
+                    _st2.metric("✅ 勝/負", f"{_stats['wins']}/{_stats['losses']}")
+                    _st3.metric("🎯 勝率", f"{_stats['win_rate']}%")
+                    _st4.metric("💰 累計P&L", f"${_stats['total_pnl']:+,.0f}")
+                    _st5.metric("💸 累計費用", f"${_stats['total_fees']:,.0f}")
+
+                # 操作記錄
+                _show_log = st.checkbox("📋 查看操作記錄", value=False, key=f"log_{w['id']}")
+                if _show_log:
+                    _trades = db.get_trade_log(watch_id=w["id"])
+                    if _trades:
+                        _trows = []
+                        for _t in _trades:
+                            _act_icon = "📌" if _t["action"] == "開倉" else "💰"
+                            _side_icon = "🟢" if _t["side"] == 1 else "🔴"
+                            _trows.append({
+                                "時間": datetime.fromtimestamp(_t["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M"),
+                                "操作": f"{_act_icon} {_t['action']}",
+                                "方向": f"{_side_icon} {'多' if _t['side']==1 else '空'}",
+                                "價格": f"{_t['price']:,.2f}",
+                                "P&L%": f"{_t['pnl_pct']:+.2f}%" if _t["pnl_pct"] else "",
+                                "P&L$": f"{_t['pnl_amount']:+,.0f}" if _t["pnl_amount"] else "",
+                                "手續費": f"${_t['fee']:,.0f}" if _t["fee"] else "",
+                                "說明": _t["reason"],
+                            })
+                        st.dataframe(pd.DataFrame(_trows), use_container_width=True, hide_index=True)
+                    else:
+                        st.caption("尚無操作記錄，刷新後信號變化時會自動記錄")
 
                 # 詳細資訊
                 st.caption(
