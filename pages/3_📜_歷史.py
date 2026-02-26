@@ -5,20 +5,15 @@ import plotly.graph_objects as go
 from datetime import datetime, timezone
 from io import BytesIO
 from src.auth import UserDB
+from src.ui_common import apply_theme, breadcrumb, require_login, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 歷史", page_icon="📜", layout="wide")
-st.markdown('<p style="font-size:0.85rem;color:#888;">🏠 首頁 › 📜 我的空間</p>', unsafe_allow_html=True)
+apply_theme()
+breadcrumb("我的空間", "📜")
 
-if not st.session_state.get("user"):
-    st.warning("⚠️ 請先登入")
-    st.page_link("pages/1_🔐_登入.py", label="🔐 前往登入", icon="🔐")
-    st.stop()
-
-user = st.session_state["user"]
+user = require_login()
 db = UserDB()
-
-st.sidebar.markdown(f"### 👤 {user['display_name']}")
-st.sidebar.page_link("pages/2_📊_回測.py", label="📊 回測", icon="📊")
+sidebar_user_nav(user)
 
 st.markdown(f"## 📜 我的空間 — {user['display_name']}")
 

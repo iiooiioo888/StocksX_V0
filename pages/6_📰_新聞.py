@@ -2,9 +2,12 @@
 import streamlit as st
 import time
 from datetime import datetime, timezone
+from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 市場新聞", page_icon="📰", layout="wide")
-st.markdown('<p style="font-size:0.85rem;color:#888;">🏠 首頁 › 📰 市場新聞</p>', unsafe_allow_html=True)
+apply_theme()
+breadcrumb("市場新聞", "📰")
+sidebar_user_nav(check_session())
 st.markdown("## 📰 市場新聞")
 
 NEWS_SOURCES = {

@@ -20,15 +20,15 @@ from src.data.crypto import CryptoDataFetcher
 from src.data.traditional import TraditionalDataFetcher
 from src.data.integrity import validate_ohlcv, compute_data_hash
 from src.auth import UserDB
-from src.config import STRATEGY_LABELS, STRATEGY_COLORS, CRYPTO_CATEGORIES, TRADITIONAL_CATEGORIES, EXCHANGE_OPTIONS, APP_CSS
+from src.config import STRATEGY_LABELS, STRATEGY_COLORS, CRYPTO_CATEGORIES, TRADITIONAL_CATEGORIES, EXCHANGE_OPTIONS
 from src.chart_theme import apply_dark_theme
+from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 通用回測", page_icon="📊", layout="wide")
+apply_theme()
+breadcrumb("回測", "📊")
 
 _user_db = UserDB()
-
-st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
-st.markdown('<p class="breadcrumb">🏠 首頁 › 📊 回測</p>', unsafe_allow_html=True)
 
 
 def to_ms(d):
@@ -54,17 +54,9 @@ ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
 ## CRYPTO_CATEGORIES, TRADITIONAL_CATEGORIES, EXCHANGE_OPTIONS imported from src.config
 
 # ────────────────────────── 側邊欄 ──────────────────────────
+_u = check_session()
 with st.sidebar:
-    _u = st.session_state.get("user")
-    if _u:
-        st.markdown(f"**👤 {_u['display_name']}**")
-    else:
-        st.page_link("pages/1_🔐_登入.py", label="🔐 登入", use_container_width=True)
-    if _u:
-        _nc1, _nc2 = st.columns(2)
-        _nc1.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
-        if _u["role"] == "admin":
-            _nc2.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", use_container_width=True)
+    sidebar_user_nav(_u)
 
     with st.expander("🔧 基本設定", expanded=True):
         market_type = st.radio("市場大類", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True, key="mkt_type")
