@@ -34,29 +34,43 @@ tab_watch, tab_add = st.tabs(["📊 我的訂閱", "➕ 新增訂閱"])
 # ─── 新增訂閱 ───
 with tab_add:
     st.subheader("➕ 新增策略訂閱")
+
+    # 市場/分類/產品 在 form 外面，即時聯動
+    _wm1, _wm2 = st.columns(2)
+    with _wm1:
+        w_market = st.radio("市場", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True, key="w_mkt_radio")
+    is_trad = w_market == "🏛️ 傳統市場"
+    _mt = "traditional" if is_trad else "crypto"
+
+    _wc1, _wc2 = st.columns(2)
+    with _wc1:
+        _cats = db.get_product_categories(_mt)
+        _sel_cat = st.selectbox("分類", _cats if _cats else ["全部"], key="w_cat")
+    with _wc2:
+        _products = db.get_products(user["id"], market_type=_mt, category=_sel_cat if _sel_cat != "全部" else "")
+        _prod_options = [f"{p['symbol']} — {p['name']}" for p in _products]
+        _prod_options.append("✏️ 自訂輸入")
+        _sel_prod = st.selectbox("產品", _prod_options, key="w_prod")
+
+    if _sel_prod == "✏️ 自訂輸入":
+        _ci1, _ci2 = st.columns(2)
+        with _ci1:
+            w_symbol = st.text_input("代碼", value="BTC/USDT:USDT" if not is_trad else "AAPL", key="w_sym_custom")
+        with _ci2:
+            w_exchange = "yfinance" if is_trad else st.selectbox("交易所", ["binance", "okx", "bitget", "gate", "mexc", "htx"], key="w_ex")
+    else:
+        _idx = _prod_options.index(_sel_prod)
+        _p = _products[_idx]
+        w_symbol = _p["symbol"]
+        w_exchange = _p["exchange"]
+
+    st.divider()
+
+    # 策略/參數/資金 在 form 裡面
     with st.form("add_watch"):
         wc1, wc2 = st.columns(2)
         with wc1:
-            w_market = st.radio("市場", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True)
-            is_trad = w_market == "🏛️ 傳統市場"
-            _mt = "traditional" if is_trad else "crypto"
-            _cats = db.get_product_categories(_mt)
-            _sel_cat = st.selectbox("分類", _cats if _cats else ["全部"], key="w_cat")
-            _products = db.get_products(user["id"], market_type=_mt, category=_sel_cat if _sel_cat != "全部" else "")
-            _prod_options = [f"{p['symbol']} — {p['name']}" for p in _products]
-            _prod_options.append("✏️ 自訂輸入")
-            _sel_prod = st.selectbox("產品", _prod_options, key="w_prod")
-
-            if _sel_prod == "✏️ 自訂輸入":
-                w_symbol = st.text_input("代碼", value="BTC/USDT:USDT" if not is_trad else "AAPL", key="w_sym_custom")
-                w_exchange = "yfinance" if is_trad else st.selectbox("交易所", ["binance", "okx", "bitget", "gate", "mexc", "htx"], key="w_ex")
-            else:
-                _idx = _prod_options.index(_sel_prod)
-                _p = _products[_idx]
-                w_symbol = _p["symbol"]
-                w_exchange = _p["exchange"]
-                st.caption(f"交易所: {w_exchange}")
-
+            st.caption(f"📌 已選：**{w_symbol}** ({w_exchange})")
             if is_trad:
                 w_timeframe = st.selectbox("週期", ["1h", "1d"], index=1, key="w_tf")
             else:
@@ -66,21 +80,25 @@ with tab_add:
                                       format_func=lambda x: STRATEGY_LABELS.get(x, x))
             w_equity = st.number_input("模擬資金", value=10000.0, step=500.0)
 
-            params = {}
-            if w_strategy == "sma_cross":
-                params["fast"] = st.number_input("快線", value=10, min_value=2)
-                params["slow"] = st.number_input("慢線", value=30, min_value=5)
-            elif w_strategy == "rsi_signal":
-                params["period"] = st.number_input("RSI 週期", value=14, min_value=5)
-                params["oversold"] = st.number_input("超賣", value=30.0)
-                params["overbought"] = st.number_input("超買", value=70.0)
-            elif w_strategy == "macd_cross":
-                params["fast"] = st.number_input("MACD 快", value=12, min_value=2)
-                params["slow"] = st.number_input("MACD 慢", value=26, min_value=5)
-                params["signal"] = st.number_input("信號線", value=9, min_value=2)
-            elif w_strategy == "bollinger_signal":
-                params["period"] = st.number_input("週期", value=20, min_value=5)
-                params["std_dev"] = st.number_input("倍數", value=2.0, min_value=0.5)
+        params = {}
+        if w_strategy == "sma_cross":
+            _p1, _p2 = st.columns(2)
+            params["fast"] = _p1.number_input("快線", value=10, min_value=2)
+            params["slow"] = _p2.number_input("慢線", value=30, min_value=5)
+        elif w_strategy == "rsi_signal":
+            _p1, _p2, _p3 = st.columns(3)
+            params["period"] = _p1.number_input("RSI 週期", value=14, min_value=5)
+            params["oversold"] = _p2.number_input("超賣", value=30.0)
+            params["overbought"] = _p3.number_input("超買", value=70.0)
+        elif w_strategy == "macd_cross":
+            _p1, _p2, _p3 = st.columns(3)
+            params["fast"] = _p1.number_input("MACD 快", value=12, min_value=2)
+            params["slow"] = _p2.number_input("MACD 慢", value=26, min_value=5)
+            params["signal"] = _p3.number_input("信號線", value=9, min_value=2)
+        elif w_strategy == "bollinger_signal":
+            _p1, _p2 = st.columns(2)
+            params["period"] = _p1.number_input("週期", value=20, min_value=5)
+            params["std_dev"] = _p2.number_input("倍數", value=2.0, min_value=0.5)
 
         if st.form_submit_button("📡 開始訂閱", type="primary", use_container_width=True):
             db.add_watch(user["id"], w_symbol, w_exchange, w_timeframe, w_strategy, params, w_equity)
