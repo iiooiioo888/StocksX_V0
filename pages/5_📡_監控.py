@@ -41,7 +41,7 @@ with tab_add:
                 w_timeframe = st.selectbox("週期", ["1h", "1d"], index=1, key="w_tf")
             else:
                 w_symbol = st.text_input("交易對", value="BTC/USDT:USDT")
-                w_exchange = st.selectbox("交易所", ["okx", "bitget", "gate", "mexc", "htx"], key="w_ex")
+                w_exchange = st.selectbox("交易所", ["binance", "okx", "bitget", "gate", "mexc", "htx", "bybit", "bingx", "woo"], key="w_ex")
                 w_timeframe = st.selectbox("週期", ["5m", "15m", "1h", "4h", "1d"], index=2, key="w_tf_c")
         with wc2:
             w_strategy = st.selectbox("策略", list(STRATEGY_LABELS.keys()),
