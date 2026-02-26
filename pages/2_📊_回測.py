@@ -44,6 +44,18 @@ def to_ms(d):
     return int(dt.timestamp() * 1000)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_fetch(exchange_id: str, symbol: str, timeframe: str, since_ms: int, until_ms: int,
+                  is_traditional: bool, exclude_outliers: bool) -> list[dict]:
+    """快取 K 線數據 5 分鐘，避免重複拉取"""
+    if is_traditional:
+        fetcher = TraditionalDataFetcher()
+    else:
+        fetcher = CryptoDataFetcher(exchange_id or "okx")
+    return fetcher.get_ohlcv(symbol or "BTC/USDT:USDT", timeframe, since_ms, until_ms,
+                             fill_gaps=True, exclude_outliers=exclude_outliers)
+
+
 ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
 STRATEGY_LABELS = {
     "sma_cross": "雙均線交叉", "buy_and_hold": "買入持有",
@@ -284,14 +296,8 @@ if run_btn:
         results = {}
         try:
             _progress_bar.progress(10, text="連接交易所…")
-            if is_traditional:
-                fetcher = TraditionalDataFetcher()
-            else:
-                _eid = exchange_id or "okx"
-                fetcher = CryptoDataFetcher(_eid)
-            _sym = symbol or "BTC/USDT:USDT"
             _progress_bar.progress(30, text="拉取 K 線數據…")
-            rows = fetcher.get_ohlcv(_sym, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
+            rows = _cached_fetch(exchange_id, symbol, timeframe, since_ms, until_ms, is_traditional, exclude_outliers)
         except Exception as e:
             _progress_bar.empty()
             st.markdown(f'<div class="fail-banner">❌ <b>數據拉取失敗</b>：{e}</div>', unsafe_allow_html=True)
