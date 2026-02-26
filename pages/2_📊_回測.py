@@ -13,6 +13,7 @@ import streamlit as st
 
 from src.backtest import BacktestResult, find_optimal, find_optimal_global, run_backtest
 from src.backtest.engine import _run_backtest_on_rows
+from src.backtest.fees import EXCHANGE_FEES, get_fee_rate, get_slippage
 from src.backtest.optimizer import DEFAULT_STRATEGIES_GLOBAL, DEFAULT_TIMEFRAMES_GLOBAL, OBJECTIVES
 from src.backtest import strategies as backtest_strategies
 from src.data.crypto import CryptoDataFetcher
@@ -193,6 +194,20 @@ with st.sidebar:
         with col_sl:
             stop_loss_pct = st.number_input("止損 %", min_value=0.0, value=0.0, step=0.5)
         exclude_outliers = st.checkbox("排除插針資料", value=False)
+        st.divider()
+        st.caption("💸 手續費 & 滑點")
+        _ex_for_fee = exchange_id if not is_traditional else ("tw_broker" if "TW" in symbol else "us_broker")
+        _default_fee = get_fee_rate(_ex_for_fee)
+        _default_slip = get_slippage(_ex_for_fee)
+        _ex_info = EXCHANGE_FEES.get(_ex_for_fee, {})
+        st.caption(f"📋 {_ex_info.get('name', _ex_for_fee)}：Maker {_ex_info.get('maker', 0)}% / Taker {_ex_info.get('taker', 0)}%")
+        fee_mode = st.radio("費率模式", ["自動（依交易所）", "自訂"], horizontal=True, key="fee_mode")
+        if fee_mode == "自訂":
+            user_fee = st.number_input("手續費 %（單邊）", min_value=0.0, value=_default_fee, step=0.01, key="user_fee")
+            user_slip = st.number_input("滑點 %", min_value=0.0, value=_default_slip, step=0.01, key="user_slip")
+        else:
+            user_fee = _default_fee
+            user_slip = _default_slip
 
     with st.expander("⚙️ 策略參數自訂", expanded=False):
         st.caption("調整各策略的參數，留空則使用預設值")
@@ -293,6 +308,7 @@ if run_btn:
                     since_ms=since_ms, until_ms=until_ms, strategy=strategy, strategy_params=params,
                     initial_equity=initial_equity, leverage=leverage,
                     take_profit_pct=take_profit_pct or None, stop_loss_pct=stop_loss_pct or None,
+                    fee_rate=user_fee, slippage=user_slip,
                 )
                 results[strategy] = res
             _progress_bar.progress(100, text="✅ 完成！")
@@ -599,7 +615,8 @@ with tab2:
                 "總報酬率%": m.get("total_return_pct"), "年化報酬%": m.get("annual_return_pct"),
                 "最大回撤%": m.get("max_drawdown_pct"), "夏普": m.get("sharpe_ratio"),
                 "Sortino": m.get("sortino_ratio"), "Calmar": m.get("calmar_ratio"),
-                "交易次數": m.get("num_trades"), "勝率%": m.get("win_rate_pct"), "備註": "",
+                "交易次數": m.get("num_trades"), "勝率%": m.get("win_rate_pct"),
+                "手續費$": m.get("total_fees", 0), "備註": "",
             })
     df_perf = pd.DataFrame(perf_rows)
     st.subheader("📋 績效彙總")
