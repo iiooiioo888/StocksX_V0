@@ -18,7 +18,7 @@ db = UserDB()
 st.markdown("## 🛠️ 管理後台")
 st.caption(f"管理員：{user['display_name']}")
 
-tab_stats, tab_users, tab_data = st.tabs(["📊 系統統計", "👥 用戶管理", "🗄️ 數據管理"])
+tab_stats, tab_users, tab_security, tab_data = st.tabs(["📊 系統統計", "👥 用戶管理", "🔒 安全日誌", "🗄️ 數據管理"])
 
 # ─── 系統統計 ───
 with tab_stats:
@@ -109,6 +109,25 @@ with tab_users:
             st.rerun()
 
 # ─── 數據管理 ───
+with tab_security:
+    st.subheader("🔒 登入安全日誌")
+    login_logs = db.get_login_log(limit=100)
+    if login_logs:
+        log_rows = []
+        for lg in login_logs:
+            log_rows.append({
+                "時間": datetime.fromtimestamp(lg["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M:%S"),
+                "帳號": lg["username"],
+                "結果": "✅ 成功" if lg["success"] else "❌ 失敗",
+                "原因": lg.get("reason", ""),
+                "IP": lg.get("ip", ""),
+            })
+        st.dataframe(pd.DataFrame(log_rows), use_container_width=True, hide_index=True)
+        fail_count = sum(1 for lg in login_logs if not lg["success"])
+        st.metric("最近 100 筆中失敗次數", fail_count)
+    else:
+        st.info("尚無登入記錄")
+
 with tab_data:
     st.subheader("🗄️ 數據快取管理")
     import os

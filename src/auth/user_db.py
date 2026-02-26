@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS watchlist (
     pnl_pct REAL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS login_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    ip TEXT DEFAULT '',
+    success INTEGER NOT NULL,
+    reason TEXT DEFAULT '',
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS alerts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -83,16 +91,47 @@ CREATE TABLE IF NOT EXISTS alerts (
 """
 
 
+_MAX_LOGIN_ATTEMPTS = 5
+_LOCKOUT_SECONDS = 300
+_SESSION_TIMEOUT = 3600
+_MIN_PASSWORD_LEN = 6
+
+
 def _hash_pw(password: str, salt: str = "") -> str:
     if not salt:
         salt = secrets.token_hex(16)
-    h = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
-    return f"{salt}:{h}"
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+    return f"pbkdf2:{salt}:{h}"
 
 
 def _verify_pw(password: str, stored: str) -> bool:
+    if stored.startswith("pbkdf2:"):
+        _, salt, h = stored.split(":", 2)
+        return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex() == h
     salt = stored.split(":")[0]
-    return _hash_pw(password, salt) == stored
+    old_h = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
+    return f"{salt}:{old_h}" == stored
+
+
+def _sanitize(text: str, max_len: int = 200) -> str:
+    """輸入消毒：去除危險字符，防 XSS/注入"""
+    if not isinstance(text, str):
+        return ""
+    text = text.strip()[:max_len]
+    for ch in ["<", ">", "'", '"', ";", "--", "/*", "*/", "\\", "\x00"]:
+        text = text.replace(ch, "")
+    return text
+
+
+def _validate_password(password: str) -> str | None:
+    """密碼強度檢查，回傳錯誤訊息或 None"""
+    if len(password) < _MIN_PASSWORD_LEN:
+        return f"密碼至少 {_MIN_PASSWORD_LEN} 個字元"
+    if password.isdigit():
+        return "密碼不能全是數字"
+    if password.isalpha():
+        return "密碼需包含數字"
+    return None
 
 
 class UserDB:
@@ -104,6 +143,7 @@ class UserDB:
         self._conn.commit()
         self._migrate()
         self._ensure_admin()
+        self._rate_limits: dict[str, list[float]] = {}
 
     def _migrate(self) -> None:
         try:
@@ -117,7 +157,37 @@ class UserDB:
         if not cur.fetchone():
             self.register("admin", "admin123", display_name="管理員", role="admin")
 
-    def register(self, username: str, password: str, display_name: str = "", role: str = "user") -> dict | None:
+    def check_rate_limit(self, key: str, max_calls: int = 10, period: float = 60) -> bool:
+        """回傳 True 表示未超限，False 表示已超限"""
+        now = time.time()
+        calls = self._rate_limits.get(key, [])
+        calls = [t for t in calls if now - t < period]
+        if len(calls) >= max_calls:
+            return False
+        calls.append(now)
+        self._rate_limits[key] = calls
+        return True
+
+    @staticmethod
+    def validate_session(user: dict | None) -> bool:
+        if not user:
+            return False
+        login_time = user.get("last_login", 0)
+        if login_time and time.time() - login_time > _SESSION_TIMEOUT:
+            return False
+        return True
+
+    def register(self, username: str, password: str, display_name: str = "", role: str = "user") -> dict | str:
+        """註冊，成功回傳 user dict，失敗回傳錯誤字串"""
+        username = _sanitize(username, 50)
+        display_name = _sanitize(display_name, 100)
+        if not username or len(username) < 3:
+            return "帳號至少 3 個字元"
+        if not username.replace("_", "").replace("-", "").isalnum():
+            return "帳號只能包含字母、數字、底線、減號"
+        pw_err = _validate_password(password)
+        if pw_err:
+            return pw_err
         try:
             pw_hash = _hash_pw(password)
             self._conn.execute(
@@ -127,18 +197,58 @@ class UserDB:
             self._conn.commit()
             return self.get_user(username)
         except sqlite3.IntegrityError:
-            return None
+            return "帳號已存在"
 
-    def login(self, username: str, password: str) -> dict | None:
+    def _log_login(self, username: str, success: bool, reason: str = "", ip: str = "") -> None:
+        self._conn.execute(
+            "INSERT INTO login_log (username, ip, success, reason, created_at) VALUES (?,?,?,?,?)",
+            (_sanitize(username), ip, 1 if success else 0, reason, time.time()),
+        )
+        self._conn.commit()
+
+    def _is_locked(self, username: str) -> bool:
+        cutoff = time.time() - _LOCKOUT_SECONDS
+        cur = self._conn.execute(
+            "SELECT COUNT(*) as c FROM login_log WHERE username=? AND success=0 AND created_at>?",
+            (username, cutoff),
+        )
+        return cur.fetchone()["c"] >= _MAX_LOGIN_ATTEMPTS
+
+    def login(self, username: str, password: str, ip: str = "") -> dict | str:
+        """登入，成功回傳 user dict，失敗回傳錯誤訊息字串"""
+        username = _sanitize(username, 50)
+        if not username or not password:
+            return "帳號和密碼不能為空"
+        if self._is_locked(username):
+            self._log_login(username, False, "帳號已鎖定", ip)
+            return f"帳號已鎖定，請 {_LOCKOUT_SECONDS // 60} 分鐘後再試"
         cur = self._conn.execute("SELECT * FROM users WHERE username=? AND is_active=1", (username,))
         row = cur.fetchone()
         if not row:
-            return None
+            self._log_login(username, False, "帳號不存在", ip)
+            return "帳號或密碼錯誤"
         if not _verify_pw(password, row["password_hash"]):
-            return None
+            self._log_login(username, False, "密碼錯誤", ip)
+            remaining = _MAX_LOGIN_ATTEMPTS - self._get_recent_failures(username)
+            return f"帳號或密碼錯誤（剩餘 {max(0, remaining)} 次嘗試）"
+        self._log_login(username, True, "", ip)
         self._conn.execute("UPDATE users SET last_login=? WHERE id=?", (time.time(), row["id"]))
+        if row["password_hash"].startswith("pbkdf2:") is False:
+            self._conn.execute("UPDATE users SET password_hash=? WHERE id=?", (_hash_pw(password), row["id"]))
         self._conn.commit()
         return dict(row)
+
+    def _get_recent_failures(self, username: str) -> int:
+        cutoff = time.time() - _LOCKOUT_SECONDS
+        cur = self._conn.execute(
+            "SELECT COUNT(*) as c FROM login_log WHERE username=? AND success=0 AND created_at>?",
+            (username, cutoff),
+        )
+        return cur.fetchone()["c"]
+
+    def get_login_log(self, limit: int = 50) -> list[dict]:
+        cur = self._conn.execute("SELECT * FROM login_log ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [dict(r) for r in cur.fetchall()]
 
     def get_user(self, username: str) -> dict | None:
         cur = self._conn.execute("SELECT * FROM users WHERE username=?", (username,))
@@ -175,8 +285,9 @@ class UserDB:
         cur = self._conn.execute(
             """INSERT INTO backtest_history (user_id, created_at, symbol, exchange, timeframe, strategy, params, metrics, notes, tags)
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (user_id, time.time(), symbol, exchange, timeframe, strategy,
-             json.dumps(params, ensure_ascii=False), json.dumps(metrics, ensure_ascii=False), notes, tags),
+            (user_id, time.time(), _sanitize(symbol, 50), _sanitize(exchange, 20), _sanitize(timeframe, 10),
+             _sanitize(strategy, 50), json.dumps(params, ensure_ascii=False),
+             json.dumps(metrics, ensure_ascii=False), _sanitize(notes, 500), _sanitize(tags, 200)),
         )
         self._conn.commit()
         return cur.lastrowid or 0

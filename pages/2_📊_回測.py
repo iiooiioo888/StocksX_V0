@@ -23,12 +23,18 @@ st.set_page_config(page_title="StocksX — 通用回測", page_icon="📊", layo
 
 _user_db = UserDB()
 
-st.markdown("""<style>
-[data-testid="stMetric"] {background:#f8f9fb;border:1px solid #e0e3e8;border-radius:10px;padding:12px 16px;}
+_dark = st.session_state.get("dark_mode", False)
+_theme_css = """
+[data-testid="stMetric"] {border:1px solid #e0e3e8;border-radius:10px;padding:12px 16px;}
 [data-testid="stMetric"] [data-testid="stMetricValue"] {font-size:1.3rem;}
 div[data-testid="stExpander"] {border:1px solid #e0e3e8;border-radius:8px;}
 .breadcrumb {font-size:0.85rem;color:#888;margin-bottom:0.5rem;}
-</style>""", unsafe_allow_html=True)
+@keyframes fadeIn {from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)}}
+.fade-in {animation:fadeIn 0.4s ease-out;}
+.success-banner {background:linear-gradient(135deg,#d4edda,#c3e6cb);border:1px solid #28a745;border-radius:10px;padding:15px;margin:10px 0;animation:fadeIn 0.5s;}
+.fail-banner {background:linear-gradient(135deg,#f8d7da,#f5c6cb);border:1px solid #dc3545;border-radius:10px;padding:15px;margin:10px 0;animation:fadeIn 0.5s;}
+""" + ("[data-testid='stMetric'] {background:#2d2d2d;}" if _dark else "[data-testid='stMetric'] {background:#f8f9fb;}")
+st.markdown(f"<style>{_theme_css}</style>", unsafe_allow_html=True)
 st.markdown('<p class="breadcrumb">🏠 首頁 › 📊 回測</p>', unsafe_allow_html=True)
 
 
@@ -122,14 +128,19 @@ EXCHANGE_OPTIONS = {
 # ────────────────────────── 側邊欄 ──────────────────────────
 with st.sidebar:
     _u = st.session_state.get("user")
+    _top1, _top2 = st.columns([3, 1])
     if _u:
-        _uc1, _uc2, _uc3 = st.columns([2, 1, 1])
-        _uc1.markdown(f"**👤 {_u['display_name']}**")
-        _uc2.page_link("pages/3_📜_歷史.py", label="📜", use_container_width=True)
-        if _u["role"] == "admin":
-            _uc3.page_link("pages/4_🛠️_管理.py", label="🛠️", use_container_width=True)
+        _top1.markdown(f"**👤 {_u['display_name']}**")
     else:
-        st.page_link("pages/1_🔐_登入.py", label="🔐 登入以保存歷史", use_container_width=True)
+        _top1.page_link("pages/1_🔐_登入.py", label="🔐 登入", use_container_width=True)
+    if _top2.button("🌙" if not _dark else "☀️", key="theme_toggle"):
+        st.session_state["dark_mode"] = not _dark
+        st.rerun()
+    if _u:
+        _nc1, _nc2 = st.columns(2)
+        _nc1.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
+        if _u["role"] == "admin":
+            _nc2.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", use_container_width=True)
 
     with st.expander("🔧 基本設定", expanded=True):
         market_type = st.radio("市場大類", ["₿ 加密貨幣", "🏛️ 傳統市場"], horizontal=True, key="mkt_type")
@@ -248,34 +259,58 @@ since_ms = to_ms(datetime.combine(start, datetime.min.time(), tzinfo=timezone.ut
 until_ms = to_ms(datetime.combine(end, datetime.max.time(), tzinfo=timezone.utc))
 
 # ────────────────────────── 執行回測 ──────────────────────────
+import time as _time_mod
 if run_btn:
     if since_ms >= until_ms:
         st.error("請選擇「開始日期」早於「結束日期」。")
     else:
-        with st.spinner("回測中…（拉取數據一次，全部策略共用）"):
-            results = {}
-            try:
-                if is_traditional:
-                    fetcher = TraditionalDataFetcher()
-                else:
-                    _eid = exchange_id or "okx"
-                    fetcher = CryptoDataFetcher(_eid)
-                _sym = symbol or "BTC/USDT:USDT"
-                rows = fetcher.get_ohlcv(_sym, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
-            except Exception as e:
-                st.error(f"數據拉取失敗：{e}")
-                rows = None
-            if rows is not None:
-                st.session_state["ohlcv_rows"] = rows
-                for strategy in ALL_STRATEGIES:
-                    params = custom_params.get(strategy) or (backtest_strategies.STRATEGY_CONFIG.get(strategy, {}).get("defaults") or {}).copy()
-                    res = _run_backtest_on_rows(
-                        rows=rows, exchange_id=exchange_id, symbol=symbol, timeframe=timeframe,
-                        since_ms=since_ms, until_ms=until_ms, strategy=strategy, strategy_params=params,
-                        initial_equity=initial_equity, leverage=leverage,
-                        take_profit_pct=take_profit_pct or None, stop_loss_pct=stop_loss_pct or None,
-                    )
-                    results[strategy] = res
+        _t_start = _time_mod.time()
+        _progress_bar = st.progress(0, text="準備中…")
+        results = {}
+        try:
+            _progress_bar.progress(10, text="連接交易所…")
+            if is_traditional:
+                fetcher = TraditionalDataFetcher()
+            else:
+                _eid = exchange_id or "okx"
+                fetcher = CryptoDataFetcher(_eid)
+            _sym = symbol or "BTC/USDT:USDT"
+            _progress_bar.progress(30, text="拉取 K 線數據…")
+            rows = fetcher.get_ohlcv(_sym, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
+        except Exception as e:
+            _progress_bar.empty()
+            st.markdown(f'<div class="fail-banner">❌ <b>數據拉取失敗</b>：{e}</div>', unsafe_allow_html=True)
+            rows = None
+        if rows is not None:
+            st.session_state["ohlcv_rows"] = rows
+            _total_strats = len(ALL_STRATEGIES)
+            for _si, strategy in enumerate(ALL_STRATEGIES):
+                _pct = 30 + int(60 * (_si + 1) / _total_strats)
+                _progress_bar.progress(_pct, text=f"回測 {STRATEGY_LABELS.get(strategy, strategy)}… ({_si+1}/{_total_strats})")
+                params = custom_params.get(strategy) or (backtest_strategies.STRATEGY_CONFIG.get(strategy, {}).get("defaults") or {}).copy()
+                res = _run_backtest_on_rows(
+                    rows=rows, exchange_id=exchange_id, symbol=symbol, timeframe=timeframe,
+                    since_ms=since_ms, until_ms=until_ms, strategy=strategy, strategy_params=params,
+                    initial_equity=initial_equity, leverage=leverage,
+                    take_profit_pct=take_profit_pct or None, stop_loss_pct=stop_loss_pct or None,
+                )
+                results[strategy] = res
+            _progress_bar.progress(100, text="✅ 完成！")
+        _elapsed = _time_mod.time() - _t_start
+        if results:
+            _valid = {s: r for s, r in results.items() if not r.error}
+            if _valid:
+                _best = max(_valid.items(), key=lambda x: x[1].metrics.get("total_return_pct", -999))
+                _bm = _best[1].metrics
+                _ret = _bm.get("total_return_pct", 0)
+                _emoji = "🎉" if _ret > 5 else "✅" if _ret > 0 else "📉"
+                st.markdown(
+                    f'<div class="success-banner">{_emoji} 回測完成！耗時 <b>{_elapsed:.1f}s</b>　|　'
+                    f'最佳：<b>{STRATEGY_LABELS.get(_best[0], _best[0])}</b> {_ret:+.2f}%　|　'
+                    f'{len(rows)} 根 K 線 × {len(ALL_STRATEGIES)} 策略</div>',
+                    unsafe_allow_html=True)
+                if _ret > 10:
+                    st.balloons()
         st.session_state["backtest_results"] = results
         for key in ("optimal_global_result", "optimal_global_strategy", "optimal_global_timeframe",
                      "optimal_global_params", "optimal_global_table", "optimal_global_objective"):
@@ -363,8 +398,44 @@ if "backtest_results" not in st.session_state or not st.session_state["backtest_
         st.session_state["backtest_results"] = {best_s: st.session_state["optimal_global_result"]}
     else:
         st.markdown("## 📊 開始回測")
+
+        # 新手引導
+        if not st.session_state.get("_onboarded"):
+            with st.expander("🎓 新手指南（點擊收合）", expanded=True):
+                st.markdown("""
+**三步驟開始回測：**
+1. **選擇市場** — 左側選「₿ 加密貨幣」或「🏛️ 傳統市場」，再選細類和交易對
+2. **設定參數** — 調整時間範圍、資金、策略參數（進階用戶可展開自訂）
+3. **執行回測** — 點擊紅色「🚀 執行回測」按鈕，等待結果
+
+**結果包含：** K 線圖 + 權益曲線 + 績效表 + 損益分佈 + 策略信號
+""")
+                if st.button("✅ 我知道了，不再顯示"):
+                    st.session_state["_onboarded"] = True
+                    st.rerun()
+
         st.info("👈 在左側設定參數 → 點擊「🚀 執行回測」")
-        st.divider()
+
+        # 智能推薦
+        _cur_user = st.session_state.get("user")
+        if _cur_user:
+            _hist = _user_db.get_history(_cur_user["id"], limit=100)
+            if _hist:
+                _best_strats = {}
+                for h in _hist:
+                    s = h.get("strategy", "")
+                    ret = h.get("metrics", {}).get("total_return_pct", 0)
+                    if s not in _best_strats or ret > _best_strats[s]:
+                        _best_strats[s] = ret
+                if _best_strats:
+                    _sorted = sorted(_best_strats.items(), key=lambda x: x[1], reverse=True)[:3]
+                    st.markdown("### 🤖 根據你的歷史推薦")
+                    _rc = st.columns(len(_sorted))
+                    for i, (s, ret) in enumerate(_sorted):
+                        _icon = "🥇" if i == 0 else "🥈" if i == 1 else "🥉"
+                        _rc[i].metric(f"{_icon} {STRATEGY_LABELS.get(s, s)}", f"{ret:+.2f}%")
+                    st.divider()
+
         st.markdown("### 📋 支援策略一覽")
         _strat_info = [
             ("雙均線交叉", "趨勢", "快慢 SMA 交叉做多空"),
