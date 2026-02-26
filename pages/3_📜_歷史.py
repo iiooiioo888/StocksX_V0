@@ -26,7 +26,7 @@ with tab_hist:
     history = db.get_history(user["id"])
     if not history:
         st.info("尚無回測歷史。")
-        st.page_link("pages/2_📊_回測.py", label="📊 前往回測", icon="📊")
+        st.page_link("pages/2_₿_加密回測.py", label="📊 前往回測", icon="📊")
     else:
         st.caption(f"共 {len(history)} 筆記錄")
         rows = []
@@ -77,7 +77,7 @@ with tab_hist:
                             "timeframe": h["timeframe"], "strategy": h["strategy"],
                             "params": h.get("params", {}),
                         }
-                        st.switch_page("pages/2_📊_回測.py")
+                        st.switch_page("pages/2_₿_加密回測.py")
 
         st.divider()
         st.subheader("📝 編輯備註 & 標籤")
@@ -225,7 +225,7 @@ with tab_preset:
                 with pc1:
                     if st.button("📊 載入並回測", key=f"load_{p['id']}"):
                         st.session_state["_rerun_config"] = c
-                        st.switch_page("pages/2_📊_回測.py")
+                        st.switch_page("pages/2_₿_加密回測.py")
                 with pc2:
                     if st.button("🗑️ 刪除", key=f"del_preset_{p['id']}"):
                         db.delete_preset(p["id"])

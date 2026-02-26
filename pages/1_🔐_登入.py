@@ -16,7 +16,7 @@ if st.session_state.get("user"):
         st.rerun()
     st.success(f"✅ 已登入：{u['display_name']}（{'👑 管理員' if u['role'] == 'admin' else '👤 用戶'}）")
     col1, col2 = st.columns(2)
-    col1.page_link("pages/2_📊_回測.py", label="📊 前往回測", icon="📊")
+    col1.page_link("pages/2_₿_加密回測.py", label="₿ 加密回測", icon="₿")
     col2.page_link("pages/3_📜_歷史.py", label="📜 歷史記錄", icon="📜")
     if st.button("🚪 登出"):
         st.session_state.pop("user", None)
@@ -41,7 +41,7 @@ with tab_login:
                     st.session_state["user"] = result
                     st.session_state["_login_time"] = __import__("time").time()
                     st.success(f"歡迎，{result['display_name']}！")
-                    st.switch_page("pages/2_📊_回測.py")
+                    st.switch_page("pages/2_₿_加密回測.py")
                 else:
                     st.error(f"🔒 {result}")
     st.caption("🔒 連續登入失敗 5 次將鎖定帳號 5 分鐘")
