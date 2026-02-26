@@ -7,12 +7,8 @@ from src.auth import UserDB
 
 st.set_page_config(page_title="StocksX — 通用回測平台", page_icon="📊", layout="wide")
 
-st.markdown("""<style>
-[data-testid="stMetric"] {background:#f8f9fb;border:1px solid #e0e3e8;border-radius:10px;padding:12px 16px;}
-[data-testid="stMetric"] [data-testid="stMetricValue"] {font-size:1.3rem;}
-div[data-testid="stExpander"] {border:1px solid #e0e3e8;border-radius:8px;}
-.feature-card {background:linear-gradient(135deg,#f8f9fb,#eef1f5);border-radius:12px;padding:20px;height:160px;}
-</style>""", unsafe_allow_html=True)
+from src.config import APP_CSS
+st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
 
 _login_page = "pages/1_🔐_登入.py"
 _backtest_page = "pages/2_📊_回測.py"
