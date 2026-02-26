@@ -101,8 +101,10 @@ def _run_backtest_on_rows(
     leverage: float,
     take_profit_pct: float | None,
     stop_loss_pct: float | None,
+    fee_rate: float = 0.0,
+    slippage: float = 0.0,
 ) -> BacktestResult:
-    """核心回測邏輯：假設 K 線已經準備好，方便 optimizer 重複使用。"""
+    """核心回測邏輯。fee_rate 和 slippage 為百分比（如 0.05 = 0.05%）。"""
     out = BacktestResult()
     if not rows:
         out.error = "無 K 線資料，請先拉取數據或調整時間範圍。"
@@ -110,6 +112,9 @@ def _run_backtest_on_rows(
 
     out.raw_ohlcv = rows
     sig = strategies.get_signal(strategy, rows, **strategy_params)
+
+    cost_pct = (fee_rate + slippage) / 100
+    total_fees = 0.0
 
     equity = initial_equity
     position = 0
@@ -159,8 +164,11 @@ def _run_backtest_on_rows(
                 exit_reason = "tp"
             if exit_price is not None:
                 price_return = (exit_price - entry_price) / entry_price * direction
-                pnl_pct = price_return * leverage
+                round_trip_cost = cost_pct * 2
+                pnl_pct = price_return * leverage - round_trip_cost
                 equity_before = equity
+                fee_amount = equity_before * round_trip_cost
+                total_fees += fee_amount
                 equity *= 1 + pnl_pct
                 profit = equity_before * pnl_pct
                 if equity <= 0:
@@ -176,6 +184,7 @@ def _run_backtest_on_rows(
                     "exit_price": exit_price,
                     "pnl_pct": round(pnl_pct * 100, 4),
                     "profit": round(profit, 2),
+                    "fee": round(fee_amount, 2),
                     "liquidation": liquidated,
                     "exit_reason": exit_reason,
                 })
@@ -186,11 +195,13 @@ def _run_backtest_on_rows(
                 continue
 
         if position != 0 and target != position and entry_price:
-            # 平倉：根據當前持倉方向（多=1 / 空=-1）計算報酬
-            direction = position  # 1 = 多，-1 = 空
+            direction = position
             price_return = (close - entry_price) / entry_price * direction
-            pnl_pct = price_return * leverage
+            round_trip_cost = cost_pct * 2
+            pnl_pct = price_return * leverage - round_trip_cost
             equity_before = equity
+            fee_amount = equity_before * round_trip_cost
+            total_fees += fee_amount
             equity *= 1 + pnl_pct
             profit = equity_before * pnl_pct
             if equity <= 0:
@@ -206,6 +217,7 @@ def _run_backtest_on_rows(
                 "exit_price": close,
                 "pnl_pct": round(pnl_pct * 100, 4),
                 "profit": round(profit, 2),
+                "fee": round(fee_amount, 2),
                 "liquidation": liquidated,
             })
             position = 0
@@ -226,12 +238,14 @@ def _run_backtest_on_rows(
         equity_curve.append({"timestamp": ts, "equity": round(mtm_equity, 2), "position": position})
 
     if not liquidated and position != 0 and entry_price and rows:
-        # 最後一根 K 線強制平倉（依方向支援多 / 空）
         last_close = rows[-1]["close"]
         direction = position
         price_return = (last_close - entry_price) / entry_price * direction
-        pnl_pct = price_return * leverage
+        round_trip_cost = cost_pct * 2
+        pnl_pct = price_return * leverage - round_trip_cost
         equity_before = equity
+        fee_amount = equity_before * round_trip_cost
+        total_fees += fee_amount
         equity *= 1 + pnl_pct
         profit = equity_before * pnl_pct
         if equity <= 0:
@@ -243,6 +257,7 @@ def _run_backtest_on_rows(
             "exit_ts": rows[-1]["timestamp"],
             "side": direction,
             "entry_price": entry_price,
+            "fee": round(fee_amount, 2),
             "exit_price": last_close,
             "pnl_pct": round(pnl_pct * 100, 4),
             "profit": round(profit, 2),
@@ -256,6 +271,9 @@ def _run_backtest_on_rows(
     out.equity_curve = equity_curve
     out.trades = trades
     out.metrics = _compute_metrics(equity_curve, trades, initial_equity, since_ms, until_ms, leverage=leverage)
+    out.metrics["total_fees"] = round(total_fees, 2)
+    out.metrics["fee_rate_pct"] = fee_rate
+    out.metrics["slippage_pct"] = slippage
     return out
 
 
