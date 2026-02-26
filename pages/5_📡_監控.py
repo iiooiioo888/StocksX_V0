@@ -6,25 +6,15 @@ import time as _time
 from datetime import datetime, timezone
 from src.auth import UserDB
 from src.data.live import get_live_price, get_current_signal, STRATEGY_LABELS
+from src.ui_common import apply_theme, breadcrumb, require_login, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 策略監控", page_icon="📡", layout="wide")
-st.markdown('<p style="font-size:0.85rem;color:#888;">🏠 首頁 › 📡 策略監控</p>', unsafe_allow_html=True)
+apply_theme()
+breadcrumb("策略監控", "📡")
 
-if not st.session_state.get("user"):
-    st.warning("⚠️ 請先登入")
-    st.page_link("pages/1_🔐_登入.py", label="🔐 前往登入", icon="🔐")
-    st.stop()
-
-user = st.session_state["user"]
+user = require_login()
 db = UserDB()
-
-st.sidebar.markdown(f"**👤 {user['display_name']}**")
-_sc1, _sc2 = st.sidebar.columns(2)
-_sc1.page_link("pages/2_📊_回測.py", label="📊 回測", use_container_width=True)
-_sc2.page_link("pages/3_📜_歷史.py", label="📜 歷史", use_container_width=True)
-if st.sidebar.button("🚪 登出", use_container_width=True, key="mon_logout"):
-    st.session_state.pop("user", None)
-    st.switch_page("pages/1_🔐_登入.py")
+sidebar_user_nav(user)
 
 st.markdown("## 📡 策略訂閱 & 即時監控")
 st.caption("訂閱策略後，即時查看信號、持倉狀態和損益")

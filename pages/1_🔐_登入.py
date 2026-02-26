@@ -1,8 +1,10 @@
 # 登入 / 註冊頁面（安全強化版）
 import streamlit as st
 from src.auth import UserDB
+from src.ui_common import apply_theme
 
 st.set_page_config(page_title="StocksX — 登入", page_icon="🔐", layout="centered")
+apply_theme()
 
 db = UserDB()
 

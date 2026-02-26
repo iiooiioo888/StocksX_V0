@@ -3,17 +3,15 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
 from src.auth import UserDB
+from src.ui_common import apply_theme, breadcrumb, require_admin, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 管理後台", page_icon="🛠️", layout="wide")
+apply_theme()
+breadcrumb("管理後台", "🛠️")
 
-user = st.session_state.get("user")
-if not user or user.get("role") != "admin":
-    st.error("⛔ 僅管理員可訪問此頁面")
-    if not user:
-        st.page_link("pages/1_🔐_登入.py", label="前往登入", icon="🔐")
-    st.stop()
-
+user = require_admin()
 db = UserDB()
+sidebar_user_nav(user)
 
 st.markdown("## 🛠️ 管理後台")
 st.caption(f"管理員：{user['display_name']}")
