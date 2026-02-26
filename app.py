@@ -11,7 +11,8 @@ from src.config import APP_CSS
 st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
 
 _login_page = "pages/1_🔐_登入.py"
-_backtest_page = "pages/2_📊_回測.py"
+_crypto_page = "pages/2_₿_加密回測.py"
+_trad_page = "pages/2_🏛️_傳統回測.py"
 _history_page = "pages/3_📜_歷史.py"
 _admin_page = "pages/4_🛠️_管理.py"
 
@@ -51,28 +52,32 @@ else:
     st.divider()
 
     # 快速導航
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.markdown("### 📊 執行回測")
-        st.caption("五大策略 × 多市場")
-        st.page_link(_backtest_page, label="前往回測", icon="📊")
+        st.markdown("### ₿ 加密回測")
+        st.caption("BTC、ETH、DeFi、Meme…")
+        st.page_link(_crypto_page, label="₿ 加密貨幣", icon="₿")
     with col2:
-        st.markdown("### 📡 策略監控")
-        st.caption("訂閱策略即時信號")
-        st.page_link("pages/5_📡_監控.py", label="前往監控", icon="📡")
+        st.markdown("### 🏛️ 傳統回測")
+        st.caption("股票、ETF、債券、期貨")
+        st.page_link(_trad_page, label="🏛️ 傳統市場", icon="🏛️")
     with col3:
-        st.markdown("### 📜 歷史 & 收藏")
-        st.caption("記錄、收藏、預設、提醒")
-        st.page_link(_history_page, label="前往歷史", icon="📜")
+        st.markdown("### 📡 策略監控")
+        st.caption("訂閱即時信號")
+        st.page_link("pages/5_📡_監控.py", label="📡 監控", icon="📡")
     with col4:
+        st.markdown("### 📜 歷史")
+        st.caption("記錄、收藏、預設")
+        st.page_link(_history_page, label="📜 歷史", icon="📜")
+    with col5:
         if user["role"] == "admin":
-            st.markdown("### 🛠️ 管理後台")
-            st.caption("用戶管理、系統統計")
-            st.page_link(_admin_page, label="前往管理", icon="🛠️")
+            st.markdown("### 🛠️ 管理")
+            st.caption("用戶、統計")
+            st.page_link(_admin_page, label="🛠️ 管理", icon="🛠️")
         else:
-            st.markdown("### ⚙️ 設定")
-            st.caption("修改暱稱、密碼")
-            st.page_link(_history_page, label="前往設定", icon="⚙️")
+            st.markdown("### 📰 新聞")
+            st.caption("市場即時新聞")
+            st.page_link("pages/6_📰_新聞.py", label="📰 新聞", icon="📰")
 
     # 最近回測記錄
     if history:

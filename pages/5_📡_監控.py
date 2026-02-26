@@ -195,7 +195,7 @@ with tab_watch:
                         "symbol": w["symbol"], "exchange": w["exchange"],
                         "timeframe": w["timeframe"], "strategy": w["strategy"],
                     }
-                    st.switch_page("pages/2_📊_回測.py")
+                    st.switch_page("pages/2_₿_加密回測.py")
                 if bc3.button("🗑️ 刪除", key=f"del_{w['id']}"):
                     db.delete_watch(w["id"])
                     st.rerun()

@@ -53,14 +53,11 @@ def sidebar_user_nav(user: dict | None = None):
 
     if user:
         st.sidebar.markdown(f"**👤 {user['display_name']}**")
-        _c1, _c2, _c3 = st.sidebar.columns(3)
-        _c1.page_link("pages/2_📊_回測.py", label="📊", use_container_width=True)
-        _c2.page_link("pages/3_📜_歷史.py", label="📜", use_container_width=True)
-        _c3.page_link("pages/5_📡_監控.py", label="📡", use_container_width=True)
-        if user.get("role") == "admin":
-            _a1, _a2 = st.sidebar.columns(2)
-            _a1.page_link("pages/4_🛠️_管理.py", label="🛠️ 管理", use_container_width=True)
-            _a2.page_link("pages/6_📰_新聞.py", label="📰 新聞", use_container_width=True)
+        _c1, _c2, _c3, _c4 = st.sidebar.columns(4)
+        _c1.page_link("pages/2_₿_加密回測.py", label="₿", use_container_width=True)
+        _c2.page_link("pages/2_🏛️_傳統回測.py", label="🏛️", use_container_width=True)
+        _c3.page_link("pages/3_📜_歷史.py", label="📜", use_container_width=True)
+        _c4.page_link("pages/5_📡_監控.py", label="📡", use_container_width=True)
         if st.sidebar.button("🚪 登出", use_container_width=True, key=f"logout_{id(user)}"):
             st.session_state.pop("user", None)
             st.switch_page("pages/1_🔐_登入.py")
