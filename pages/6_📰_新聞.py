@@ -48,8 +48,12 @@ def _fetch_rss(url: str, max_items: int = 15) -> list[dict]:
             if len(items) >= max_items:
                 break
         return items
+    except urllib.request.URLError as e:
+        return [{"title": f"⚠️ 網路連線失敗: {str(e.reason)[:50]}", "link": "", "date": "", "desc": "請檢查網路連線"}]
+    except ET.ParseError:
+        return [{"title": "⚠️ RSS 格式解析失敗", "link": "", "date": "", "desc": "來源可能已變更格式"}]
     except Exception as e:
-        return [{"title": f"載入失敗: {str(e)[:80]}", "link": "", "date": "", "desc": ""}]
+        return [{"title": f"⚠️ 載入失敗: {str(e)[:60]}", "link": "", "date": "", "desc": ""}]
 
 
 tab_names = list(NEWS_SOURCES.keys())

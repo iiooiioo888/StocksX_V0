@@ -217,6 +217,8 @@ def find_optimal_global(
     exclude_outliers: bool = False,
     max_combos_per_strategy: int = 999,
     use_async: bool = True,
+    fee_rate: float = 0.0,
+    slippage: float = 0.0,
     max_workers: int | None = None,
     on_global_progress: Callable[[str, str, int, int, BacktestResult | None, dict], None] | None = None,
 ) -> tuple[BacktestResult | None, str, str, dict[str, Any], list[dict[str, Any]]]:
@@ -347,6 +349,8 @@ def find_optimal_global(
                     leverage=leverage,
                     take_profit_pct=take_profit_pct,
                     stop_loss_pct=stop_loss_pct,
+                    fee_rate=fee_rate,
+                    slippage=slippage,
                 )
                 if res.error:
                     continue
