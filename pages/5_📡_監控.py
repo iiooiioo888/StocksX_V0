@@ -185,6 +185,75 @@ with tab_watch:
                 v3.metric("📍 進場價", f"{entry:,.2f}" if entry else "—")
                 v4.metric("💵 初始資金", f"${_equity:,.2f}")
 
+                # 走勢圖表
+                _show_chart = st.checkbox("📈 顯示走勢圖", value=False, key=f"chart_{w['id']}")
+                if _show_chart:
+                    try:
+                        if w["exchange"] == "yfinance":
+                            from src.data.traditional import TraditionalDataFetcher
+                            _fetcher = TraditionalDataFetcher()
+                        else:
+                            from src.data.crypto import CryptoDataFetcher
+                            _fetcher = CryptoDataFetcher(w["exchange"])
+                        _until = int(_time.time() * 1000)
+                        _tf_ms = {"1m": 60000, "5m": 300000, "15m": 900000, "1h": 3600000,
+                                  "4h": 14400000, "1d": 86400000}.get(w["timeframe"], 3600000)
+                        _since = _until - 100 * _tf_ms
+                        _rows = _fetcher.get_ohlcv(w["symbol"], w["timeframe"], _since, _until, fill_gaps=True)
+
+                        if _rows:
+                            from src.backtest import strategies as _strat_mod
+                            _signals = _strat_mod.get_signal(w["strategy"], _rows, **w["strategy_params"])
+
+                            _df = pd.DataFrame(_rows)
+                            _df["time"] = pd.to_datetime(_df["timestamp"], unit="ms", utc=True)
+                            _real = _df[_df.get("filled", 0) == 0] if "filled" in _df.columns else _df
+
+                            _fig = go.Figure()
+                            # 收盤價線
+                            _fig.add_trace(go.Scatter(
+                                x=_real["time"], y=_real["close"], mode="lines", name="收盤價",
+                                line=dict(color="#8888cc", width=1.5),
+                            ))
+                            # 進場價水平線
+                            if entry and entry > 0:
+                                _fig.add_hline(y=entry, line=dict(color="#FFD700", width=1, dash="dash"),
+                                               annotation_text=f"進場 {entry:,.2f}",
+                                               annotation_font_color="#FFD700")
+
+                            # 信號標記
+                            _sig_map = {}
+                            for _si, _r in enumerate(_rows):
+                                if _si < len(_signals):
+                                    _sig_map[_r["timestamp"]] = _signals[_si]
+                            _real_copy = _real.copy()
+                            _real_copy["signal"] = _real_copy["timestamp"].map(_sig_map).fillna(0).astype(int)
+                            _buys = _real_copy[(_real_copy["signal"] == 1) & (_real_copy["signal"].shift(1) != 1)]
+                            _sells = _real_copy[(_real_copy["signal"] == -1) & (_real_copy["signal"].shift(1) != -1)]
+                            if len(_buys) > 0:
+                                _fig.add_trace(go.Scatter(
+                                    x=_buys["time"], y=_buys["close"], mode="markers", name="做多",
+                                    marker=dict(symbol="triangle-up", size=9, color="#26A69A"),
+                                ))
+                            if len(_sells) > 0:
+                                _fig.add_trace(go.Scatter(
+                                    x=_sells["time"], y=_sells["close"], mode="markers", name="做空",
+                                    marker=dict(symbol="triangle-down", size=9, color="#EF5350"),
+                                ))
+
+                            _fig.update_layout(
+                                height=280, margin=dict(l=0, r=0, t=10, b=0),
+                                legend=dict(orientation="h", y=1.05), yaxis_side="right",
+                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(15,15,30,0.5)",
+                                font=dict(color="#c8c8e0", size=11),
+                                xaxis=dict(gridcolor="rgba(50,50,90,0.2)", range=[_real["time"].min(), _real["time"].max()]),
+                                yaxis=dict(gridcolor="rgba(50,50,90,0.2)"),
+                                hovermode="x unified",
+                            )
+                            st.plotly_chart(_fig, use_container_width=True, key=f"wchart_{w['id']}")
+                    except Exception as _e:
+                        st.caption(f"⚠️ 圖表載入失敗: {str(_e)[:60]}")
+
                 # 操作按鈕
                 bc1, bc2, bc3 = st.columns(3)
                 if bc1.button("⏸️ 暫停" if w["is_active"] else "▶️ 啟用", key=f"toggle_{w['id']}"):
