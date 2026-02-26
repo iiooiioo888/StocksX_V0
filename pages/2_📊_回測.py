@@ -407,13 +407,15 @@ valid_results = {s: r for s, r in backtest_results.items() if not r.error}
 if valid_results:
     best_strategy = max(valid_results.items(), key=lambda x: x[1].metrics.get("total_return_pct", -999))
     bm = best_strategy[1].metrics
-    cols = st.columns(6)
+    _fee_total = sum(r.metrics.get("total_fees", 0) for r in valid_results.values())
+    cols = st.columns(7)
     cols[0].metric("🏆 最佳策略", STRATEGY_LABELS.get(best_strategy[0], best_strategy[0]))
-    cols[1].metric("💰 總報酬率", f"{bm.get('total_return_pct', 0)}%")
+    cols[1].metric("💰 淨報酬率", f"{bm.get('total_return_pct', 0)}%")
     cols[2].metric("📅 年化報酬", f"{bm.get('annual_return_pct', 0)}%")
     cols[3].metric("📉 最大回撤", f"{bm.get('max_drawdown_pct', 0)}%")
     cols[4].metric("📐 夏普比率", f"{bm.get('sharpe_ratio', 0)}")
     cols[5].metric("🔄 交易次數", f"{bm.get('num_trades', 0)}")
+    cols[6].metric("💸 總手續費", f"${_fee_total:,.0f}")
 
 ohlcv_rows = st.session_state.get("ohlcv_rows")
 curves_ok = [(s, r) for s, r in backtest_results.items() if r.equity_curve and not r.error]
@@ -753,12 +755,13 @@ with st.expander("📝 交易明細（各策略）", expanded=False):
                 st.error("⚠️ 本策略曾發生爆倉")
 
         show_cols = ["序號", "進場時間", "出場時間", "方向", "entry_price", "exit_price",
-                     "持倉時長", "pnl_pct", "盈虧", "profit"]
+                     "持倉時長", "pnl_pct", "fee", "profit", "盈虧"]
         if "爆倉" in df_trades.columns:
             show_cols.append("爆倉")
         show_cols = [c for c in show_cols if c in df_trades.columns]
         disp = df_trades[show_cols].rename(
-            columns={"entry_price": "進場價", "exit_price": "出場價", "pnl_pct": "報酬率%", "profit": "獲利"}
+            columns={"entry_price": "進場價", "exit_price": "出場價", "pnl_pct": "報酬率%",
+                     "fee": "手續費", "profit": "淨利潤"}
         )
         st.dataframe(disp, use_container_width=True, hide_index=True)
 
@@ -887,10 +890,11 @@ if st.session_state.get("optimal_global_result") is not None:
                     df_t["出場"] = pd.to_datetime(df_t["exit_ts"], unit="ms", utc=True).dt.strftime("%m/%d %H:%M")
                     df_t["方向"] = df_t["side"].map({1: "🟢多", -1: "🔴空"})
                     df_t["盈虧"] = df_t["profit"].apply(lambda x: "✅" if x > 0 else "❌" if x < 0 else "➖")
-                    show = ["序號", "進場", "出場", "方向", "entry_price", "exit_price", "pnl_pct", "profit", "盈虧"]
+                    show = ["序號", "進場", "出場", "方向", "entry_price", "exit_price", "pnl_pct", "fee", "profit", "盈虧"]
                     show = [c for c in show if c in df_t.columns]
                     disp_t = df_t[show].rename(columns={
-                        "entry_price": "進場價", "exit_price": "出場價", "pnl_pct": "報酬%", "profit": "獲利"
+                        "entry_price": "進場價", "exit_price": "出場價", "pnl_pct": "報酬%",
+                        "fee": "手續費", "profit": "淨利潤"
                     })
                     st.dataframe(disp_t, use_container_width=True, hide_index=True)
                     csv_detail = BytesIO()
