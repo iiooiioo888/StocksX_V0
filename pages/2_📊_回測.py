@@ -407,15 +407,10 @@ valid_results = {s: r for s, r in backtest_results.items() if not r.error}
 if valid_results:
     best_strategy = max(valid_results.items(), key=lambda x: x[1].metrics.get("total_return_pct", -999))
     bm = best_strategy[1].metrics
+    _ret = bm.get("total_return_pct", 0)
     _fee_total = sum(r.metrics.get("total_fees", 0) for r in valid_results.values())
-    cols = st.columns(7)
-    cols[0].metric("🏆 最佳策略", STRATEGY_LABELS.get(best_strategy[0], best_strategy[0]))
-    cols[1].metric("💰 淨報酬率", f"{bm.get('total_return_pct', 0)}%")
-    cols[2].metric("📅 年化報酬", f"{bm.get('annual_return_pct', 0)}%")
-    cols[3].metric("📉 最大回撤", f"{bm.get('max_drawdown_pct', 0)}%")
-    cols[4].metric("📐 夏普比率", f"{bm.get('sharpe_ratio', 0)}")
-    cols[5].metric("🔄 交易次數", f"{bm.get('num_trades', 0)}")
-    cols[6].metric("💸 總手續費", f"${_fee_total:,.0f}")
+    _ret_icon = "🟢" if _ret > 0 else "🔴"
+    st.markdown(f"#### {_ret_icon} 最佳：**{STRATEGY_LABELS.get(best_strategy[0], best_strategy[0])}**　淨報酬 **{_ret:+.2f}%**　|　夏普 {bm.get('sharpe_ratio', 0)}　|　回撤 {bm.get('max_drawdown_pct', 0)}%　|　{bm.get('num_trades', 0)} 筆交易　|　手續費 ${_fee_total:,.0f}")
 
 ohlcv_rows = st.session_state.get("ohlcv_rows")
 curves_ok = [(s, r) for s, r in backtest_results.items() if r.equity_curve and not r.error]
