@@ -21,14 +21,13 @@ from src.data.traditional import TraditionalDataFetcher
 from src.data.integrity import validate_ohlcv, compute_data_hash
 from src.auth import UserDB
 from src.config import STRATEGY_LABELS, STRATEGY_COLORS, CRYPTO_CATEGORIES, TRADITIONAL_CATEGORIES, EXCHANGE_OPTIONS, APP_CSS
+from src.chart_theme import apply_dark_theme
 
 st.set_page_config(page_title="StocksX — 通用回測", page_icon="📊", layout="wide")
 
 _user_db = UserDB()
 
-_dark = st.session_state.get("dark_mode", False)
-_extra = "[data-testid='stMetric']{background:#2d2d2d;}" if _dark else "[data-testid='stMetric']{background:#f8f9fb;}"
-st.markdown(f"<style>{APP_CSS}\n{_extra}</style>", unsafe_allow_html=True)
+st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
 st.markdown('<p class="breadcrumb">🏠 首頁 › 📊 回測</p>', unsafe_allow_html=True)
 
 
@@ -468,7 +467,7 @@ with tab1:
                                 margin=dict(l=0, r=0, t=30, b=0), legend=dict(orientation="h", y=1.02))
             fig_k.update_yaxes(title_text="價格", row=1, col=1)
             fig_k.update_yaxes(title_text="量", row=2, col=1)
-            st.plotly_chart(fig_k, use_container_width=True)
+            st.plotly_chart(apply_dark_theme(fig_k), use_container_width=True)
 
     # 權益曲線
     if curves_ok:
@@ -492,7 +491,7 @@ with tab1:
                          annotation_text="初始資金", annotation_position="top left")
         fig_eq.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0),
                              legend=dict(orientation="h", y=1.05), yaxis_title="權益", hovermode="x unified")
-        st.plotly_chart(fig_eq, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig_eq), use_container_width=True)
 
     # 回撤曲線
     if curves_ok:
@@ -520,7 +519,7 @@ with tab1:
                                             hovertemplate=f"{label}<br>回撤: %{{y:.2f}}%<br>%{{x}}<extra></extra>"))
             fig_dd.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0),
                                  yaxis_title="回撤 %", legend=dict(orientation="h", y=1.08), hovermode="x unified")
-            st.plotly_chart(fig_dd, use_container_width=True)
+            st.plotly_chart(apply_dark_theme(fig_dd), use_container_width=True)
 
 def _highlight_perf(val):
     if val is None or val == "" or val == "-":
@@ -594,7 +593,7 @@ with tab2:
                                    xaxis_title="報酬率 %", yaxis_title="次數",
                                    title_text=f"盈 {win_count} 筆 ({avg_win:.2f}%) / 虧 {loss_count} 筆 ({avg_loss:.2f}%)",
                                    title_font_size=12)
-            st.plotly_chart(fig_hist, use_container_width=True)
+            st.plotly_chart(apply_dark_theme(fig_hist), use_container_width=True)
         with chart_col2:
             st.markdown("**⏱️ 持倉時長分佈**")
             durations_h = [(t["exit_ts"] - t["entry_ts"]) / 3600000 for t in all_trades_for_charts]
@@ -607,7 +606,7 @@ with tab2:
             fig_dur.update_layout(height=280, margin=dict(l=0, r=0, t=30, b=0),
                                   xaxis_title="持倉時長 (小時)", yaxis_title="次數",
                                   title_text=f"共 {len(durations_h)} 筆，平均 {avg_dur:.1f}h", title_font_size=12)
-            st.plotly_chart(fig_dur, use_container_width=True)
+            st.plotly_chart(apply_dark_theme(fig_dur), use_container_width=True)
 
     if curves_ok and valid_results:
         with st.expander("🗓️ 每日報酬率熱力圖", expanded=False):
@@ -634,7 +633,7 @@ with tab2:
                         hovertemplate="週: %{x}<br>%{y}<br>報酬: %{z:.2f}%<extra></extra>"))
                     fig_hm.update_layout(height=250, margin=dict(l=0, r=0, t=10, b=0),
                                          yaxis=dict(autorange="reversed"))
-                    st.plotly_chart(fig_hm, use_container_width=True)
+                    st.plotly_chart(apply_dark_theme(fig_hm), use_container_width=True)
                 else:
                     st.info("資料不足以產生熱力圖（需至少 2 天）")
 
@@ -672,7 +671,7 @@ if st.session_state.get("compare_results"):
         yaxis_title="正規化權益 (%)", legend=dict(orientation="h", y=1.05),
         hovermode="x unified",
     )
-    st.plotly_chart(fig_cmp, use_container_width=True)
+    st.plotly_chart(apply_dark_theme(fig_cmp), use_container_width=True)
     st.dataframe(pd.DataFrame(cmp_table_rows), use_container_width=True, hide_index=True)
 
 with tab3:
@@ -718,7 +717,7 @@ with tab3:
                 title_text=f"{STRATEGY_LABELS.get(sig_strategy, sig_strategy)} 信號 — ▲多 ▼空",
                 title_font_size=14, legend=dict(orientation="h", y=1.05),
             )
-            st.plotly_chart(fig_sig, use_container_width=True)
+            st.plotly_chart(apply_dark_theme(fig_sig), use_container_width=True)
     else:
         st.info("需先執行回測才能顯示策略信號")
 
@@ -882,7 +881,7 @@ if st.session_state.get("optimal_global_result") is not None:
                     ))
                     fig_detail.add_hline(y=eq[0], line_dash="dash", line_color="gray")
                     fig_detail.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), yaxis_title="權益")
-                    st.plotly_chart(fig_detail, use_container_width=True, key=f"eq_{idx_r}")
+                    st.plotly_chart(apply_dark_theme(fig_detail), use_container_width=True, key=f"eq_{idx_r}")
 
                 # 交易明細
                 if res.trades:
