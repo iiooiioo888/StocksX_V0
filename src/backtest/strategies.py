@@ -377,19 +377,219 @@ STRATEGY_CONFIG = {
         "param_grid": {"period": [15, 20, 30], "threshold": [1.5, 2.0, 2.5]},
         "defaults": {"period": 20, "threshold": 2.0},
     },
+    "ichimoku": {
+        "params": ["tenkan", "kijun", "senkou_b"],
+        "param_grid": {"tenkan": [9], "kijun": [26], "senkou_b": [52]},
+        "defaults": {"tenkan": 9, "kijun": 26, "senkou_b": 52},
+    },
+    "stochastic": {
+        "params": ["k_period", "d_period", "oversold", "overbought"],
+        "param_grid": {"k_period": [9, 14], "d_period": [3], "oversold": [20], "overbought": [80]},
+        "defaults": {"k_period": 14, "d_period": 3, "oversold": 20.0, "overbought": 80.0},
+    },
+    "williams_r": {
+        "params": ["period", "oversold", "overbought"],
+        "param_grid": {"period": [10, 14, 21], "oversold": [-80], "overbought": [-20]},
+        "defaults": {"period": 14, "oversold": -80.0, "overbought": -20.0},
+    },
+    "adx_trend": {
+        "params": ["period", "threshold"],
+        "param_grid": {"period": [10, 14, 20], "threshold": [20, 25, 30]},
+        "defaults": {"period": 14, "threshold": 25.0},
+    },
+    "parabolic_sar": {
+        "params": ["af_start", "af_step", "af_max"],
+        "param_grid": {"af_start": [0.02], "af_step": [0.02], "af_max": [0.20]},
+        "defaults": {"af_start": 0.02, "af_step": 0.02, "af_max": 0.20},
+    },
 }
 
+def ichimoku(rows: list[dict[str, Any]], tenkan: int = 9, kijun: int = 26, senkou_b: int = 52) -> list[int]:
+    """一目均衡表：轉換線 > 基準線做多，< 做空，價格在雲帶之上確認。"""
+    n = len(rows)
+    if n < senkou_b:
+        return [0] * n
+    highs = [r["high"] for r in rows]
+    lows = [r["low"] for r in rows]
+    closes = [r["close"] for r in rows]
+
+    def _midline(h, l, p, i):
+        return (max(h[max(0, i - p + 1):i + 1]) + min(l[max(0, i - p + 1):i + 1])) / 2
+
+    signals: list[int] = [0] * senkou_b
+    for i in range(senkou_b, n):
+        tenkan_val = _midline(highs, lows, tenkan, i)
+        kijun_val = _midline(highs, lows, kijun, i)
+        senkou_a = (tenkan_val + kijun_val) / 2
+        senkou_b_val = _midline(highs, lows, senkou_b, i)
+        cloud_top = max(senkou_a, senkou_b_val)
+        cloud_bot = min(senkou_a, senkou_b_val)
+        prev_s = signals[-1]
+        if tenkan_val > kijun_val and closes[i] > cloud_top:
+            s = 1
+        elif tenkan_val < kijun_val and closes[i] < cloud_bot:
+            s = -1
+        else:
+            s = prev_s
+        signals.append(s)
+    return signals
+
+
+def stochastic(rows: list[dict[str, Any]], k_period: int = 14, d_period: int = 3,
+               oversold: float = 20, overbought: float = 80) -> list[int]:
+    """隨機指標（KD）：K 線從超賣區上穿 D 線做多，從超買區下穿做空。"""
+    n = len(rows)
+    if n < k_period + d_period:
+        return [0] * n
+    highs = [r["high"] for r in rows]
+    lows = [r["low"] for r in rows]
+    closes = [r["close"] for r in rows]
+    k_vals = [0.0] * n
+    for i in range(k_period - 1, n):
+        hh = max(highs[i - k_period + 1:i + 1])
+        ll = min(lows[i - k_period + 1:i + 1])
+        k_vals[i] = ((closes[i] - ll) / (hh - ll) * 100) if hh != ll else 50
+    d_vals = [0.0] * n
+    for i in range(k_period + d_period - 2, n):
+        d_vals[i] = sum(k_vals[i - d_period + 1:i + 1]) / d_period
+
+    signals: list[int] = [0] * (k_period + d_period)
+    for i in range(k_period + d_period, n):
+        prev_s = signals[-1]
+        if k_vals[i] > d_vals[i] and k_vals[i - 1] <= d_vals[i - 1] and k_vals[i] < oversold + 20:
+            s = 1
+        elif k_vals[i] < d_vals[i] and k_vals[i - 1] >= d_vals[i - 1] and k_vals[i] > overbought - 20:
+            s = -1
+        else:
+            s = prev_s
+        signals.append(s)
+    return signals
+
+
+def williams_r(rows: list[dict[str, Any]], period: int = 14,
+               oversold: float = -80, overbought: float = -20) -> list[int]:
+    """威廉指標（Williams %R）：< oversold 做多，> overbought 做空。"""
+    n = len(rows)
+    if n < period:
+        return [0] * n
+    highs = [r["high"] for r in rows]
+    lows = [r["low"] for r in rows]
+    closes = [r["close"] for r in rows]
+    signals: list[int] = [0] * period
+    for i in range(period, n):
+        hh = max(highs[i - period + 1:i + 1])
+        ll = min(lows[i - period + 1:i + 1])
+        wr = ((hh - closes[i]) / (hh - ll) * -100) if hh != ll else -50
+        prev_s = signals[-1]
+        if wr < oversold:
+            s = 1
+        elif wr > overbought:
+            s = -1
+        else:
+            s = prev_s
+        signals.append(s)
+    return signals
+
+
+def adx_trend(rows: list[dict[str, Any]], period: int = 14, threshold: float = 25) -> list[int]:
+    """ADX 趨勢強度：ADX > threshold 時，+DI > -DI 做多，反之做空。"""
+    n = len(rows)
+    if n < period * 2:
+        return [0] * n
+    highs = [r["high"] for r in rows]
+    lows = [r["low"] for r in rows]
+    closes = [r["close"] for r in rows]
+
+    plus_dm = [0.0] * n
+    minus_dm = [0.0] * n
+    tr_list = [0.0] * n
+    for i in range(1, n):
+        up = highs[i] - highs[i - 1]
+        down = lows[i - 1] - lows[i]
+        plus_dm[i] = up if up > down and up > 0 else 0
+        minus_dm[i] = down if down > up and down > 0 else 0
+        tr_list[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+
+    atr = [0.0] * n
+    sp = [0.0] * n
+    sm = [0.0] * n
+    atr[period] = sum(tr_list[1:period + 1]) / period
+    sp[period] = sum(plus_dm[1:period + 1]) / period
+    sm[period] = sum(minus_dm[1:period + 1]) / period
+    for i in range(period + 1, n):
+        atr[i] = (atr[i - 1] * (period - 1) + tr_list[i]) / period
+        sp[i] = (sp[i - 1] * (period - 1) + plus_dm[i]) / period
+        sm[i] = (sm[i - 1] * (period - 1) + minus_dm[i]) / period
+
+    signals: list[int] = [0] * (period * 2)
+    adx_val = 0.0
+    for i in range(period * 2, n):
+        pdi = (sp[i] / atr[i] * 100) if atr[i] > 0 else 0
+        mdi = (sm[i] / atr[i] * 100) if atr[i] > 0 else 0
+        dx = abs(pdi - mdi) / (pdi + mdi) * 100 if (pdi + mdi) > 0 else 0
+        adx_val = (adx_val * (period - 1) + dx) / period
+        prev_s = signals[-1]
+        if adx_val > threshold:
+            s = 1 if pdi > mdi else -1
+        else:
+            s = 0
+        signals.append(s)
+    return signals
+
+
+def parabolic_sar(rows: list[dict[str, Any]], af_start: float = 0.02, af_step: float = 0.02,
+                  af_max: float = 0.20) -> list[int]:
+    """拋物線 SAR：價格突破 SAR 點翻轉方向。"""
+    n = len(rows)
+    if n < 3:
+        return [0] * n
+    highs = [r["high"] for r in rows]
+    lows = [r["low"] for r in rows]
+
+    trend = 1
+    sar = lows[0]
+    ep = highs[0]
+    af = af_start
+    signals: list[int] = [0, 0]
+
+    for i in range(2, n):
+        prev_sar = sar
+        sar = prev_sar + af * (ep - prev_sar)
+        if trend == 1:
+            sar = min(sar, lows[i - 1], lows[i - 2])
+            if lows[i] < sar:
+                trend = -1
+                sar = ep
+                ep = lows[i]
+                af = af_start
+            else:
+                if highs[i] > ep:
+                    ep = highs[i]
+                    af = min(af + af_step, af_max)
+        else:
+            sar = max(sar, highs[i - 1], highs[i - 2])
+            if highs[i] > sar:
+                trend = 1
+                sar = ep
+                ep = highs[i]
+                af = af_start
+            else:
+                if lows[i] < ep:
+                    ep = lows[i]
+                    af = min(af + af_step, af_max)
+        signals.append(trend)
+    return signals
+
+
 _STRATEGY_FUNCS = {
-    "sma_cross": sma_cross,
-    "buy_and_hold": buy_and_hold,
-    "rsi_signal": rsi_signal,
-    "macd_cross": macd_cross,
-    "bollinger_signal": bollinger_signal,
-    "ema_cross": ema_cross,
-    "donchian_channel": donchian_channel,
-    "supertrend": supertrend,
-    "dual_thrust": dual_thrust,
-    "vwap_reversion": vwap_reversion,
+    "sma_cross": sma_cross, "buy_and_hold": buy_and_hold,
+    "rsi_signal": rsi_signal, "macd_cross": macd_cross,
+    "bollinger_signal": bollinger_signal, "ema_cross": ema_cross,
+    "donchian_channel": donchian_channel, "supertrend": supertrend,
+    "dual_thrust": dual_thrust, "vwap_reversion": vwap_reversion,
+    "ichimoku": ichimoku, "stochastic": stochastic,
+    "williams_r": williams_r, "adx_trend": adx_trend,
+    "parabolic_sar": parabolic_sar,
 }
 
 

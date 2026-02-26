@@ -62,12 +62,15 @@ STRATEGY_LABELS = {
     "rsi_signal": "RSI", "macd_cross": "MACD 交叉", "bollinger_signal": "布林帶",
     "ema_cross": "EMA 交叉", "donchian_channel": "唐奇安通道",
     "supertrend": "超級趨勢", "dual_thrust": "雙推力", "vwap_reversion": "VWAP 回歸",
+    "ichimoku": "一目均衡表", "stochastic": "KD 隨機指標",
+    "williams_r": "威廉指標", "adx_trend": "ADX 趨勢", "parabolic_sar": "拋物線 SAR",
 }
 STRATEGY_COLORS = {
     "sma_cross": "#636EFA", "buy_and_hold": "#00CC96", "rsi_signal": "#EF553B",
     "macd_cross": "#AB63FA", "bollinger_signal": "#FFA15A", "ema_cross": "#19D3F3",
     "donchian_channel": "#FF6692", "supertrend": "#B6E880", "dual_thrust": "#FF97FF",
-    "vwap_reversion": "#FECB52",
+    "vwap_reversion": "#FECB52", "ichimoku": "#17BECF", "stochastic": "#7F7F7F",
+    "williams_r": "#E377C2", "adx_trend": "#8C564B", "parabolic_sar": "#2CA02C",
 }
 
 CRYPTO_CATEGORIES = {
@@ -460,20 +463,18 @@ if "backtest_results" not in st.session_state or not st.session_state["backtest_
 
         st.markdown("### 📋 支援策略一覽")
         _strat_info = [
-            ("雙均線交叉", "趨勢", "快慢 SMA 交叉做多空"),
-            ("EMA 交叉", "趨勢", "指數均線交叉，反應更快"),
-            ("MACD 交叉", "趨勢", "MACD 線與信號線交叉"),
-            ("RSI", "擺盪", "超買賣反轉信號"),
-            ("布林帶", "均值回歸", "突破上下軌反向交易"),
-            ("唐奇安通道", "突破", "N 期高低突破做多空"),
-            ("超級趨勢", "趨勢", "基於 ATR 的動態趨勢帶"),
-            ("雙推力", "突破", "開盤價 ± Range 突破"),
-            ("VWAP 回歸", "均值回歸", "偏離成交量加權均價反轉"),
-            ("買入持有", "基準", "持續持有作為對照基準"),
+            ("雙均線交叉", "趨勢", "快慢 SMA 交叉"), ("EMA 交叉", "趨勢", "指數均線交叉"),
+            ("MACD 交叉", "趨勢", "MACD/信號線交叉"), ("RSI", "擺盪", "超買賣反轉"),
+            ("布林帶", "均值回歸", "上下軌突破反向"), ("唐奇安通道", "突破", "N 期高低突破"),
+            ("超級趨勢", "趨勢", "ATR 動態趨勢帶"), ("雙推力", "突破", "開盤 ± Range"),
+            ("VWAP 回歸", "均值回歸", "偏離 VWAP 反轉"), ("一目均衡表", "趨勢", "雲帶+轉換基準線"),
+            ("KD 隨機指標", "擺盪", "K/D 交叉超買賣"), ("威廉指標", "擺盪", "Williams %R"),
+            ("ADX 趨勢", "趨勢", "趨勢強度 +DI/-DI"), ("拋物線 SAR", "趨勢", "SAR 點翻轉"),
+            ("買入持有", "基準", "持續持有作基準"),
         ]
-        _sc = st.columns(2)
+        _sc = st.columns(3)
         for i, (name, cat, desc) in enumerate(_strat_info):
-            _sc[i % 2].markdown(f"**{name}**　`{cat}`　{desc}")
+            _sc[i % 3].markdown(f"**{name}**　`{cat}`　{desc}")
         st.stop()
 
 backtest_results: dict[str, BacktestResult] = st.session_state["backtest_results"]

@@ -72,6 +72,41 @@ def _compute_metrics(
         sharpe = sortino = calmar = 0.0
 
     win_trades = [t for t in trades if t.get("pnl_pct", 0) > 0]
+    loss_trades = [t for t in trades if t.get("pnl_pct", 0) < 0]
+
+    # Profit Factor = 總盈利 / 總虧損
+    gross_profit = sum(t.get("profit", 0) for t in win_trades)
+    gross_loss = abs(sum(t.get("profit", 0) for t in loss_trades))
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else 0.0
+
+    # Omega Ratio = Σ(正報酬) / Σ(負報酬的絕對值)
+    pos_returns = [r for r in bar_returns if r > 0] if bar_returns else []
+    neg_returns_abs = [abs(r) for r in bar_returns if r < 0] if bar_returns else []
+    omega = round(sum(pos_returns) / sum(neg_returns_abs), 2) if neg_returns_abs and sum(neg_returns_abs) > 0 else 0.0
+
+    # Tail Ratio = 95th percentile / abs(5th percentile)
+    if bar_returns and len(bar_returns) >= 20:
+        sorted_r = sorted(bar_returns)
+        p95 = sorted_r[int(len(sorted_r) * 0.95)]
+        p5 = sorted_r[int(len(sorted_r) * 0.05)]
+        tail_ratio = round(p95 / abs(p5), 2) if p5 != 0 else 0.0
+    else:
+        tail_ratio = 0.0
+
+    # 平均盈虧
+    avg_win = round(sum(t.get("profit", 0) for t in win_trades) / len(win_trades), 2) if win_trades else 0
+    avg_loss = round(sum(t.get("profit", 0) for t in loss_trades) / len(loss_trades), 2) if loss_trades else 0
+
+    # 最大連續虧損
+    max_consec_loss = 0
+    cur_consec = 0
+    for t in trades:
+        if t.get("profit", 0) < 0:
+            cur_consec += 1
+            max_consec_loss = max(max_consec_loss, cur_consec)
+        else:
+            cur_consec = 0
+
     return {
         "leverage": leverage,
         "initial_equity": initial_equity,
@@ -82,8 +117,14 @@ def _compute_metrics(
         "sharpe_ratio": round(sharpe, 2),
         "sortino_ratio": round(sortino, 2),
         "calmar_ratio": round(calmar, 2),
+        "profit_factor": profit_factor,
+        "omega_ratio": omega,
+        "tail_ratio": tail_ratio,
         "num_trades": len(trades),
         "win_rate_pct": round(100 * len(win_trades) / len(trades), 1) if trades else 0,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "max_consec_loss": max_consec_loss,
         "period_bars": n_bars,
     }
 
