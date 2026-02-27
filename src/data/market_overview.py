@@ -7,19 +7,43 @@ from typing import Any
 MARKET_TICKERS = {
     "₿ 加密主流": [
         ("BTC", "BTC-USD"), ("ETH", "ETH-USD"), ("SOL", "SOL-USD"),
-        ("BNB", "BNB-USD"), ("XRP", "XRP-USD"), ("DOGE", "DOGE-USD"),
+        ("BNB", "BNB-USD"), ("XRP", "XRP-USD"), ("ADA", "ADA-USD"),
+    ],
+    "🌐 DeFi/L2": [
+        ("UNI", "UNI-USD"), ("LINK", "LINK-USD"), ("AAVE", "AAVE-USD"),
+        ("ARB", "ARB11841-USD"), ("OP", "OP-USD"), ("SUI", "SUI20947-USD"),
+    ],
+    "🐸 Meme": [
+        ("DOGE", "DOGE-USD"), ("SHIB", "SHIB-USD"),
+        ("BONK", "BONK-USD"), ("FLOKI", "FLOKI-USD"),
     ],
     "📈 美股科技": [
         ("AAPL", "AAPL"), ("MSFT", "MSFT"), ("NVDA", "NVDA"),
         ("TSLA", "TSLA"), ("META", "META"), ("GOOGL", "GOOGL"),
     ],
-    "🏦 ETF": [
-        ("S&P500", "SPY"), ("Nasdaq", "QQQ"), ("黃金", "GLD"),
-        ("原油", "USO"), ("美債", "TLT"), ("台灣50", "0050.TW"),
+    "💊 美股醫療": [
+        ("UNH", "UNH"), ("JNJ", "JNJ"), ("LLY", "LLY"),
+        ("PFE", "PFE"), ("ABBV", "ABBV"), ("MRK", "MRK"),
     ],
-    "🐸 Meme": [
-        ("DOGE", "DOGE-USD"), ("SHIB", "SHIB-USD"),
-        ("BONK", "BONK-USD"), ("FLOKI", "FLOKI-USD"),
+    "🏦 美股 ETF": [
+        ("S&P500", "SPY"), ("Nasdaq", "QQQ"), ("小型股", "IWM"),
+        ("道瓊", "DIA"), ("全市場", "VTI"), ("半導體", "SOXX"),
+    ],
+    "🥇 商品": [
+        ("黃金", "GLD"), ("白銀", "SLV"), ("原油", "USO"),
+        ("天然氣", "UNG"), ("銅", "CPER"),
+    ],
+    "📜 債券": [
+        ("美長債", "TLT"), ("中期債", "IEF"), ("短期債", "SHY"),
+        ("高收債", "HYG"), ("投資級", "LQD"),
+    ],
+    "🇹🇼 台灣": [
+        ("台積電", "2330.TW"), ("鴻海", "2317.TW"), ("聯發科", "2454.TW"),
+        ("元大50", "0050.TW"), ("高股息", "00878.TW"),
+    ],
+    "🌍 全球指數": [
+        ("S&P500", "^GSPC"), ("Nasdaq", "^IXIC"), ("道瓊", "^DJI"),
+        ("日經", "^N225"), ("恆生", "^HSI"), ("加權", "^TWII"),
     ],
 }
 
