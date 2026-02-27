@@ -20,6 +20,150 @@
 
 **支援交易所**：OKX、Bitget、Gate.io、KuCoin、MEXC、HTX、BingX、WOO X、Crypto.com、Binance*、Bybit*（*受地區限制，自動回退）
 
+## 數據 API 申請與來源
+
+以下是依「數據類型」分類的主要 API 來源，方便日後擴充實盤數據或宏觀/情緒指標：
+
+### API Key 設定與統一入口
+
+- **環境變數 / .env**：  
+  - 所有外部 API 金鑰一律走環境變數，建議在專案根目錄建立 `.env`（不納入 git）並搭配 `python-dotenv` 自動載入。  
+  - 主要變數名稱（對應上列服務）：  
+    - `FRED_API_KEY`  
+    - `TRADING_ECONOMICS_API_KEY`  
+    - `COINGECKO_API_KEY`  
+    - `COINMARKETCAP_API_KEY`  
+    - `GLASSNODE_API_KEY`  
+    - `ALPHA_VANTAGE_API_KEY`  
+    - `FMP_API_KEY`  
+    - `POLYGON_API_KEY`  
+    - `ALPACA_API_KEY` / `ALPACA_API_SECRET`  
+    - `DASHSCOPE_API_KEY`（Qwen AI，用於 `src/ai/qwen_client.py`）
+- **程式端入口**：  
+  - 統一由 `src/config_secrets.py` 讀取與檢查金鑰，避免在各模組重複處理。  
+  - 數據抓取函式集中在 `src/data/sources/api_hub.py`，例如：  
+    - `fetch_fred_series(...)`  
+    - `fetch_alpha_vantage(...)`  
+    - `fetch_polygon(...)`  
+    - `fetch_coingecko(...)`  
+    - `fetch_coinmarketcap(...)`  
+    - `fetch_glassnode(...)`  
+    - `fetch_trading_economics(...)`  
+    - `fetch_polymarket_markets(...)`
+
+### 1. 宏觀經濟數據 (Macro Economic)
+
+- **FRED (Federal Reserve Economic Data)**  
+  - **網址**：[`https://fred.stlouisfed.org/`](https://fred.stlouisfed.org/)  
+  - **費用**：免費（需註冊 API Key）  
+  - **數據**：美國 CPI、非農就業、利率、GDP 等權威宏觀數據。
+- **TradingEconomics**  
+  - **網址**：[`https://tradingeconomics.com/`](https://tradingeconomics.com/)  
+  - **費用**：有限免費 / 付費  
+  - **數據**：全球各國宏觀指標與經濟日曆。
+
+### 2. 加密貨幣市場與鏈上數據 (Crypto & On-Chain)
+
+- **CoinGecko**  
+  - **網址**：[`https://www.coingecko.com/`](https://www.coingecko.com/)  
+  - **費用**：免費層級有限 / 付費  
+  - **數據**：代幣價格、市值、交易量等基本市場數據。
+- **CoinMarketCap**  
+  - **網址**：[`https://coinmarketcap.com/`](https://coinmarketcap.com/)  
+  - **費用**：免費層級有限 / 付費  
+  - **數據**：代幣價格、排名、交易所資訊。
+- **Glassnode**  
+  - **網址**：[`https://glassnode.com/`](https://glassnode.com/)  
+  - **費用**：免費層級有限 / 付費  
+  - **數據**：鏈上指標（活躍地址、哈希率、MVRV 等）。
+
+### 3. 股市與綜合金融數據 (Stocks & General)
+
+- **Alpha Vantage**  
+  - **網址**：[`https://www.alphavantage.co/`](https://www.alphavantage.co/)  
+  - **費用**：免費（有每日呼叫上限）/ 付費  
+  - **數據**：美股、匯率、常用技術指標。
+- **Financial Modeling Prep (FMP)**  
+  - **網址**：[`https://financialmodelingprep.com/`](https://financialmodelingprep.com/)  
+  - **費用**：免費層級有限 / 付費  
+  - **數據**：財報、股價、部分經濟數據。
+- **Polygon.io**  
+  - **網址**：[`https://polygon.io/`](https://polygon.io/)  
+  - **費用**：免費層級有限 / 付費  
+  - **數據**：美股、外匯、加密的即時與歷史數據。
+
+### 4. 券商交易接口 (Brokerage API)
+
+- **Interactive Brokers (IBKR)**  
+  - **網址**：[`https://www.interactivebrokers.com/`](https://www.interactivebrokers.com/)  
+  - **費用**：需開戶（市場數據可能需額外付費）  
+  - **數據**：全球市場即時行情與下單交易接口。
+- **Alpaca**  
+  - **網址**：[`https://alpaca.markets/`](https://alpaca.markets/)  
+  - **費用**：免費（美股）  
+  - **數據**：美股即時數據與交易（適合程式交易 / 模擬帳戶）。
+
+### 5. 情緒與另類數據 (Sentiment & Alternative)
+
+- **Alternative.me — Crypto Fear & Greed Index**  
+  - **網址**：[`https://alternative.me/crypto/fear-and-greed-index/`](https://alternative.me/crypto/fear-and-greed-index/)  
+  - **費用**：免費（無需 API Key，直接存取 URL）  
+  - **數據**：加密貨幣恐懼與貪婪情緒指標。
+- **CBOE**  
+  - **網址**：[`https://www.cboe.com/`](https://www.cboe.com/)  
+  - **費用**：部分公開 / 付費  
+  - **數據**：VIX 波動率指數與相關衍生商品數據。
+
+### 6. 預測市場 (Prediction Markets)
+
+- **Polymarket / Gamma API**  
+  - **Base URL**：[`https://gamma-api.polymarket.com`](https://gamma-api.polymarket.com)  
+  - **權限**：公開市場數據無需 API Key，下單/持倉相關需錢包簽名。  
+  - **限制**：有頻率限制，實務上建議在應用端增加快取（例如記憶體 / SQLite / Redis）。  
+  - **數據內容**：事件概率、成交量、開盤/結算狀態、結果等。  
+  - **常見端點**（社群整理，非官方文件）：  
+    - 取得市場列表：`GET /markets`  
+    - 取得事件詳情：`GET /events/{id}`  
+    - 取得使用者相關通知/持倉：`GET /notifications`（需認證）  
+  - **Python 抓取範例**（簡化版）：
+
+    ```python
+    import requests
+    from typing import List, Dict, Any
+
+    BASE_URL = "https://gamma-api.polymarket.com"
+
+    def get_polymarket_markets(query: str = "", limit: int = 10) -> List[Dict[str, Any]]:
+        """從 Polymarket Gamma API 抓取市場列表（僅示意用）"""
+        url = f"{BASE_URL}/markets"
+        params = {"limit": limit}
+        if query:
+            params["search"] = query
+
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # 依常見欄位做基本整理（實際欄位可能會有變動）
+        markets: List[Dict[str, Any]] = []
+        for m in data:
+            markets.append(
+                {
+                    "title": m.get("title"),
+                    "yes_bid": m.get("yesBid"),
+                    "volume": m.get("volume"),
+                    "status": m.get("status"),
+                }
+            )
+        return markets
+    ```
+
+  - **整合建議**：  
+    - 可在 `MARKET_HIERARCHY` 中新增一個大類，例如：  
+      - `🎲 預測市場` → `加密事件 / 宏觀事件` 等子分類，只儲存自定義代碼（例如 `POLY_BTC_100K`）與顯示名稱。  
+    - 在數據層以這些代碼對應到實際 Polymarket 查詢條件或市場 ID，由獨立模組（例如 `src/data/sources/polymarket.py`）負責呼叫 Gamma API 並轉換成平台統一格式。  
+    - 需注意端點屬「非官方文件」，可能隨時間變動，建議加上錯誤處理與快取機制。
+
 ### 📈 互動圖表
 - Plotly K 線圖（Candlestick）+ 成交量 + 買賣點標記
 - 多策略權益曲線對比

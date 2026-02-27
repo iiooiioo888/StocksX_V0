@@ -11,7 +11,8 @@ Qwen AI 客戶端封裝。
 
 from http import HTTPStatus
 from typing import Dict, List, Optional
-import os
+
+from src.config_secrets import DASHSCOPE_API_KEY, require
 
 try:
     import dashscope
@@ -24,9 +25,7 @@ except ImportError:
 def _ensure_ready() -> None:
     if dashscope is None or Generation is None:
         raise RuntimeError("尚未安裝 dashscope，請先執行：pip install dashscope")
-    api_key = os.getenv("DASHSCOPE_API_KEY")
-    if not api_key:
-        raise RuntimeError("請先設定環境變數 DASHSCOPE_API_KEY 才能呼叫 Qwen。")
+    api_key = require(DASHSCOPE_API_KEY, "DASHSCOPE_API_KEY")
     dashscope.api_key = api_key
 
 

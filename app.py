@@ -86,7 +86,7 @@ else:
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.markdown("### ₿ 加密回測")
-        st.page_link(_crypto_page, label="₿ 加密貨幣", icon="₿")
+        st.page_link(_crypto_page, label="₿ 加密貨幣", icon="💰")
     with col2:
         st.markdown("### 🏛️ 傳統回測")
         st.page_link(_trad_page, label="🏛️ 傳統市場", icon="🏛️")

@@ -219,17 +219,43 @@ MARKET_HIERARCHY: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = {
 
 @st.cache_data(ttl=120, show_spinner=False)
 def _fetch_single(symbol: str) -> dict | None:
-    """逐個拉取單一標的行情"""
+    """逐個拉取單一標的行情（優先使用 fast_info，失敗再回退到 history）"""
     try:
         import yfinance as yf
+
         t = yf.Ticker(symbol)
-        h = t.history(period="5d", interval="1d")
-        if h.empty or len(h) < 2:
-            return None
-        last = float(h["Close"].iloc[-1])
-        prev = float(h["Close"].iloc[-2])
+
+        last = None
+        prev = None
+        currency = None
+
+        # 優先嘗試 fast_info（速度較快）
+        try:
+            finfo = getattr(t, "fast_info", None) or {}
+            last = finfo.get("lastPrice")
+            prev = finfo.get("previousClose")
+            currency = finfo.get("currency")
+        except Exception:
+            pass
+
+        # 如 fast_info 取不到價格，回退到 history
+        if last is None or prev is None:
+            h = t.history(period="5d", interval="1d")
+            if h.empty or len(h) < 2:
+                return None
+            last = float(h["Close"].iloc[-1])
+            prev = float(h["Close"].iloc[-2])
+
         change = ((last - prev) / prev * 100) if prev else 0
-        return {"price": last, "change": round(change, 2)}
+
+        data: dict[str, Any] = {
+            "price": float(last),
+            "change": round(change, 2),
+        }
+        if currency:
+            data["currency"] = currency
+
+        return data
     except Exception:
         return None
 
@@ -257,6 +283,13 @@ def fetch_market_data() -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]
             for sector, tickers in sectors.items():
                 sector_data: list[dict[str, Any]] = []
                 for name, sym in tickers:
+                    # 經濟數據等非交易型指標無法透過 yfinance 抓取，直接略過
+                    if any(
+                        x in sym
+                        for x in ["NFP", "CPI", "PCE", "GDP", "PMI", "HALVING", "RATE"]
+                    ):
+                        continue
+
                     data = _fetch_single(sym)
                     if data:
                         sector_data.append({"name": name, "symbol": sym, **data})
