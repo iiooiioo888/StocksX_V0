@@ -4,7 +4,6 @@ from __future__ import annotations
 import streamlit as st
 from typing import Any
 
-
 MARKET_TICKERS = {
     "₿ 加密主流": [
         ("BTC", "BTC-USD"), ("ETH", "ETH-USD"), ("SOL", "SOL-USD"),
@@ -19,52 +18,39 @@ MARKET_TICKERS = {
         ("原油", "USO"), ("美債", "TLT"), ("台灣50", "0050.TW"),
     ],
     "🐸 Meme": [
-        ("DOGE", "DOGE-USD"), ("SHIB", "SHIB-USD"), ("PEPE", "PEPE-USD"),
-        ("WIF", "WIF-USD"), ("BONK", "BONK-USD"), ("FLOKI", "FLOKI-USD"),
+        ("DOGE", "DOGE-USD"), ("SHIB", "SHIB-USD"),
+        ("BONK", "BONK-USD"), ("FLOKI", "FLOKI-USD"),
     ],
 }
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_market_data() -> dict[str, list[dict[str, Any]]]:
-    """拉取各板塊即時行情（2 分鐘快取）"""
+def _fetch_single(symbol: str) -> dict | None:
+    """逐個拉取單一標的行情"""
     try:
         import yfinance as yf
-    except ImportError:
-        return {}
+        t = yf.Ticker(symbol)
+        h = t.history(period="5d", interval="1d")
+        if h.empty or len(h) < 2:
+            return None
+        last = float(h["Close"].iloc[-1])
+        prev = float(h["Close"].iloc[-2])
+        change = ((last - prev) / prev * 100) if prev else 0
+        return {"price": last, "change": round(change, 2)}
+    except Exception:
+        return None
 
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_market_data() -> dict[str, list[dict[str, Any]]]:
+    """拉取各板塊即時行情（2 分鐘快取）"""
     result = {}
     for sector, tickers in MARKET_TICKERS.items():
         sector_data = []
-        symbols = [t[1] for t in tickers]
-        names = [t[0] for t in tickers]
-        try:
-            data = yf.download(symbols, period="2d", interval="1d", progress=False, threads=True)
-            if data.empty:
-                continue
-            close = data.get("Close")
-            if close is None:
-                continue
-            for i, sym in enumerate(symbols):
-                try:
-                    if isinstance(close, type(data)):
-                        col = close[sym] if sym in close.columns else None
-                    else:
-                        col = close
-                    if col is None or len(col.dropna()) < 2:
-                        continue
-                    vals = col.dropna()
-                    last = float(vals.iloc[-1])
-                    prev = float(vals.iloc[-2]) if len(vals) > 1 else last
-                    change = ((last - prev) / prev * 100) if prev else 0
-                    sector_data.append({
-                        "name": names[i], "symbol": sym,
-                        "price": last, "change": round(change, 2),
-                    })
-                except Exception:
-                    continue
-        except Exception:
-            continue
+        for name, sym in tickers:
+            data = _fetch_single(sym)
+            if data:
+                sector_data.append({"name": name, "symbol": sym, **data})
         if sector_data:
             result[sector] = sector_data
     return result

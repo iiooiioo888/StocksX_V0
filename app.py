@@ -44,19 +44,35 @@ if market_data:
         _avg = sum(i["change"] for i in items) / len(items) if items else 0
         _up = sum(1 for i in items if i["change"] > 0)
         _down = sum(1 for i in items if i["change"] < 0)
-        _sector_summary.append({"板塊": sector, "平均漲跌%": round(_avg, 2), "漲": _up, "跌": _down})
+        _sector_summary.append({"板塊": sector, "平均漲跌%": round(_avg, 2), "漲": _up, "跌": _down,
+                                "總數": len(items)})
 
-    with st.expander("📊 板塊資金流向", expanded=False):
-        import plotly.graph_objects as go
-        from src.chart_theme import apply_dark_theme
+    if _sector_summary:
+        with st.expander("📊 板塊資金流向", expanded=True):
+            import plotly.graph_objects as go
+            from src.chart_theme import apply_dark_theme
 
-        _names = [s["板塊"] for s in _sector_summary]
-        _vals = [s["平均漲跌%"] for s in _sector_summary]
-        _colors = ["#26A69A" if v >= 0 else "#EF5350" for v in _vals]
-        fig = go.Figure(go.Bar(x=_names, y=_vals, marker_color=_colors,
-                                text=[f"{v:+.2f}%" for v in _vals], textposition="outside"))
-        fig.update_layout(height=250, yaxis_title="平均漲跌%", margin=dict(l=0, r=0, t=10, b=0))
-        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
+            _names = [s["板塊"] for s in _sector_summary]
+            _vals = [s["平均漲跌%"] for s in _sector_summary]
+            _colors = ["#26A69A" if v >= 0 else "#EF5350" for v in _vals]
+
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=_names, y=_vals, marker_color=_colors,
+                text=[f"{v:+.2f}%" for v in _vals], textposition="outside",
+                textfont=dict(color=_colors, size=13),
+                hovertemplate="%{x}<br>平均漲跌: %{y:+.2f}%<extra></extra>",
+            ))
+            fig.add_hline(y=0, line=dict(color="rgba(150,150,200,0.3)", width=1))
+            fig.update_layout(height=220, yaxis_title="平均漲跌%",
+                              margin=dict(l=0, r=0, t=5, b=0))
+            st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
+
+            # 漲跌統計摘要
+            _total_up = sum(s["漲"] for s in _sector_summary)
+            _total_down = sum(s["跌"] for s in _sector_summary)
+            _total = sum(s["總數"] for s in _sector_summary)
+            st.caption(f"📊 {_total} 個標的：🟢 {_total_up} 漲 / 🔴 {_total_down} 跌 / ⚪ {_total - _total_up - _total_down} 平")
 
 st.divider()
 
