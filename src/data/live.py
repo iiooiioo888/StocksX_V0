@@ -8,6 +8,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from src.config import STRATEGY_LABELS
+from src.notify.bark import send_bark
 
 
 def get_live_price(symbol: str, exchange: str = "okx") -> dict[str, Any] | None:
@@ -76,6 +77,16 @@ def get_current_signal(symbol: str, exchange: str, timeframe: str,
         signal_changed = current_signal != prev_signal
 
         signal_text = {1: "🟢 做多", -1: "🔴 做空", 0: "⚪ 觀望"}.get(current_signal, "⚪ 觀望")
+
+        # 若有訂閱，且信號改變，發出 Bark 通知（需在環境變數設定 BARK_KEY）
+        if signal_changed:
+            try:
+                strat_name = STRATEGY_LABELS.get(strategy, strategy)
+                title = f"{symbol} {strat_name} 信號變化"
+                body = f"{exchange} {timeframe} {signal_text} | 價格 {price}"
+                send_bark(title, body, group="策略信號")
+            except Exception as e:
+                logger.warning("send_bark failed for %s %s: %s", symbol, strategy, e)
 
         return {
             "signal": current_signal,
