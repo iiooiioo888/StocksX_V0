@@ -1,7 +1,7 @@
 # StocksX — 通用回測平台入口
 import streamlit as st
 from src.auth import UserDB
-from src.config import APP_CSS
+from src.config import APP_CSS, format_price
 
 st.set_page_config(page_title="StocksX — 通用回測平台", page_icon="📊", layout="wide")
 st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
@@ -33,7 +33,7 @@ if market_data:
                 _delta_color = "normal" if _chg >= 0 else "inverse"
                 col.metric(
                     f"{_icon} {item['name']}",
-                    f"${item['price']:,.2f}" if item["price"] > 1 else f"${item['price']:.6f}",
+                    format_price(item["price"]),
                     delta=f"{_chg:+.2f}%",
                     delta_color=_delta_color,
                 )

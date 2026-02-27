@@ -185,7 +185,7 @@ def render_equity_curves(results: dict[str, BacktestResult], initial_equity: flo
         fig.add_trace(go.Scatter(
             x=idx, y=eq, mode="lines", name=label,
             line=dict(color=color, width=2),
-            hovertemplate=f"{label}<br>權益: %{{y:,.0f}}<extra></extra>",
+            hovertemplate=f"{label}: $%{{y:,.0f}}<extra></extra>",
         ), row=1, col=1)
 
         # 回撤

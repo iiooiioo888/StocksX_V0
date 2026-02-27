@@ -101,4 +101,9 @@ if "crypto_results" in st.session_state:
             with st.expander("📝 交易明細", expanded=False):
                 render_trade_details(results)
 else:
-    st.info("👈 設定參數後點擊「🚀 執行回測」")
+    st.info("👈 選擇交易對和參數，點擊「🚀 執行回測」開始")
+    st.divider()
+    _sc = st.columns(3)
+    _sc[0].markdown("#### 🔥 熱門回測\nBTC、ETH、SOL 永續合約")
+    _sc[1].markdown("#### ⚡ 快速開始\n選擇分類 → 交易對 → 執行")
+    _sc[2].markdown("#### 📊 15 種策略\n趨勢、擺盪、突破、均值回歸")

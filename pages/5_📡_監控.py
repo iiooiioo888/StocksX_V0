@@ -6,6 +6,7 @@ import time as _time
 from datetime import datetime, timezone
 from src.auth import UserDB
 from src.data.live import get_live_price, get_current_signal, STRATEGY_LABELS
+from src.config import format_price
 from src.ui_common import apply_theme, breadcrumb, require_login, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 策略監控", page_icon="📡", layout="wide")
@@ -115,7 +116,7 @@ with tab_watch:
             _w_value = _w_equity * (1 + _w_pnl / 100) if _w_pos != 0 else _w_equity
             _w_sig = {1: "🟢做多", -1: "🔴做空", 0: "⚪觀望"}.get(w.get("last_signal", 0), "⚪觀望")
             _w_pnl_str = f"{'🟢' if _w_pnl > 0 else '🔴' if _w_pnl < 0 else '⚪'}{_w_pnl:+.2f}%"
-            _w_price_str = f"${w['last_price']:,.2f}" if w.get("last_price") else ""
+            _w_price_str = format_price(w["last_price"]) if w.get("last_price") else ""
 
             _header = f"{status_icon} {w['symbol']} × {s_label}　|　{_w_sig}　|　💰${_w_value:,.0f}　|　{_w_pnl_str}"
             if _w_price_str:
@@ -192,7 +193,7 @@ with tab_watch:
                 _profit = _current_value - _equity
 
                 r1, r2, r3 = st.columns(3)
-                r1.metric("💰 即時價格", f"{w['last_price']:,.2f}" if w["last_price"] else "—")
+                r1.metric("💰 即時價格", format_price(w["last_price"]) if w["last_price"] else "—")
                 sig_text = {1: "🟢 做多", -1: "🔴 做空", 0: "⚪ 觀望"}.get(w.get("last_signal", 0), "⚪ 觀望")
                 r2.metric("📡 當前信號", sig_text)
                 pos_text = {1: "🟢 多頭", -1: "🔴 空頭", 0: "⬜ 空倉"}.get(_position, "⬜ 空倉")
@@ -203,7 +204,7 @@ with tab_watch:
                 v1.metric("🏦 帳戶價值", f"${_current_value:,.2f}", delta=f"{_profit:+,.2f}", delta_color=_val_color)
                 v2.metric("💹 未實現 P&L", f"{_pnl:+.2f}%", delta=f"${_profit:+,.2f}", delta_color=_val_color)
                 entry = w.get("entry_price", 0)
-                v3.metric("📍 進場價", f"{entry:,.2f}" if entry else "—")
+                v3.metric("📍 進場價", format_price(entry) if entry else "—")
                 v4.metric("💵 初始資金", f"${_equity:,.2f}")
 
                 # 走勢圖表
