@@ -1,13 +1,9 @@
 # StocksX — 通用回測平台入口
-"""
-啟動方式：streamlit run app.py
-"""
 import streamlit as st
 from src.auth import UserDB
+from src.config import APP_CSS
 
 st.set_page_config(page_title="StocksX — 通用回測平台", page_icon="📊", layout="wide")
-
-from src.config import APP_CSS
 st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
 
 _login_page = "pages/1_🔐_登入.py"
@@ -18,15 +14,60 @@ _admin_page = "pages/4_🛠️_管理.py"
 
 user = st.session_state.get("user")
 
+# ─── 市場行情（登入/未登入都顯示）───
+st.markdown("# 📊 StocksX")
+
+from src.data.market_overview import fetch_market_data
+
+with st.spinner("載入市場行情…"):
+    market_data = fetch_market_data()
+
+if market_data:
+    tabs = st.tabs(list(market_data.keys()))
+    for tab, (sector, items) in zip(tabs, market_data.items()):
+        with tab:
+            cols = st.columns(len(items))
+            for col, item in zip(cols, items):
+                _chg = item["change"]
+                _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
+                _delta_color = "normal" if _chg >= 0 else "inverse"
+                col.metric(
+                    f"{_icon} {item['name']}",
+                    f"${item['price']:,.2f}" if item["price"] > 1 else f"${item['price']:.6f}",
+                    delta=f"{_chg:+.2f}%",
+                    delta_color=_delta_color,
+                )
+
+    # 板塊漲跌統計
+    _sector_summary = []
+    for sector, items in market_data.items():
+        _avg = sum(i["change"] for i in items) / len(items) if items else 0
+        _up = sum(1 for i in items if i["change"] > 0)
+        _down = sum(1 for i in items if i["change"] < 0)
+        _sector_summary.append({"板塊": sector, "平均漲跌%": round(_avg, 2), "漲": _up, "跌": _down})
+
+    with st.expander("📊 板塊資金流向", expanded=False):
+        import plotly.graph_objects as go
+        from src.chart_theme import apply_dark_theme
+
+        _names = [s["板塊"] for s in _sector_summary]
+        _vals = [s["平均漲跌%"] for s in _sector_summary]
+        _colors = ["#26A69A" if v >= 0 else "#EF5350" for v in _vals]
+        fig = go.Figure(go.Bar(x=_names, y=_vals, marker_color=_colors,
+                                text=[f"{v:+.2f}%" for v in _vals], textposition="outside"))
+        fig.update_layout(height=250, yaxis_title="平均漲跌%", margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
+
+st.divider()
+
+# ─── 未登入 ───
 if not user:
-    st.markdown("# 📊 StocksX — 通用回測平台")
-    st.markdown("##### 加密貨幣 × 股票 × ETF × 期貨　五大策略一鍵回測")
-    st.divider()
+    st.markdown("##### 加密貨幣 × 股票 × ETF × 期貨　15 大策略一鍵回測")
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown("#### 🎯 15 大策略\n雙均線、RSI、MACD、一目均衡表、SAR…")
+    c1.markdown("#### 🎯 15 大策略\n雙均線、RSI、MACD、一目均衡表…")
     c2.markdown("#### 🌍 多市場\n加密貨幣 + 美股 + 台股 + ETF + 期貨")
-    c3.markdown("#### 📰 即時新聞\nCoinDesk、Yahoo Finance、CNBC")
-    c4.markdown("#### 🛠️ 管理後台\n用戶管理、系統統計")
+    c3.markdown("#### 📡 即時監控\n訂閱策略、模擬交易記錄")
+    c4.markdown("#### 🔒 安全系統\nPBKDF2 加密、帳號保護")
     st.divider()
     st.page_link(_login_page, label="🔐 登入 / 註冊", icon="🔐")
 else:
@@ -38,9 +79,7 @@ else:
         st.rerun()
     st.sidebar.divider()
 
-    st.markdown(f"## 👋 歡迎，{user['display_name']}！")
-
-    # 快速統計
+    # 用戶統計
     history = db.get_history(user["id"], limit=5)
     stats = db.get_stats()
     m1, m2, m3, m4 = st.columns(4)
@@ -55,31 +94,25 @@ else:
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.markdown("### ₿ 加密回測")
-        st.caption("BTC、ETH、DeFi、Meme…")
         st.page_link(_crypto_page, label="₿ 加密貨幣", icon="₿")
     with col2:
         st.markdown("### 🏛️ 傳統回測")
-        st.caption("股票、ETF、債券、期貨")
         st.page_link(_trad_page, label="🏛️ 傳統市場", icon="🏛️")
     with col3:
         st.markdown("### 📡 策略監控")
-        st.caption("訂閱即時信號")
         st.page_link("pages/5_📡_監控.py", label="📡 監控", icon="📡")
     with col4:
         st.markdown("### 📜 歷史")
-        st.caption("記錄、收藏、預設")
         st.page_link(_history_page, label="📜 歷史", icon="📜")
     with col5:
         if user["role"] == "admin":
             st.markdown("### 🛠️ 管理")
-            st.caption("用戶、統計")
             st.page_link(_admin_page, label="🛠️ 管理", icon="🛠️")
         else:
             st.markdown("### 📰 新聞")
-            st.caption("市場即時新聞")
             st.page_link("pages/6_📰_新聞.py", label="📰 新聞", icon="📰")
 
-    # 最近回測記錄
+    # 最近回測
     if history:
         st.divider()
         st.markdown("### 📋 最近回測")
@@ -87,6 +120,6 @@ else:
             m = h.get("metrics", {})
             ret = m.get("total_return_pct", 0)
             icon = "🟢" if ret and ret > 0 else "🔴" if ret and ret < 0 else "⚪"
-            st.markdown(f"{icon} **{h['symbol']}** × {h['strategy']} — 報酬 {ret}% | {h['timeframe']}")
+            st.markdown(f"{icon} **{h['symbol']}** × {h['strategy']} — {ret}% | {h['timeframe']}")
 
-st.caption("⚠️ 免責聲明：本平台僅供學習與研究，不構成投資建議。")
+st.caption("⚠️ 免責聲明：本平台僅供學習與研究，不構成投資建議。數據來源：Yahoo Finance。")
