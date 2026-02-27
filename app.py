@@ -24,19 +24,22 @@ with st.spinner("載入市場行情…"):
 
 if market_data:
     tabs = st.tabs(list(market_data.keys()))
+    _cols_per_row = 4
     for tab, (sector, items) in zip(tabs, market_data.items()):
         with tab:
-            cols = st.columns(len(items))
-            for col, item in zip(cols, items):
-                _chg = item["change"]
-                _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
-                _delta_color = "normal" if _chg >= 0 else "inverse"
-                col.metric(
-                    f"{_icon} {item['name']}",
-                    format_price(item["price"]),
-                    delta=f"{_chg:+.2f}%",
-                    delta_color=_delta_color,
-                )
+            for _row_start in range(0, len(items), _cols_per_row):
+                _row_items = items[_row_start:_row_start + _cols_per_row]
+                cols = st.columns(_cols_per_row)
+                for col, item in zip(cols, _row_items):
+                    _chg = item["change"]
+                    _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
+                    _delta_color = "normal" if _chg >= 0 else "inverse"
+                    col.metric(
+                        f"{_icon} {item['name']}",
+                        format_price(item["price"]),
+                        delta=f"{_chg:+.2f}%",
+                        delta_color=_delta_color,
+                    )
 
     # 板塊漲跌統計
     _sector_summary = []
