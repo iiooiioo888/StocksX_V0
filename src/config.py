@@ -54,6 +54,18 @@ EXCHANGE_OPTIONS = {
     "cryptocom": "Crypto.com（僅現貨）",
 }
 
+def format_price(price: float, symbol: str = "") -> str:
+    """智能價格格式化"""
+    if price >= 10000:
+        return f"${price:,.0f}"
+    elif price >= 1:
+        return f"${price:,.2f}"
+    elif price >= 0.01:
+        return f"${price:.4f}"
+    else:
+        return f"${price:.8f}"
+
+
 APP_CSS = """
 /* 全局背景 */
 .stApp {background: linear-gradient(160deg, #0f0f1a 0%, #1a1a2e 40%, #16213e 100%);}

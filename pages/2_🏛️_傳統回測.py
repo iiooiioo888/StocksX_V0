@@ -146,8 +146,12 @@ if "trad_results" in st.session_state:
 else:
     st.info("👈 選擇市場類型和標的，點擊「🚀 執行回測」")
     st.divider()
-    st.markdown("### 📋 可用市場")
-    for mt, subs in MARKET_TABS.items():
-        with st.expander(mt, expanded=False):
+    st.markdown("### 📋 支援市場一覽")
+    _mt_cols = st.columns(len(MARKET_TABS))
+    for _col, (mt, subs) in zip(_mt_cols, MARKET_TABS.items()):
+        with _col:
+            st.markdown(f"**{mt}**")
             for cat, syms in subs.items():
-                st.markdown(f"**{cat}**：{', '.join(syms)}")
+                _count = len(syms)
+                _preview = ", ".join(syms[:3])
+                st.caption(f"{cat}（{_count}）：{_preview}…" if _count > 3 else f"{cat}：{_preview}")
