@@ -23,59 +23,32 @@ with st.spinner("載入市場行情…"):
     market_data = fetch_market_data()
 
 if market_data:
-    tabs = st.tabs(list(market_data.keys()))
+    # 先以「市場類型」分頁（加密 / 傳統），再以「市場」與「板塊」細分
+    group_tabs = st.tabs(list(market_data.keys()))
     _cols_per_row = 4
-    for tab, (sector, items) in zip(tabs, market_data.items()):
-        with tab:
-            for _row_start in range(0, len(items), _cols_per_row):
-                _row_items = items[_row_start:_row_start + _cols_per_row]
-                cols = st.columns(_cols_per_row)
-                for col, item in zip(cols, _row_items):
-                    _chg = item["change"]
-                    _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
-                    _delta_color = "normal" if _chg >= 0 else "inverse"
-                    col.metric(
-                        f"{_icon} {item['name']}",
-                        format_price(item["price"]),
-                        delta=f"{_chg:+.2f}%",
-                        delta_color=_delta_color,
-                    )
-
-    # 板塊漲跌統計
-    _sector_summary = []
-    for sector, items in market_data.items():
-        _avg = sum(i["change"] for i in items) / len(items) if items else 0
-        _up = sum(1 for i in items if i["change"] > 0)
-        _down = sum(1 for i in items if i["change"] < 0)
-        _sector_summary.append({"板塊": sector, "平均漲跌%": round(_avg, 2), "漲": _up, "跌": _down,
-                                "總數": len(items)})
-
-    if _sector_summary:
-        with st.expander("📊 板塊資金流向", expanded=True):
-            import plotly.graph_objects as go
-            from src.chart_theme import apply_dark_theme
-
-            _names = [s["板塊"] for s in _sector_summary]
-            _vals = [s["平均漲跌%"] for s in _sector_summary]
-            _colors = ["#26A69A" if v >= 0 else "#EF5350" for v in _vals]
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=_names, y=_vals, marker_color=_colors,
-                text=[f"{v:+.2f}%" for v in _vals], textposition="outside",
-                textfont=dict(color=_colors, size=13),
-                hovertemplate="%{x}<br>平均漲跌: %{y:+.2f}%<extra></extra>",
-            ))
-            fig.add_hline(y=0, line=dict(color="rgba(150,150,200,0.3)", width=1))
-            fig.update_layout(height=220, yaxis_title="平均漲跌%",
-                              margin=dict(l=0, r=0, t=5, b=0))
-            st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
-
-            # 漲跌統計摘要
-            _total_up = sum(s["漲"] for s in _sector_summary)
-            _total_down = sum(s["跌"] for s in _sector_summary)
-            _total = sum(s["總數"] for s in _sector_summary)
-            st.caption(f"📊 {_total} 個標的：🟢 {_total_up} 漲 / 🔴 {_total_down} 跌 / ⚪ {_total - _total_up - _total_down} 平")
+    for gtab, (group_name, markets) in zip(group_tabs, market_data.items()):
+        with gtab:
+            st.caption(f"{group_name} — 市場與板塊即時行情")
+            market_tabs = st.tabs(list(markets.keys()))
+            for mtab, (market_name, sectors) in zip(market_tabs, markets.items()):
+                with mtab:
+                    st.caption(f"{market_name} 板塊")
+                    sector_tabs = st.tabs(list(sectors.keys()))
+                    for stab, (sector, items) in zip(sector_tabs, sectors.items()):
+                        with stab:
+                            for _row_start in range(0, len(items), _cols_per_row):
+                                _row_items = items[_row_start:_row_start + _cols_per_row]
+                                cols = st.columns(_cols_per_row)
+                                for col, item in zip(cols, _row_items):
+                                    _chg = item["change"]
+                                    _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
+                                    _delta_color = "normal" if _chg >= 0 else "inverse"
+                                    col.metric(
+                                        f"{_icon} {item['name']}",
+                                        format_price(item["price"]),
+                                        delta=f"{_chg:+.2f}%",
+                                        delta_color=_delta_color,
+                                    )
 
 st.divider()
 
