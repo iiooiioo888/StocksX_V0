@@ -3,13 +3,18 @@ from __future__ import annotations
 """
 統一外部 API 取值入口。
 
-目前整合：
+整合內容：
 - 傳統市場 K 線：yfinance
 - 加密貨幣 K 線：CCXT
 - 預測市場：Polymarket Gamma API
+- 宏觀經濟：FRED、TradingEconomics
+- 股市數據：Alpha Vantage、Polygon.io、FMP
+- 加密貨幣：CoinGecko、CoinMarketCap、Glassnode
+- 券商交易：Alpaca
+- 情緒數據：Fear & Greed Index、CBOE VIX
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -21,6 +26,10 @@ from src.config_secrets import (
     COINMARKETCAP_API_KEY,
     GLASSNODE_API_KEY,
     TRADING_ECONOMICS_API_KEY,
+    FMP_API_KEY,
+    ALPACA_API_KEY,
+    ALPACA_API_SECRET,
+    CBOE_API_KEY,
     require,
 )
 from .yfinance_source import YfinanceOhlcvSource
@@ -295,4 +304,238 @@ def fetch_trading_economics(
     resp = requests.get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
+
+
+# ────────────────────────────── 股市：FMP (Financial Modeling Prep) ──────────────────────────────
+
+FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
+
+
+def fetch_fmp(
+    path: str,
+    *,
+    params: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """
+    FMP 通用 GET 封裝。
+    path 例如：/profile/AAPL, /quote/AAPL, /financial-statements/income-statement/AAPL
+    官方文件：https://financialmodelingprep.com/developer/docs/
+    """
+    api_key = require(FMP_API_KEY, "FMP_API_KEY")
+    if params is None:
+        params = {}
+    params.setdefault("apikey", api_key)
+
+    url = f"{FMP_BASE_URL}{path}"
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_fmp_profile(symbol: str) -> Dict[str, Any]:
+    """取得公司股票概況（公司名稱、產業、描述等）。"""
+    return fetch_fmp(f"/profile/{symbol}")
+
+
+def fetch_fmp_quote(symbol: str) -> Dict[str, Any]:
+    """取得即時股價報價。"""
+    data = fetch_fmp(f"/quote/{symbol}")
+    return data[0] if isinstance(data, list) and data else data
+
+
+def fetch_fmp_financials(symbol: str, statement: str = "income-statement") -> Dict[str, Any]:
+    """
+    取得財報數據。
+    statement: "income-statement", "balance-sheet", "cash-flow-statement"
+    """
+    return fetch_fmp(f"/financial-statements/{statement}/{symbol}")
+
+
+# ────────────────────────────── 券商：Alpaca ──────────────────────────────
+
+ALPACA_BASE_URL = "https://api.alpaca.markets"
+ALPACA_DATA_URL = "https://data.alpaca.markets"
+
+
+def fetch_alpaca(
+    path: str,
+    *,
+    params: Dict[str, Any] | None = None,
+    use_data_url: bool = False,
+) -> Dict[str, Any]:
+    """
+    Alpaca 通用 GET 封裝（需 API Key）。
+    path 例如：/v2/stocks/AAPL/bars, /v2/orders
+    """
+    api_key = require(ALPACA_API_KEY, "ALPACA_API_KEY")
+    api_secret = require(ALPACA_API_SECRET, "ALPACA_API_SECRET")
+    if params is None:
+        params = {}
+
+    base_url = ALPACA_DATA_URL if use_data_url else ALPACA_BASE_URL
+    url = f"{base_url}{path}"
+    headers = {
+        "APCA-API-KEY-ID": api_key,
+        "APCA-API-SECRET-KEY": api_secret,
+    }
+    resp = requests.get(url, params=params, headers=headers, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_alpaca_bars(
+    symbol: str,
+    timeframe: str = "1Day",
+    start: str | None = None,
+    end: str | None = None,
+    limit: int | None = None,
+) -> Dict[str, Any]:
+    """
+    取得美股 K 線數據（透過 Alpaca）。
+    timeframe: "1Min", "5Min", "15Min", "1Hour", "1Day"
+    """
+    params: Dict[str, Any] = {"timeframe": timeframe}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    if limit:
+        params["limit"] = limit
+    return fetch_alpaca(f"/v2/stocks/{symbol}/bars", params=params, use_data_url=True)
+
+
+def fetch_alpaca_account() -> Dict[str, Any]:
+    """取得 Alpaca 帳戶資訊。"""
+    return fetch_alpaca("/v2/account")
+
+
+def fetch_alpaca_positions() -> Dict[str, Any]:
+    """取得當前持倉。"""
+    return fetch_alpaca("/v2/positions")
+
+
+def fetch_alpaca_orders(status: str = "open") -> Dict[str, Any]:
+    """取得訂單列表。"""
+    return fetch_alpaca("/v2/orders", params={"status": status})
+
+
+# ────────────────────────────── 情緒數據：Fear & Greed Index ──────────────────────────────
+
+ALTERNATIVE_ME_BASE_URL = "https://api.alternative.me/fng"
+
+
+def fetch_fear_greed_index(
+    limit: int = 30,
+) -> Dict[str, Any]:
+    """
+    從 Alternative.me 取得加密貨幣恐懼與貪婪指數。
+    無需 API Key，直接存取公開 URL。
+    官方文件：https://alternative.me/crypto/fear-and-greed-index/
+
+    回傳範例：
+    {
+        "metadata": {"error": null},
+        "data": [
+            {"value": "50", "value_classification": "Neutral", "timestamp": "1709020800", ...},
+            ...
+        ]
+    }
+    """
+    url = f"{ALTERNATIVE_ME_BASE_URL}/"
+    params = {"limit": limit, "format": "json"}
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_current_fear_greed() -> Optional[Dict[str, Any]]:
+    """取得當前恐懼與貪婪指數（單一最新值）。"""
+    data = fetch_fear_greed_index(limit=1)
+    if data.get("data"):
+        entry = data["data"][0]
+        return {
+            "value": int(entry.get("value", 0)),
+            "classification": entry.get("value_classification", "Unknown"),
+            "timestamp": entry.get("timestamp"),
+        }
+    return None
+
+
+# ────────────────────────────── 情緒數據：CBOE VIX ──────────────────────────────
+
+CBOE_BASE_URL = "https://markets.cboe.com/us/options/market_statistics"
+
+
+def fetch_cboe_vix() -> Optional[Dict[str, Any]]:
+    """
+    從 CBOE 取得 VIX 波動率指數。
+    注意：CBOE API 無正式公開文件，此處使用公開網頁數據或 Alpha Vantage 替代方案。
+    """
+    # 方案 1：嘗試直接從 CBOE 網頁抓取（可能需要解析 HTML）
+    # 方案 2：使用 Alpha Vantage 的 VIX 數據（更穩定）
+    if ALPHA_VANTAGE_API_KEY:
+        try:
+            data = fetch_alpha_vantage(function="VIX", datatype="json")
+            if "Meta Data" in data and "Time Series (VIX)" in data:
+                ts = data["Time Series (VIX)"]
+                latest_date = list(ts.keys())[0]
+                vix_data = ts[latest_date]
+                return {
+                    "date": latest_date,
+                    "open": float(vix_data.get("1. open", 0)),
+                    "high": float(vix_data.get("2. high", 0)),
+                    "low": float(vix_data.get("3. low", 0)),
+                    "close": float(vix_data.get("4. close", 0)),
+                }
+        except Exception:
+            pass
+    return None
+
+
+def fetch_vix_history(days: int = 30) -> List[Dict[str, Any]]:
+    """
+    取得 VIX 歷史數據（透過 Alpha Vantage）。
+    """
+    if not ALPHA_VANTAGE_API_KEY:
+        return []
+    try:
+        data = fetch_alpha_vantage(function="VIX", datatype="json")
+        if "Time Series (VIX)" not in data:
+            return []
+        ts = data["Time Series (VIX)"]
+        result = []
+        for i, (date, v) in enumerate(ts.items()):
+            if i >= days:
+                break
+            result.append({
+                "date": date,
+                "open": float(v.get("1. open", 0)),
+                "high": float(v.get("2. high", 0)),
+                "low": float(v.get("3. low", 0)),
+                "close": float(v.get("4. close", 0)),
+            })
+        return result
+    except Exception:
+        return []
+
+
+# ────────────────────────────── 便捷整合函式 ──────────────────────────────
+
+def fetch_market_sentiment() -> Dict[str, Any]:
+    """
+    取得綜合市場情緒指標（Fear & Greed + VIX）。
+    """
+    result: Dict[str, Any] = {}
+
+    # 加密貨幣情緒
+    fg = get_current_fear_greed()
+    if fg:
+        result["crypto_fear_greed"] = fg
+
+    # 股市情緒（VIX）
+    vix = fetch_cboe_vix()
+    if vix:
+        result["vix"] = vix
+
+    return result
 

@@ -1,12 +1,14 @@
-# 市場總覽 — 各板塊即時漲跌
+# 市場總覽 — 資產類別 × 交易類型 矩陣
+# 一級：資產 (Asset) | 二級：交易類型 (現貨/期貨/期權/指標) | 三級：板塊/市場
 from __future__ import annotations
 
 import streamlit as st
 from typing import Any
 
-# 更完整的市場層級：GROUP -> MARKET -> SECTOR -> [(name, symbol), ...]
+# 矩陣結構：ASSET -> INSTRUMENT -> SECTOR -> [(name, symbol), ...]
+# 期貨歸屬到對應資產下（股指期貨→傳統、商品期貨→大宗、外匯期貨→外匯），情緒獨立為儀表板
 MARKET_HIERARCHY: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = {
-    "🪙 加密市場": {
+    "🪙 加密資產": {
         "現貨": {
             "₿ 加密主流": [
                 ("BTC", "BTC-USD"), ("ETH", "ETH-USD"), ("SOL", "SOL-USD"),
@@ -24,193 +26,122 @@ MARKET_HIERARCHY: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = {
                 ("BONK", "BONK-USD"), ("FLOKI", "FLOKI-USD"),
             ],
         },
-        "合約/衍生": {
-            "Perpetual": [
+        "期貨/合約": {
+            "永續合約": [
                 ("BTC 永續", "BTCUSDT.P"), ("ETH 永續", "ETHUSDT.P"), ("SOL 永續", "SOLUSDT.P"),
             ],
+        },
+        "期權": {
             "期權": [
                 ("BTC 期權", "BTC-OPTION"), ("ETH 期權", "ETH-OPTION"),
             ],
         },
     },
-    "📈 傳統市場": {
-        "美股": {
-            "📈 美股科技": [
+    "📈 傳統股票/指數": {
+        "現貨": {
+            "美股": [
                 ("AAPL", "AAPL"), ("MSFT", "MSFT"), ("NVDA", "NVDA"),
                 ("TSLA", "TSLA"), ("META", "META"), ("GOOGL", "GOOGL"),
+                ("AMD", "AMD"), ("AVGO", "AVGO"), ("JPM", "JPM"), ("AMZN", "AMZN"),
             ],
-            "🔌 半導體": [
-                ("AMD", "AMD"), ("AVGO", "AVGO"), ("ASML", "ASML"),
-                ("TSM", "TSM"), ("INTC", "INTC"),
+            "美股 · 科技/半導體": [
+                ("ASML", "ASML"), ("TSM", "TSM"), ("INTC", "INTC"),
+                ("CRM", "CRM"), ("ADBE", "ADBE"), ("NOW", "NOW"), ("SNOW", "SNOW"), ("PLTR", "PLTR"),
             ],
-            "🤖 AI / 雲端": [
-                ("CRM", "CRM"), ("ADBE", "ADBE"), ("NOW", "NOW"),
-                ("SNOW", "SNOW"), ("PLTR", "PLTR"),
+            "美股 · 金融/消費/能源": [
+                ("BAC", "BAC"), ("WFC", "WFC"), ("GS", "GS"), ("V", "V"), ("MA", "MA"),
+                ("WMT", "WMT"), ("COST", "COST"), ("XOM", "XOM"), ("CVX", "CVX"),
             ],
-            "💊 美股醫療": [
-                ("UNH", "UNH"), ("JNJ", "JNJ"), ("LLY", "LLY"),
-                ("PFE", "PFE"), ("ABBV", "ABBV"), ("MRK", "MRK"),
-            ],
-            "🏦 金融": [
-                ("JPM", "JPM"), ("BAC", "BAC"), ("WFC", "WFC"),
-                ("GS", "GS"), ("MS", "MS"), ("V", "V"), ("MA", "MA"),
-            ],
-            "🛒 消費": [
-                ("AMZN", "AMZN"), ("WMT", "WMT"), ("COST", "COST"),
-                ("HD", "HD"), ("NKE", "NKE"), ("MCD", "MCD"),
-            ],
-            "⚡ 能源": [
-                ("XOM", "XOM"), ("CVX", "CVX"), ("COP", "COP"), ("SLB", "SLB"),
-            ],
-            "🏭 工業": [
-                ("CAT", "CAT"), ("BA", "BA"), ("UPS", "UPS"), ("HON", "HON"),
-            ],
-        },
-        "港股": {
-            "🇭🇰 港股藍籌": [
+            "港股": [
                 ("騰訊", "0700.HK"), ("阿里巴巴", "9988.HK"), ("港交所", "0388.HK"),
-                ("中國建行", "0939.HK"), ("中國平安", "2318.HK"), ("友邦保險", "1299.HK"),
+                ("美團", "3690.HK"), ("小米", "1810.HK"),
             ],
-            "🏠 地產": [
-                ("領展", "0823.HK"), ("新鴻基地產", "0016.HK"), ("長實集團", "1113.HK"),
+            "A 股": [
+                ("貴州茅台", "600519.SS"), ("寧德時代", "300750.SZ"), ("比亞迪", "002594.SZ"),
             ],
-            "🎮 科技/遊戲": [
-                ("網易", "9999.HK"), ("快手", "1024.HK"), ("美團", "3690.HK"), ("小米", "1810.HK"),
-            ],
-        },
-        "A 股": {
-            "🇨🇳 滬深藍籌": [
-                ("貴州茅台", "600519.SS"), ("招商銀行", "600036.SS"),
-                ("中國平安", "601318.SS"), ("寧德時代", "300750.SZ"), ("格力電器", "000651.SZ"),
-            ],
-            "🔋 新能源": [
-                ("比亞迪", "002594.SZ"), ("隆基綠能", "601012.SS"), ("陽光電源", "300274.SZ"),
-            ],
-        },
-        "台股": {
-            "🇹🇼 台灣": [
+            "台股": [
                 ("台積電", "2330.TW"), ("鴻海", "2317.TW"), ("聯發科", "2454.TW"),
                 ("元大 50", "0050.TW"), ("高股息", "00878.TW"),
             ],
-            "📦 傳產/金融": [
-                ("富邦金", "2881.TW"), ("國泰金", "2882.TW"),
-                ("中信金", "2891.TW"), ("統一", "1216.TW"),
+            "ETF 大盤/科技": [
+                ("S&P500", "SPY"), ("Nasdaq", "QQQ"), ("道瓊", "DIA"), ("全市場", "VTI"),
+                ("半導體", "SOXX"), ("科技", "XLK"), ("創新", "ARKK"),
             ],
-        },
-        "ETF": {
-            "🏦 美股 ETF 大盤": [
-                ("S&P500", "SPY"), ("Nasdaq", "QQQ"), ("小型股", "IWM"),
-                ("道瓊", "DIA"), ("全市場", "VTI"),
+            "ETF 策略/區域": [
+                ("紅利", "SCHD"), ("成長", "VUG"), ("價值", "VTV"),
+                ("中國", "MCHI"), ("台灣", "EWT"), ("日本", "EWJ"), ("歐洲", "VGK"),
             ],
-            "🤖 AI / 科技 ETF": [
-                ("半導體", "SOXX"), ("半導體 (台股權重)", "SMH"),
-                ("科技", "XLK"), ("創新", "ARKK"), ("次世代網路", "ARKW"),
-            ],
-            "💰 策略/因子": [
-                ("紅利", "SCHD"), ("低波動", "USMV"),
-                ("成長", "VUG"), ("價值", "VTV"), ("動量", "MTUM"),
-            ],
-            "🌏 國家/區域": [
-                ("中國", "MCHI"), ("台灣", "EWT"), ("日本", "EWJ"),
-                ("歐洲", "VGK"), ("新興市場", "VWO"),
-            ],
-        },
-        "商品": {
-            "🥇 貴金屬": [
-                ("黃金", "GLD"), ("白銀", "SLV"), ("鉑金", "PPLT"), ("鈀金", "PALL"),
-            ],
-            "🛢️ 能源商品": [
-                ("原油", "USO"), ("天然氣", "UNG"), ("布蘭特原油", "BNO"),
-            ],
-            "⚙️ 原物料 / 農產品": [
-                ("銅", "CPER"), ("綜合商品", "DBC"), ("農產品", "DBA"),
-                ("玉米", "CORN"), ("小麥", "WEAT"),
-            ],
-        },
-        "債券": {
-            "📜 債券": [
+            "債券": [
                 ("美長債", "TLT"), ("中期債", "IEF"), ("短期債", "SHY"),
-                ("高收債", "HYG"), ("投資級", "LQD"),
-                ("美國債券綜合", "BND"), ("美國債券綜合 (AGG)", "AGG"),
-                ("新興市場債", "EMB"),
+                ("高收債", "HYG"), ("投資級", "LQD"), ("綜合", "BND"),
             ],
-        },
-        "🏢 房地產 (REITs)": {
-            "🇺🇸 美股 REITs": [
-                ("Vanguard 房地產", "VNQ"), ("Realty Income", "O"),
-                ("Prologis", "PLD"), ("American Tower", "AMT"),
+            "REITs": [
+                ("Vanguard 房地產", "VNQ"), ("Realty Income", "O"), ("Prologis", "PLD"),
             ],
-            "🇭🇰 港股 REITs": [
-                ("領展", "0823.HK"), ("置富", "0778.HK"), ("陽光", "0435.HK"),
-            ],
-        },
-        "全球指數": {
-            "🌍 全球指數": [
+            "全球指數": [
                 ("S&P500", "^GSPC"), ("Nasdaq", "^IXIC"), ("道瓊", "^DJI"),
                 ("日經", "^N225"), ("恆生", "^HSI"), ("加權", "^TWII"),
-                ("歐洲 Stoxx50", "^STOXX50E"), ("德國 DAX", "^GDAXI"),
-                ("英國 FTSE100", "^FTSE"), ("上證", "000001.SS"), ("深證", "399001.SZ"),
+                ("德國 DAX", "^GDAXI"), ("英國 FTSE", "^FTSE"),
             ],
         },
-    },
-    "💱 外匯市場": {
-        "主要貨幣": {
-            "G10 主流": [
-                ("歐元/美元", "EURUSD=X"), ("英鎊/美元", "GBPUSD=X"),
-                ("美元/日圓", "USDJPY=X"), ("美元/瑞郎", "USDCHF=X"),
-                ("澳元/美元", "AUDUSD=X"), ("美元/加元", "USDCAD=X"),
-            ],
-        },
-        "交叉貨幣": {
-            "主要交叉": [
-                ("歐元/日圓", "EURJPY=X"), ("英鎊/日圓", "GBPJPY=X"),
-                ("澳元/日圓", "AUDJPY=X"), ("歐元/英鎊", "EURGBP=X"),
-                ("紐元/美元", "NZDUSD=X"),
-            ],
-        },
-        "新興/離岸": {
-            "新興貨幣": [
-                ("美元/離岸人民幣", "USDCNH=X"), ("美元/在岸人民幣", "USDCNY=X"),
-                ("美元/港幣", "USDHKD=X"), ("美元/台幣", "USDTWD=X"),
-                ("美元/韓元", "USDKRW=X"), ("美元/新加坡幣", "USDSGD=X"),
-            ],
-        },
-    },
-    "📑 期貨市場": {
-        "股指期貨": {
-            "股指": [
+        "期貨": {
+            "股指期貨": [
                 ("標普 500", "ES=F"), ("納斯達克", "NQ=F"), ("道瓊", "YM=F"),
                 ("恆生", "HSI=F"), ("台指", "TW=F"), ("日經", "NIY=F"),
             ],
-        },
-        "商品期貨": {
-            "商品": [
-                ("黃金", "GC=F"), ("原油", "CL=F"), ("天然氣", "NG=F"),
-                ("銅", "HG=F"), ("玉米", "ZC=F"), ("大豆", "ZS=F"),
-            ],
-        },
-        "債券期貨": {
-            "美債": [
+            "債券期貨": [
                 ("10 年期美債", "ZN=F"), ("30 年期美債", "ZB=F"), ("2 年期美債", "ZT=F"),
             ],
         },
-        "外匯期貨": {
-            "主要外匯期貨": [
+    },
+    "💱 外匯": {
+        "現貨": {
+            "G10 主流": [
+                ("歐元/美元", "EURUSD=X"), ("英鎊/美元", "GBPUSD=X"),
+                ("美元/日圓", "USDJPY=X"), ("澳元/美元", "AUDUSD=X"), ("美元/加元", "USDCAD=X"),
+            ],
+            "交叉/新興": [
+                ("歐元/日圓", "EURJPY=X"), ("美元/離岸人民幣", "USDCNH=X"),
+                ("美元/港幣", "USDHKD=X"), ("美元/台幣", "USDTWD=X"),
+            ],
+        },
+        "期貨": {
+            "外匯期貨": [
                 ("歐元", "6E=F"), ("日圓", "6J=F"), ("英鎊", "6B=F"), ("澳元", "6A=F"),
             ],
         },
     },
-    "📊 經濟數據": {
-        "美國": {
-            "美國經濟": [
-                ("非農就業", "NFP"), ("CPI 通脹", "CPI"), ("核心 PCE", "PCE"),
-                ("聯儲利率", "FEDRATE"), ("GDP", "GDP"),
+    "🥇 大宗商品": {
+        "現貨": {
+            "貴金屬 ETF": [
+                ("黃金", "GLD"), ("白銀", "SLV"), ("鉑金", "PPLT"), ("鈀金", "PALL"),
+            ],
+            "能源/原物料 ETF": [
+                ("原油", "USO"), ("天然氣", "UNG"), ("布蘭特原油", "BNO"),
+                ("銅", "CPER"), ("綜合商品", "DBC"), ("農產品", "DBA"),
             ],
         },
-        "中國": {
-            "中國經濟": [
-                ("PMI 製造業", "CN_PMI"), ("CPI", "CN_CPI"),
-                ("PPI", "CN_PPI"), ("社會融資", "CN_TS"),
+        "期貨": {
+            "商品期貨": [
+                ("黃金", "GC=F"), ("原油", "CL=F"), ("天然氣", "NG=F"),
+                ("銅", "HG=F"), ("玉米", "ZC=F"), ("大豆", "ZS=F"),
+            ],
+        },
+    },
+    "📊 情緒儀表板": {
+        "指標": {
+            "🌡️ 加密情緒": [
+                ("恐懼貪婪", "FG_INDEX"),
+            ],
+            "😨 股市情緒": [
+                ("VIX", "VIX_INDEX"),
+            ],
+        },
+        "預測市場": {
+            "🔮 Polymarket": [
+                ("BTC 100K", "POLY_BTC_100K"),
+                ("美大選", "POLY_US_ELECTION"),
+                ("聯儲決策", "POLY_FED_RATE"),
             ],
         },
     },
@@ -263,16 +194,14 @@ def _fetch_single(symbol: str) -> dict | None:
 @st.cache_data(ttl=120, show_spinner=False)
 def fetch_market_data() -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
     """
-    拉取各板塊即時行情（2 分鐘快取），結構：
+    拉取各板塊即時行情（2 分鐘快取）。矩陣結構：
+    一級 資產 → 二級 交易類型(現貨/期貨/期權/指標) → 三級 板塊 → [行情]
     {
-      "🪙 加密市場": {
-        "現貨": { "₿ 加密主流": [...], ... },
-      },
-      "📈 傳統市場": {
-        "美股": { "📈 美股科技": [...], ... },
-        "ETF": { ... },
-        ...
-      },
+      "🪙 加密資產": { "現貨": {...}, "期貨/合約": {...}, "期權": {...} },
+      "📈 傳統股票/指數": { "現貨": {...}, "期貨": {...} },
+      "💱 外匯": { "現貨": {...}, "期貨": {...} },
+      "🥇 大宗商品": { "現貨": {...}, "期貨": {...} },
+      "📊 情緒儀表板": { "指標": {...}, "預測市場": {...} },
     }
     """
     result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
@@ -290,6 +219,69 @@ def fetch_market_data() -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]
                     ):
                         continue
 
+                    # 處理預測市場（Polymarket）
+                    if sym.startswith("POLY_"):
+                        try:
+                            from src.data.sources.api_hub import fetch_polymarket_markets
+                            query_map = {
+                                "POLY_BTC_100K": "Bitcoin",
+                                "POLY_US_ELECTION": "Election",
+                                "POLY_FED_RATE": "Fed",
+                            }
+                            query = query_map.get(sym, "")
+                            markets_list = fetch_polymarket_markets(query=query, limit=5)
+                            if markets_list:
+                                for m in markets_list:
+                                    vol = m.get("volume", 0) or 0
+                                    yes_bid = m.get("yes_bid", 0) or 0
+                                    sector_data.append({
+                                        "name": f"{name} ({m.get('title', '')[:20]})",
+                                        "symbol": sym,
+                                        "price": yes_bid,
+                                        "change": 0,
+                                        "volume": vol,
+                                        "status": m.get("status", "active"),
+                                    })
+                        except Exception:
+                            pass
+                        continue
+
+                    # 處理恐懼貪婪指數
+                    if sym == "FG_INDEX":
+                        try:
+                            from src.data.sources.api_hub import get_current_fear_greed
+                            fg = get_current_fear_greed()
+                            if fg:
+                                sector_data.append({
+                                    "name": name,
+                                    "symbol": sym,
+                                    "price": fg["value"],
+                                    "change": 0,
+                                    "classification": fg["classification"],
+                                })
+                        except Exception:
+                            pass
+                        continue
+
+                    # 處理 VIX 指數
+                    if sym == "VIX_INDEX":
+                        try:
+                            from src.data.sources.api_hub import fetch_cboe_vix
+                            vix = fetch_cboe_vix()
+                            if vix:
+                                sector_data.append({
+                                    "name": name,
+                                    "symbol": sym,
+                                    "price": float(vix.get("close", 0)),
+                                    "change": 0,
+                                    "open": float(vix.get("open", 0)),
+                                    "high": float(vix.get("high", 0)),
+                                    "low": float(vix.get("low", 0)),
+                                })
+                        except Exception:
+                            pass
+                        continue
+
                     data = _fetch_single(sym)
                     if data:
                         sector_data.append({"name": name, "symbol": sym, **data})
@@ -300,3 +292,50 @@ def fetch_market_data() -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]
         if group_data:
             result[group_name] = group_data
     return result
+
+
+# ─── 參考 Yahoo Finance 首頁：期貨報價與熱門標的 ───
+YAHOO_REFERENCE_FUTURES: list[tuple[str, str]] = [
+    ("標普500期貨", "ES=F"),
+    ("納斯達克期貨", "NQ=F"),
+    ("道瓊期貨", "YM=F"),
+    ("原油", "CL=F"),
+    ("黃金", "GC=F"),
+    ("白銀", "SI=F"),
+    ("VIX", "^VIX"),
+]
+YAHOO_REFERENCE_TRENDING: list[tuple[str, str]] = [
+    ("NVIDIA", "NVDA"),
+    ("蘋果", "AAPL"),
+    ("微軟", "MSFT"),
+    ("Google", "GOOGL"),
+    ("亞馬遜", "AMZN"),
+    ("Meta", "META"),
+    ("特斯拉", "TSLA"),
+    ("Netflix", "NFLX"),
+    ("Palantir", "PLTR"),
+    ("比特幣", "BTC-USD"),
+    ("以太坊", "ETH-USD"),
+]
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_yahoo_reference_futures() -> list[dict[str, Any]]:
+    """Yahoo Finance 參考：期貨報價（首頁風格）。"""
+    out: list[dict[str, Any]] = []
+    for name, sym in YAHOO_REFERENCE_FUTURES:
+        data = _fetch_single(sym)
+        if data:
+            out.append({"name": name, "symbol": sym, **data})
+    return out
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_yahoo_reference_trending() -> list[dict[str, Any]]:
+    """Yahoo Finance 參考：熱門標的（首頁風格）。"""
+    out: list[dict[str, Any]] = []
+    for name, sym in YAHOO_REFERENCE_TRENDING:
+        data = _fetch_single(sym)
+        if data:
+            out.append({"name": name, "symbol": sym, **data})
+    return out

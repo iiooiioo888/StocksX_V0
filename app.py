@@ -17,22 +17,66 @@ user = st.session_state.get("user")
 # ─── 市場行情（登入/未登入都顯示）───
 st.markdown("# 📊 StocksX")
 
-from src.data.market_overview import fetch_market_data
+from src.data.market_overview import (
+    fetch_market_data,
+    fetch_yahoo_reference_futures,
+    fetch_yahoo_reference_trending,
+)
 
 with st.spinner("載入市場行情…"):
     market_data = fetch_market_data()
 
+# ─── 參考 Yahoo Finance：熱門標的與期貨報價 ───
+with st.spinner("載入 Yahoo Finance 參考行情…"):
+    yahoo_futures = fetch_yahoo_reference_futures()
+    yahoo_trending = fetch_yahoo_reference_trending()
+
+if yahoo_futures or yahoo_trending:
+    st.markdown("### 📈 參考 [Yahoo Finance](https://finance.yahoo.com/)：熱門標的與期貨")
+    col_futures, col_trending = st.columns(2)
+    with col_futures:
+        st.caption("期貨報價")
+        _cols_per_row = 2
+        for i in range(0, len(yahoo_futures), _cols_per_row):
+            row = yahoo_futures[i : i + _cols_per_row]
+            cols = st.columns(_cols_per_row)
+            for c, item in zip(cols, row):
+                _chg = item["change"]
+                _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
+                c.metric(
+                    f"{_icon} {item['name']}",
+                    format_price(item["price"]),
+                    delta=f"{_chg:+.2f}%",
+                    delta_color="normal" if _chg >= 0 else "inverse",
+                )
+    with col_trending:
+        st.caption("熱門標的")
+        for i in range(0, len(yahoo_trending), _cols_per_row):
+            row = yahoo_trending[i : i + _cols_per_row]
+            cols = st.columns(_cols_per_row)
+            for c, item in zip(cols, row):
+                _chg = item["change"]
+                _icon = "🟢" if _chg > 0 else "🔴" if _chg < 0 else "⚪"
+                c.metric(
+                    f"{_icon} {item['name']}",
+                    format_price(item["price"]),
+                    delta=f"{_chg:+.2f}%",
+                    delta_color="normal" if _chg >= 0 else "inverse",
+                )
+    st.divider()
+
 if market_data:
-    # 先以「市場類型」分頁（加密 / 傳統），再以「市場」與「板塊」細分
+    # 一級：資產類別 | 二級：交易類型(現貨/期貨/期權) | 三級：板塊
+    st.caption("🌍 一級：資產類別　｜　二級：交易類型　｜　三級：板塊")
     group_tabs = st.tabs(list(market_data.keys()))
     _cols_per_row = 4
-    for gtab, (group_name, markets) in zip(group_tabs, market_data.items()):
+    for gtab, (group_name, instruments) in zip(group_tabs, market_data.items()):
         with gtab:
-            st.caption(f"{group_name} — 市場與板塊即時行情")
-            market_tabs = st.tabs(list(markets.keys()))
-            for mtab, (market_name, sectors) in zip(market_tabs, markets.items()):
-                with mtab:
-                    st.caption(f"{market_name} 板塊")
+            st.caption(f"{group_name} — 交易類型與板塊即時行情")
+            instrument_tabs = st.tabs(list(instruments.keys()))
+            for itab, (instrument_name, sectors) in zip(instrument_tabs, instruments.items()):
+                with itab:
+                    st.caption(f"交易類型：{instrument_name}")
                     sector_tabs = st.tabs(list(sectors.keys()))
                     for stab, (sector, items) in zip(sector_tabs, sectors.items()):
                         with stab:
@@ -114,4 +158,7 @@ else:
             icon = "🟢" if ret and ret > 0 else "🔴" if ret and ret < 0 else "⚪"
             st.markdown(f"{icon} **{h['symbol']}** × {h['strategy']} — {ret}% | {h['timeframe']}")
 
-st.caption("⚠️ 免責聲明：本平台僅供學習與研究，不構成投資建議。數據來源：Yahoo Finance。")
+st.caption(
+    "⚠️ 免責聲明：本平台僅供學習與研究，不構成投資建議。"
+    " 數據與參考來源：[Yahoo Finance](https://finance.yahoo.com/)。"
+)

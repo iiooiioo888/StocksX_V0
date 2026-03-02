@@ -12,9 +12,9 @@ from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_n
 from src.ui_backtest import ALL_STRATEGIES, run_all_strategies, render_summary_line, \
     render_kline_chart, render_equity_curves, render_performance_table, render_trade_details
 
-st.set_page_config(page_title="StocksX — 加密回測", page_icon="₿", layout="wide")
+st.set_page_config(page_title="StocksX — 加密回測", page_icon="💰", layout="wide")
 apply_theme()
-breadcrumb("加密貨幣回測", "₿")
+breadcrumb("加密貨幣回測", "💰")
 
 _user = check_session()
 _db = UserDB()

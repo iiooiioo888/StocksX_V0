@@ -47,6 +47,9 @@ POLYGON_API_KEY: Optional[str] = _get("POLYGON_API_KEY")
 ALPACA_API_KEY: Optional[str] = _get("ALPACA_API_KEY")
 ALPACA_API_SECRET: Optional[str] = _get("ALPACA_API_SECRET")
 
+# ─── 情緒與另類數據 ───
+CBOE_API_KEY: Optional[str] = _get("CBOE_API_KEY")  # VIX 波動率指數
+
 
 def require(key_value: Optional[str], name: str) -> str:
     """
