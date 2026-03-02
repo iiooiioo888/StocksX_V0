@@ -2,11 +2,20 @@
 # 一級：資產 (Asset) | 二級：交易類型 (現貨/期貨/期權/指標) | 三級：板塊/市場
 from __future__ import annotations
 
+import logging
+import warnings
 import streamlit as st
 from typing import Any
 
+# 過濾 Yahoo Finance 警告
+logging.getLogger('yfinance').setLevel(logging.ERROR)
+warnings.filterwarnings('ignore', category=FutureWarning, module='yfinance')
+warnings.filterwarnings('ignore', message='.*possibly delisted.*')
+warnings.filterwarnings('ignore', message='.*No data found.*')
+
 # 矩陣結構：ASSET -> INSTRUMENT -> SECTOR -> [(name, symbol), ...]
 # 期貨歸屬到對應資產下（股指期貨→傳統、商品期貨→大宗、外匯期貨→外匯），情緒獨立為儀表板
+# 註：Yahoo Finance 不支援加密貨幣合約和期權，這些僅供參考
 MARKET_HIERARCHY: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = {
     "🪙 加密資產": {
         "現貨": {
@@ -15,25 +24,27 @@ MARKET_HIERARCHY: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = {
                 ("BNB", "BNB-USD"), ("XRP", "XRP-USD"), ("ADA", "ADA-USD"),
             ],
             "🌐 DeFi/L2": [
-                ("UNI", "UNI-USD"), ("LINK", "LINK-USD"), ("AAVE", "AAVE-USD"),
-                ("ARB", "ARB11841-USD"), ("OP", "OP-USD"), ("SUI", "SUI20947-USD"),
+                ("LINK", "LINK-USD"), ("AAVE", "AAVE-USD"),
+                ("OP", "OP-USD"), ("SUI", "SUI20947-USD"),
             ],
             "🐶 Meme 老牌": [
                 ("DOGE", "DOGE-USD"), ("SHIB", "SHIB-USD"),
             ],
             "🧪 Meme 新興": [
-                ("PEPE", "PEPE-USD"), ("WIF", "WIF-USD"),
+                ("WIF", "WIF-USD"),
                 ("BONK", "BONK-USD"), ("FLOKI", "FLOKI-USD"),
             ],
         },
         "期貨/合約": {
-            "永續合約": [
-                ("BTC 永續", "BTCUSDT.P"), ("ETH 永續", "ETHUSDT.P"), ("SOL 永續", "SOLUSDT.P"),
+            # Yahoo Finance 不支援加密合約，顯示提示
+            "提示": [
+                ("說明", "YAHOO_HINT"),
             ],
         },
         "期權": {
-            "期權": [
-                ("BTC 期權", "BTC-OPTION"), ("ETH 期權", "ETH-OPTION"),
+            # Yahoo Finance 不支援加密期權，顯示提示
+            "提示": [
+                ("說明", "YAHOO_HINT"),
             ],
         },
     },
@@ -150,7 +161,19 @@ MARKET_HIERARCHY: dict[str, dict[str, dict[str, list[tuple[str, str]]]]] = {
 
 @st.cache_data(ttl=120, show_spinner=False)
 def _fetch_single(symbol: str) -> dict | None:
-    """逐個拉取單一標的行情（優先使用 fast_info，失敗再回退到 history）"""
+    """
+    逐個拉取單一標的行情（優先使用 fast_info，失敗再回退到 history）
+    自動過濾 Yahoo Finance 不支援的代碼
+    """
+    # 過濾 Yahoo Finance 不支援的代碼
+    if symbol in ["YAHOO_HINT", "FG_INDEX", "VIX_INDEX", "POLY_BTC_100K", 
+                  "POLY_US_ELECTION", "POLY_FED_RATE"]:
+        return None
+    
+    # 過濾加密合約和期權代碼（Yahoo 不支援）
+    if symbol.endswith(".P") or symbol.endswith("-OPTION"):
+        return None
+    
     try:
         import yfinance as yf
 
@@ -212,38 +235,22 @@ def fetch_market_data() -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]
             for sector, tickers in sectors.items():
                 sector_data: list[dict[str, Any]] = []
                 for name, sym in tickers:
+                    # 跳過提示類代碼
+                    if sym == "YAHOO_HINT":
+                        sector_data.append({
+                            "name": "💡 Yahoo Finance 不支援此類數據",
+                            "symbol": sym,
+                            "price": 0,
+                            "change": 0,
+                            "note": "加密合約/期權請使用交易所 API",
+                        })
+                        continue
+                    
                     # 經濟數據等非交易型指標無法透過 yfinance 抓取，直接略過
                     if any(
                         x in sym
                         for x in ["NFP", "CPI", "PCE", "GDP", "PMI", "HALVING", "RATE"]
                     ):
-                        continue
-
-                    # 處理預測市場（Polymarket）
-                    if sym.startswith("POLY_"):
-                        try:
-                            from src.data.sources.api_hub import fetch_polymarket_markets
-                            query_map = {
-                                "POLY_BTC_100K": "Bitcoin",
-                                "POLY_US_ELECTION": "Election",
-                                "POLY_FED_RATE": "Fed",
-                            }
-                            query = query_map.get(sym, "")
-                            markets_list = fetch_polymarket_markets(query=query, limit=5)
-                            if markets_list:
-                                for m in markets_list:
-                                    vol = m.get("volume", 0) or 0
-                                    yes_bid = m.get("yes_bid", 0) or 0
-                                    sector_data.append({
-                                        "name": f"{name} ({m.get('title', '')[:20]})",
-                                        "symbol": sym,
-                                        "price": yes_bid,
-                                        "change": 0,
-                                        "volume": vol,
-                                        "status": m.get("status", "active"),
-                                    })
-                        except Exception:
-                            pass
                         continue
 
                     # 處理恐懼貪婪指數

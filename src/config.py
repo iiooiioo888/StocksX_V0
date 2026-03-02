@@ -83,6 +83,10 @@ section[data-testid="stSidebar"] .stSelectbox label, section[data-testid="stSide
     background: linear-gradient(135deg, #1e1e3a, #252545);
     border: 1px solid #3a3a5c; border-radius: 12px; padding: 14px 18px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-2px); box-shadow: 0 4px 12px rgba(110,168,254,0.2);
 }
 [data-testid="stMetric"] [data-testid="stMetricValue"] {font-size: 1.3rem; color: #f0f0ff !important;}
 [data-testid="stMetric"] [data-testid="stMetricLabel"] {color: #9090b0 !important;}
@@ -138,4 +142,13 @@ div[data-testid="stExpander"] summary {color: #d0d0e8 !important;}
 
 /* info/warning/error */
 div[data-testid="stAlert"] {border-radius: 8px;}
+
+/* 頁面鏈接卡片 */
+[data-testid="stPageLink"] {
+    background: rgba(30,30,55,0.6); border: 1px solid #3a3a5c;
+    border-radius: 10px; padding: 12px; transition: all 0.2s;
+}
+[data-testid="stPageLink"]:hover {
+    background: rgba(110,168,254,0.15); border-color: #6ea8fe;
+}
 """
