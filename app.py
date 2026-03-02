@@ -1,5 +1,5 @@
 # StocksX — 通用回測平台
-# 全新改版：Hero Banner + 卡片式佈局 + 專業儀表板
+# 現代化設計 v3.0
 
 import streamlit as st
 from src.auth import UserDB
@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ════════════════════════════════════════════════════════════
-# CSS 樣式定義
+# CSS 樣式定義 - 現代化設計
 # ════════════════════════════════════════════════════════════
 CUSTOM_CSS = """
 /* ─── 全局設定 ─── */
@@ -22,14 +22,53 @@ CUSTOM_CSS = """
     background: linear-gradient(160deg, #0a0a12 0%, #12121f 40%, #0f1724 100%);
 }
 
+/* ─── 導航欄 ─── */
+.nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 25px;
+    background: rgba(20,20,35,0.7);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(110,168,254,0.1);
+    border-radius: 16px;
+    margin: 15px 0 25px 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.nav-logo {
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #6ea8fe, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.nav-search input {
+    width: 400px;
+    background: rgba(30,30,50,0.6) !important;
+    border: 1px solid rgba(110,168,254,0.3) !important;
+    border-radius: 12px !important;
+    padding: 10px 15px !important;
+    color: #e0e0e8 !important;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+}
+.nav-search input:focus {
+    border-color: rgba(110,168,254,0.6) !important;
+    box-shadow: 0 0 20px rgba(110,168,254,0.2) !important;
+}
+
 /* ─── Hero Banner ─── */
 .hero-banner {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    border-radius: 12px;
-    padding: 25px 35px;
-    margin: 15px 0 20px 0;
-    border: 1px solid #2a2a4a;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    background: linear-gradient(135deg, rgba(26,26,46,0.9) 0%, rgba(22,33,62,0.9) 50%, rgba(15,52,96,0.9) 100%);
+    border-radius: 20px;
+    padding: 35px 45px;
+    margin: 20px 0 30px 0;
+    border: 1px solid rgba(110,168,254,0.15);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
     position: relative;
     overflow: hidden;
 }
@@ -40,7 +79,7 @@ CUSTOM_CSS = """
     right: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle, rgba(110,168,254,0.1) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(110,168,254,0.08) 0%, transparent 70%);
     animation: pulse 8s ease-in-out infinite;
 }
 @keyframes pulse {
@@ -48,163 +87,148 @@ CUSTOM_CSS = """
     50% { transform: scale(1.1); opacity: 0.8; }
 }
 .hero-title {
-    font-size: 2.2rem;
+    font-size: 2.5rem;
     font-weight: 800;
-    background: linear-gradient(135deg, #6ea8fe, #a78bfa, #6ea8fe);
+    background: linear-gradient(135deg, #6ea8fe 0%, #a78bfa 50%, #6ea8fe 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
     position: relative;
     z-index: 1;
+    letter-spacing: -0.5px;
 }
 .hero-subtitle {
-    font-size: 0.95rem;
+    font-size: 1rem;
     color: #94a3b8;
-    margin-bottom: 18px;
+    margin-bottom: 25px;
     position: relative;
     z-index: 1;
+    line-height: 1.6;
 }
 .hero-stats {
     display: flex;
-    gap: 20px;
+    gap: 25px;
     flex-wrap: wrap;
     position: relative;
     z-index: 1;
 }
 .hero-stat-item {
-    background: rgba(255,255,255,0.05);
+    background: linear-gradient(135deg, rgba(110,168,254,0.1), rgba(167,139,250,0.05));
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px;
-    padding: 12px 20px;
-    min-width: 100px;
+    border: 1px solid rgba(110,168,254,0.2);
+    border-radius: 14px;
+    padding: 18px 28px;
+    min-width: 120px;
+    transition: all 0.3s;
+}
+.hero-stat-item:hover {
+    transform: translateY(-3px);
+    border-color: rgba(110,168,254,0.4);
+    box-shadow: 0 8px 20px rgba(110,168,254,0.15);
 }
 .hero-stat-value {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #6ea8fe;
+    font-size: 1.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #6ea8fe, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 .hero-stat-label {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: #64748b;
-    margin-top: 4px;
-}
-
-/* ─── 導航欄 ─── */
-.nav-container {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    background: rgba(26,26,46,0.8);
-    backdrop-filter: blur(20px);
-    border: 1px solid #2a2a4a;
-    border-radius: 12px;
-    margin-bottom: 20px;
-}
-.nav-logo {
-    font-size: 1.3rem;
-    font-weight: bold;
-    color: #6ea8fe;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.nav-search input {
-    width: 320px;
-    background: rgba(30,30,55,0.9) !important;
-    border: 1px solid #3a3a5c !important;
-    border-radius: 8px;
-    padding: 8px 12px !important;
-    color: #e0e0e8 !important;
-    font-size: 0.9rem;
-}
-.nav-user {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    margin-top: 6px;
+    font-weight: 500;
 }
 
 /* ─── 功能卡片 ─── */
 .feature-card {
-    background: linear-gradient(135deg, #1e1e3a, #252545);
-    border: 1px solid #3a3a5c;
-    border-radius: 12px;
-    padding: 18px;
+    background: linear-gradient(135deg, rgba(30,30,58,0.8), rgba(37,37,69,0.8));
+    border: 1px solid rgba(58,58,92,0.5);
+    border-radius: 16px;
+    padding: 22px;
     transition: all 0.3s ease;
     height: 100%;
+    position: relative;
+    overflow: hidden;
 }
-.stColumn > div:has(.feature-card) {
-    height: 100%;
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, rgba(110,168,254,0.5), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
 }
 .feature-card:hover {
-    transform: translateY(-3px);
-    border-color: #6ea8fe;
-    box-shadow: 0 6px 20px rgba(110,168,254,0.2);
+    transform: translateY(-5px);
+    border-color: rgba(110,168,254,0.4);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.4);
+}
+.feature-card:hover::before {
+    opacity: 1;
 }
 .feature-icon {
-    font-size: 2rem;
-    margin-bottom: 10px;
+    font-size: 2.2rem;
+    margin-bottom: 14px;
+    display: inline-block;
+    transition: transform 0.3s;
+}
+.feature-card:hover .feature-icon {
+    transform: scale(1.1) rotate(5deg);
 }
 .feature-title {
-    font-size: 1.05rem;
-    font-weight: 600;
+    font-size: 1.15rem;
+    font-weight: 700;
     color: #f0f0ff;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 .feature-desc {
     font-size: 0.85rem;
     color: #94a3b8;
-    line-height: 1.5;
+    line-height: 1.6;
+    margin-bottom: 12px;
 }
 .feature-tags {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    margin-top: 12px;
 }
 .feature-tag {
-    background: rgba(110,168,254,0.15);
+    background: linear-gradient(135deg, rgba(110,168,254,0.15), rgba(167,139,250,0.1));
     color: #6ea8fe;
-    padding: 3px 8px;
-    border-radius: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
     font-size: 0.7rem;
-    font-weight: 500;
+    font-weight: 600;
+    border: 1px solid rgba(110,168,254,0.1);
 }
 
 /* ─── 市場行情區塊 ─── */
 .market-section {
-    background: rgba(26,26,46,0.6);
-    border: 1px solid #2a2a4a;
-    border-radius: 12px;
-    padding: 20px;
-    margin: 20px 0;
-}
-.market-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 15px;
-}
-.market-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #f0f0ff;
+    background: rgba(26,26,46,0.5);
+    border: 1px solid rgba(58,58,92,0.3);
+    border-radius: 16px;
+    padding: 25px;
+    margin: 30px 0;
 }
 
 /* ─── 情緒儀表板 ─── */
 .sentiment-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 15px;
-    margin: 20px 0;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin: 25px 0;
 }
 .sentiment-card {
-    background: linear-gradient(135deg, #2a1a3a, #352545);
-    border: 1px solid #5a3a7c;
-    border-radius: 12px;
-    padding: 20px;
+    background: linear-gradient(135deg, rgba(42,26,58,0.8), rgba(53,37,69,0.8));
+    border: 1px solid rgba(90,58,124,0.4);
+    border-radius: 16px;
+    padding: 25px;
     text-align: center;
     position: relative;
     overflow: hidden;
@@ -215,91 +239,142 @@ CUSTOM_CSS = """
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #6ea8fe, #a78bfa);
+    height: 4px;
+    background: linear-gradient(90deg, #6ea8fe, #a78bfa, #6ea8fe);
 }
 .sentiment-value {
-    font-size: 2.5rem;
+    font-size: 3rem;
     font-weight: 800;
     line-height: 1;
-    margin: 10px 0;
+    margin: 15px 0;
+    text-shadow: 0 0 30px rgba(110,168,254,0.3);
 }
 .sentiment-label {
     font-size: 0.85rem;
     color: #94a3b8;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
+    font-weight: 600;
 }
 .sentiment-gauge {
     width: 100%;
-    height: 6px;
-    background: rgba(255,255,255,0.1);
-    border-radius: 3px;
-    margin-top: 15px;
+    height: 8px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    margin-top: 20px;
     overflow: hidden;
 }
 .sentiment-gauge-fill {
     height: 100%;
-    border-radius: 3px;
+    border-radius: 4px;
     transition: width 0.5s ease;
-}
-
-/* ─── 快速訪問按鈕 ─── */
-.quick-action-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    background: linear-gradient(135deg, #1e1e3a, #252545);
-    border: 1px solid #3a3a5c;
-    border-radius: 12px;
-    text-decoration: none;
-    transition: all 0.3s ease;
-    min-height: 100px;
-}
-.quick-action-btn:hover {
-    border-color: #6ea8fe;
-    background: linear-gradient(135deg, #252545, #2a2a50);
-    transform: translateY(-2px);
-}
-.quick-action-icon {
-    font-size: 1.8rem;
-    margin-bottom: 8px;
-}
-.quick-action-label {
-    color: #e0e0e8;
-    font-weight: 500;
 }
 
 /* ─── 績效儀表板 ─── */
 [data-testid="stMetric"] {
-    animation: fadeInUp 0.5s ease forwards;
-    background: linear-gradient(135deg, #1e1e3a, #252545);
-    border: 1px solid #3a3a5c;
-    border-radius: 10px;
-    padding: 12px 15px;
+    background: linear-gradient(135deg, rgba(30,30,58,0.6), rgba(37,37,69,0.6));
+    border: 1px solid rgba(58,58,92,0.4);
+    border-radius: 12px;
+    padding: 15px 18px;
+    transition: all 0.3s;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    border-color: rgba(110,168,254,0.3);
+    box-shadow: 0 6px 20px rgba(110,168,254,0.1);
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.4rem !important;
-    color: #6ea8fe !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    background: linear-gradient(135deg, #6ea8fe, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 [data-testid="stMetricLabel"] {
     font-size: 0.75rem !important;
-    color: #94a3b8 !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
 }
 
-/* ─── 指標卡片動畫 ─── */
-@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
+/* ─── 按鈕樣式 ─── */
+.stButton > button {
+    border-radius: 10px !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    padding: 8px 16px !important;
+    transition: all 0.3s !important;
+    border: 1px solid transparent !important;
+}
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #4a6cf7, #6366f1) !important;
+    box-shadow: 0 4px 15px rgba(99,102,241,0.3) !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #5b7cf8, #7577f2) !important;
+    box-shadow: 0 6px 20px rgba(99,102,241,0.5) !important;
+    transform: translateY(-2px) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: rgba(40,40,70,0.6) !important;
+    border: 1px solid rgba(74,74,108,0.5) !important;
+    color: #d0d0e8 !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: rgba(110,168,254,0.5) !important;
+    background: rgba(40,40,70,0.8) !important;
+}
+
+/* ─── Tab 樣式 ─── */
+.stTabs [data-baseweb="tab-list"] {
+    background: rgba(26,26,46,0.5);
+    border-radius: 12px;
+    padding: 5px;
+    border: 1px solid rgba(58,58,92,0.3);
+    gap: 3px;
+}
+.stTabs [data-baseweb="tab"] {
+    padding: 10px 20px;
+    border-radius: 10px;
+    margin: 0 2px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: none !important;
+    background: transparent !important;
+    color: #94a3b8 !important;
+    transition: all 0.3s;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    background: rgba(110,168,254,0.1) !important;
+    color: #6ea8fe !important;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, #4a6cf7, #6366f1) !important;
+    color: white !important;
+    box-shadow: 0 4px 15px rgba(99,102,241,0.3);
+}
+
+/* ─── 頁面鏈接 ─── */
+[data-testid="stPageLink"] {
+    background: linear-gradient(135deg, rgba(30,30,58,0.6), rgba(37,37,69,0.6));
+    border: 1px solid rgba(58,58,92,0.3);
+    border-radius: 14px;
+    padding: 15px;
+    transition: all 0.3s;
+}
+[data-testid="stPageLink"]:hover {
+    background: linear-gradient(135deg, rgba(30,30,58,0.8), rgba(37,37,69,0.8));
+    border-color: rgba(110,168,254,0.3);
+    box-shadow: 0 6px 20px rgba(110,168,254,0.1);
+    transform: translateY(-2px);
 }
 
 /* ─── 響應式設計 ─── */
 @media (max-width: 768px) {
     .hero-title { font-size: 2rem; }
     .hero-stats { flex-direction: column; gap: 15px; }
-    .nav-search input { width: 200px; }
+    .nav-search input { width: 250px; }
+    .feature-card { padding: 18px; }
 }
 """
 
@@ -319,7 +394,7 @@ _news_page = "pages/6_📰_新聞.py"
 user = st.session_state.get("user")
 
 # ════════════════════════════════════════════════════════════
-# 載入市場數據（增加快取，減少重複查詢）
+# 載入市場數據（快取優化）
 # ════════════════════════════════════════════════════════════
 from src.data.market_overview import (
     fetch_market_data,
@@ -327,7 +402,6 @@ from src.data.market_overview import (
     fetch_yahoo_reference_trending,
 )
 
-# 使用快取，60 秒更新一次（原本無快取或 120 秒）
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_data():
     return fetch_market_data()
@@ -340,15 +414,12 @@ def get_yahoo_futures():
 def get_yahoo_trending():
     return fetch_yahoo_reference_trending()
 
-# 非阻塞式載入市場數據（使用 placeholder 延遲顯示）
-market_placeholder = st.empty()
-with market_placeholder:
-    with st.spinner("載入市場行情…"):
-        market_data = get_market_data()
-        yahoo_futures = get_yahoo_futures()
-        yahoo_trending = get_yahoo_trending()
+# 載入數據
+market_data = get_market_data()
+yahoo_futures = get_yahoo_futures()
+yahoo_trending = get_yahoo_trending()
 
-# 已登入用戶才預先載入績效數據
+# 已登入用戶才載入績效數據
 if user:
     @st.cache_data(ttl=30, show_spinner=False)
     def get_user_performance(user_id: int):
@@ -374,13 +445,17 @@ with nav_col2:
         "🔍 搜索代幣/代碼/名稱",
         placeholder="例如：BTC, AAPL, 台積電，黃金...",
         label_visibility="collapsed",
-        key="global_search"
+        key="global_search",
+        help="輸入代幣代碼、股票代號或名稱進行搜索"
     )
 
 with nav_col3:
     if user:
         st.markdown(
-            f'<div class="nav-user"><span style="color:#94a3b8">👤</span> {user["display_name"]}</div>',
+            f'<div style="display:flex;align-items:center;gap:10px;">'
+            f'<span style="font-size:1.2rem;">👤</span> '
+            f'<span style="color:#94a3b8;font-weight:500;">{user["display_name"]}</span>'
+            f'</div>',
             unsafe_allow_html=True
         )
     else:
@@ -389,7 +464,7 @@ with nav_col3:
 st.markdown('<div class="nav-container"></div>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════
-# Hero Banner（僅未登入顯示完整版）
+# Hero Banner
 # ════════════════════════════════════════════════════════════
 if not user:
     st.markdown("""
@@ -419,14 +494,13 @@ if not user:
     </div>
     """, unsafe_allow_html=True)
 else:
-    # 已登入用戶顯示歡迎訊息
     db = UserDB()
     stats = db.get_stats()
     history_count = len(db.get_history(user["id"], limit=999))
     favorites_count = len(db.get_favorites(user["id"]))
 
     st.markdown(f"""
-    <div class="hero-banner" style="background: linear-gradient(135deg, #1a2e3a 0%, #16313e 50%, #0f3440 100%);">
+    <div class="hero-banner" style="background: linear-gradient(135deg, rgba(26,46,58,0.9) 0%, rgba(22,49,62,0.9) 50%, rgba(15,52,64,0.9) 100%);">
         <div class="hero-title">歡迎回來，{user['display_name']}！</div>
         <div class="hero-subtitle">
             {'👑 管理員控制台' if user['role'] == 'admin' else '👤 個人交易儀表板'}
@@ -453,13 +527,12 @@ else:
     """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════
-# 用戶績效儀表板（僅已登入用戶）- 使用快取優化
+# 用戶績效儀表板（僅已登入用戶）
 # ════════════════════════════════════════════════════════════
 if user and history:
-    # 績效計算（使用快取的數據）
     st.markdown("#### 📊 我的績效儀表板")
     
-    # 一次性計算所有指標
+    # 績效指標
     total_trades = len(history)
     returns = [h.get("metrics", {}).get("total_return_pct", 0) for h in history]
     profitable_count = sum(1 for r in returns if r > 0)
@@ -468,7 +541,6 @@ if user and history:
     best_trade = max(returns) if returns else 0
     worst_trade = min(returns) if returns else 0
     
-    # 夏普比率（簡化）
     if len(returns) > 1:
         import statistics
         std_dev = statistics.stdev(returns)
@@ -476,7 +548,6 @@ if user and history:
     else:
         sharpe = 0
     
-    # 績效卡片（使用快取的 favorites 長度）
     perf_cols = st.columns(5)
     perf_cols[0].metric("📈 總回測數", f"{total_trades}", delta=f"{win_rate:.1f}% 勝率")
     perf_cols[1].metric("💰 平均報酬", f"{avg_return:+.2f}%", delta=f"最佳：{best_trade:+.2f}%")
@@ -486,10 +557,9 @@ if user and history:
     
     st.divider()
     
-    # 圖表區域 - 使用 config 優化渲染速度
+    # 圖表
     chart_config = {'displayModeBar': False, 'responsive': True}
     
-    # 累積報酬曲線（簡化數據點）
     cumulative_returns = []
     cumulative = 0
     for h in reversed(history):
@@ -503,7 +573,6 @@ if user and history:
         with chart_col1:
             import plotly.graph_objects as go
             
-            # 計算漲跌顏色
             final_return = cumulative_returns[-1] if cumulative_returns else 0
             line_color = '#00cc96' if final_return >= 0 else '#ef553b'
             
@@ -531,7 +600,6 @@ if user and history:
         with chart_col2:
             import plotly.graph_objects as go
             
-            # 簡化直方圖（減少 bin 數）
             if returns:
                 fig_hist = go.Figure()
                 fig_hist.add_trace(go.Histogram(
@@ -553,7 +621,7 @@ if user and history:
                 )
                 st.plotly_chart(fig_hist, use_container_width=True, key="hist_chart", config=chart_config)
     
-    # 熱門策略分析（只顯示前 5 個）
+    # 熱門策略
     st.markdown("#### 🎯 我的熱門策略")
     
     strategy_stats = {}
@@ -571,7 +639,7 @@ if user and history:
         strategy_stats.items(),
         key=lambda x: x[1]["total_return"],
         reverse=True
-    )[:5]  # 只顯示前 5 個
+    )[:5]
     
     strat_cols = st.columns(5 if len(sorted_strategies) >= 5 else len(sorted_strategies), gap="small")
     for idx, (strategy, stats) in enumerate(sorted_strategies):
@@ -602,100 +670,81 @@ if user and history:
     st.divider()
 
 # ════════════════════════════════════════════════════════════
-# 主要功能卡片
+# 核心功能
 # ════════════════════════════════════════════════════════════
 st.markdown("#### 🎯 核心功能")
 
-# 第一排 3 張卡片
-col1, col2, col3 = st.columns(3, gap="small")
+features = [
+    {
+        "icon": "₿",
+        "title": "加密貨幣回測",
+        "desc": "支援 11 個交易所、主流幣/DeFi/Meme 全覆蓋，真實手續費模擬",
+        "tags": ["現貨", "永續", "期權"],
+        "link": _crypto_page,
+    },
+    {
+        "icon": "🏛️",
+        "title": "傳統市場回測",
+        "desc": "美股、台股、ETF、期貨、指數，Yahoo Finance 數據源",
+        "tags": ["股票", "ETF", "期貨", "指數"],
+        "link": _trad_page,
+    },
+    {
+        "icon": "📡",
+        "title": "策略即時監控",
+        "desc": "訂閱任意交易對×策略組合，即時信號、持倉追蹤、未實現 P&L",
+        "tags": ["即時", "訂閱", "信號"],
+        "link": _monitor_page,
+    },
+    {
+        "icon": "📊",
+        "title": "15 種專業策略",
+        "desc": "雙均線、MACD、RSI、布林帶、一目均衡表等經典策略即開即用",
+        "tags": ["趨勢", "擺盪", "突破"],
+        "link": _crypto_page,
+    },
+    {
+        "icon": "📜",
+        "title": "回測歷史管理",
+        "desc": "自動保存、備註標籤、策略收藏、績效對比、參數預設",
+        "tags": ["歷史", "收藏", "對比"],
+        "link": _history_page,
+    },
+    {
+        "icon": "🛠️",
+        "title": "管理員後台" if user and user["role"] == "admin" else "市場新聞",
+        "desc": "用戶管理、安全日誌、數據快取、系統統計" if user and user["role"] == "admin" else "最新市場動態、加密新聞、產業資訊",
+        "tags": ["管理", "安全", "監控"] if user and user["role"] == "admin" else ["新聞", "市場", "資訊"],
+        "link": _admin_page if user and user["role"] == "admin" else _news_page,
+    },
+]
 
-with col1:
-    st.markdown("""
-    <div class="feature-card" style="cursor: pointer;">
-        <div class="feature-icon">₿</div>
-        <div class="feature-title">加密貨幣回測</div>
-        <div class="feature-desc">支援 11 個交易所、主流幣/DeFi/Meme 全覆蓋，真實手續費模擬</div>
-        <div class="feature-tags"><span class="feature-tag">現貨</span><span class="feature-tag">永續</span><span class="feature-tag">期權</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("進入加密回測 →", key="btn_crypto", use_container_width=True):
-        st.switch_page(_crypto_page)
-
-with col2:
-    st.markdown("""
-    <div class="feature-card" style="cursor: pointer;">
-        <div class="feature-icon">🏛️</div>
-        <div class="feature-title">傳統市場回測</div>
-        <div class="feature-desc">美股、台股、ETF、期貨、指數，Yahoo Finance 數據源</div>
-        <div class="feature-tags"><span class="feature-tag">股票</span><span class="feature-tag">ETF</span><span class="feature-tag">期貨</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("進入傳統回測 →", key="btn_trad", use_container_width=True):
-        st.switch_page(_trad_page)
-
-with col3:
-    st.markdown("""
-    <div class="feature-card" style="cursor: pointer;">
-        <div class="feature-icon">📡</div>
-        <div class="feature-title">策略即時監控</div>
-        <div class="feature-desc">訂閱任意交易對×策略組合，即時信號、持倉追蹤、未實現 P&L</div>
-        <div class="feature-tags"><span class="feature-tag">即時</span><span class="feature-tag">訂閱</span><span class="feature-tag">信號</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("進入策略監控 →", key="btn_monitor", use_container_width=True):
-        st.switch_page(_monitor_page)
-
-# 第二排 3 張卡片
-col4, col5, col6 = st.columns(3, gap="small")
-
-with col4:
-    st.markdown("""
-    <div class="feature-card" style="cursor: pointer;">
-        <div class="feature-icon">📊</div>
-        <div class="feature-title">15 種專業策略</div>
-        <div class="feature-desc">雙均線、MACD、RSI、布林帶、一目均衡表等經典策略即開即用</div>
-        <div class="feature-tags"><span class="feature-tag">趨勢</span><span class="feature-tag">擺盪</span><span class="feature-tag">突破</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("查看策略 →", key="btn_strategies", use_container_width=True):
-        st.switch_page(_crypto_page)
-
-with col5:
-    st.markdown("""
-    <div class="feature-card" style="cursor: pointer;">
-        <div class="feature-icon">📜</div>
-        <div class="feature-title">回測歷史管理</div>
-        <div class="feature-desc">自動保存、備註標籤、策略收藏、績效對比、參數預設</div>
-        <div class="feature-tags"><span class="feature-tag">歷史</span><span class="feature-tag">收藏</span><span class="feature-tag">對比</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("查看歷史 →", key="btn_history", use_container_width=True):
-        st.switch_page(_history_page)
-
-with col6:
-    target_page = _admin_page if user and user["role"] == "admin" else _news_page
-    target_label = "管理員後台" if user and user["role"] == "admin" else "市場新聞"
-    st.markdown(f"""
-    <div class="feature-card" style="cursor: pointer;">
-        <div class="feature-icon">🛠️</div>
-        <div class="feature-title">{target_label}</div>
-        <div class="feature-desc">{"用戶管理、安全日誌、數據快取、系統統計" if user and user["role"] == "admin" else "最新市場動態、加密新聞、產業資訊"}</div>
-        <div class="feature-tags"><span class="feature-tag">管理</span><span class="feature-tag">安全</span><span class="feature-tag">監控</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    btn_label = "進入管理後台 →" if user and user["role"] == "admin" else "查看新聞 →"
-    if st.button(btn_label, key="btn_admin", use_container_width=True):
-        st.switch_page(target_page)
+# 功能卡片
+feat_cols = st.columns(3, gap="large")
+for idx, f in enumerate(features):
+    col = feat_cols[idx % 3]
+    with col:
+        tags_html = "".join([f'<span class="feature-tag">{t}</span>' for t in f["tags"]])
+        st.markdown(f"""
+        <div class="feature-card">
+            <div class="feature-icon">{f["icon"]}</div>
+            <div class="feature-title">{f["title"]}</div>
+            <div class="feature-desc">{f["desc"]}</div>
+            <div class="feature-tags">{tags_html}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button(f"進入{f['title']} →", key=f"feat_{idx}", use_container_width=True):
+            st.switch_page(f["link"])
 
 # ════════════════════════════════════════════════════════════
-# 市場行情總覽
+# 市場行情
 # ════════════════════════════════════════════════════════════
 st.markdown("#### 📈 市場行情")
 
-# 期貨 & 熱門標的 Tabs
 if yahoo_futures or yahoo_trending:
     tab1, tab2 = st.tabs(["📊 期貨報價", "🔥 熱門標的"])
-
+    
     with tab1:
         if yahoo_futures:
             cols = st.columns(4)
@@ -709,7 +758,7 @@ if yahoo_futures or yahoo_trending:
                     delta=f"{_chg:+.2f}%",
                     delta_color=_delta_color,
                 )
-
+    
     with tab2:
         if yahoo_trending:
             cols = st.columns(4)
@@ -738,20 +787,19 @@ try:
     if fg:
         fg_val = fg["value"]
         fg_color = "#00ff00" if fg_val > 50 else "#ff4444" if fg_val < 30 else "#ffa500"
-        fg_percent = f"{fg_val}%"
         fg_text = fg["classification"]
     else:
-        fg_val, fg_color, fg_percent, fg_text = None, "#666", "--", "數據不可用"
+        fg_val, fg_color, fg_text = 50, "#666", "數據不可用"
 except Exception:
-    fg_val, fg_color, fg_percent, fg_text = None, "#666", "--", "數據不可用"
+    fg_val, fg_color, fg_text = 50, "#666", "數據不可用"
 
 sentiment_html += f"""
 <div class="sentiment-card">
     <div style="font-size:1.5rem;margin-bottom:10px;">🌡️ 加密恐懼貪婪</div>
-    <div class="sentiment-value" style="color:{fg_color}">{fg_percent}</div>
+    <div class="sentiment-value" style="color:{fg_color}">{fg_val if fg_val != 50 else '--'}</div>
     <div class="sentiment-label">{fg_text}</div>
     <div class="sentiment-gauge">
-        <div class="sentiment-gauge-fill" style="width:{fg_val if fg_val else 50}%;background:{fg_color}"></div>
+        <div class="sentiment-gauge-fill" style="width:{fg_val}%;background:{fg_color}"></div>
     </div>
 </div>
 """
@@ -788,12 +836,11 @@ sentiment_html += '</div>'
 st.markdown(sentiment_html, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════
-# 快速開始（已登入用戶）
+# 快速開始（已登入）
 # ════════════════════════════════════════════════════════════
 if user:
     st.markdown("#### 🚀 快速開始")
     qa_cols = st.columns(4)
-
     with qa_cols[0]:
         st.page_link(_crypto_page, label="₿ 加密回測", icon="💰", use_container_width=True)
     with qa_cols[1]:

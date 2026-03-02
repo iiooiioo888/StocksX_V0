@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS watchlist (
     strategy TEXT NOT NULL,
     strategy_params TEXT DEFAULT '{}',
     initial_equity REAL DEFAULT 10000,
+    leverage REAL DEFAULT 1.0,
     is_active INTEGER DEFAULT 1,
     created_at REAL NOT NULL,
     last_check REAL DEFAULT 0,
@@ -67,6 +68,16 @@ CREATE TABLE IF NOT EXISTS watchlist (
     entry_price REAL DEFAULT 0,
     position INTEGER DEFAULT 0,
     pnl_pct REAL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS auto_strategies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    config TEXT DEFAULT '{}',
+    is_active INTEGER DEFAULT 1,
+    last_eval REAL DEFAULT 0,
+    current_strategy TEXT DEFAULT '',
+    created_at REAL NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE TABLE IF NOT EXISTS products (
@@ -584,12 +595,14 @@ class UserDB:
 
     # ─── 策略訂閱 (Watchlist) ───
     def add_watch(self, user_id: int, symbol: str, exchange: str, timeframe: str,
-                  strategy: str, strategy_params: dict, initial_equity: float = 10000) -> int:
+                  strategy: str, strategy_params: dict, initial_equity: float = 10000,
+                  leverage: float = 1.0) -> int:
         cur = self._conn.execute(
-            """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy, strategy_params, initial_equity, created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
+            """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy, 
+               strategy_params, initial_equity, leverage, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (user_id, symbol, exchange, timeframe, strategy,
-             json.dumps(strategy_params, ensure_ascii=False), initial_equity, time.time()),
+             json.dumps(strategy_params, ensure_ascii=False), initial_equity, leverage, time.time()),
         )
         self._conn.commit()
         return cur.lastrowid or 0
@@ -661,3 +674,54 @@ class UserDB:
             "total_pnl": round(total_pnl, 2), "total_fees": round(total_fees, 2),
             "avg_pnl": round(total_pnl / len(closes), 2) if closes else 0,
         }
+
+    # ─── 自動策略切換 ───
+    def save_auto_strategy(self, user_id: int, config: dict) -> int:
+        """儲存自動策略配置"""
+        cur = self._conn.execute(
+            "INSERT INTO auto_strategies (user_id, config, created_at) VALUES (?,?,?)",
+            (user_id, json.dumps(config, ensure_ascii=False), time.time()),
+        )
+        self._conn.commit()
+        return cur.lastrowid or 0
+
+    def get_auto_strategies(self, user_id: int) -> list[dict]:
+        """獲取用戶的自動策略配置"""
+        cur = self._conn.execute(
+            "SELECT * FROM auto_strategies WHERE user_id=? ORDER BY created_at DESC",
+            (user_id,)
+        )
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["config"] = json.loads(d.get("config") or "{}")
+            rows.append(d)
+        return rows
+
+    def update_auto_strategy(self, strategy_id: int, is_active: bool = None, 
+                            current_strategy: str = None, last_eval: float = None) -> None:
+        """更新自動策略狀態"""
+        updates = []
+        params = []
+        if is_active is not None:
+            updates.append("is_active = ?")
+            params.append(1 if is_active else 0)
+        if current_strategy is not None:
+            updates.append("current_strategy = ?")
+            params.append(current_strategy)
+        if last_eval is not None:
+            updates.append("last_eval = ?")
+            params.append(last_eval)
+        
+        if updates:
+            params.append(strategy_id)
+            self._conn.execute(
+                f"UPDATE auto_strategies SET {','.join(updates)} WHERE id = ?",
+                params
+            )
+            self._conn.commit()
+
+    def delete_auto_strategy(self, strategy_id: int) -> None:
+        """刪除自動策略配置"""
+        self._conn.execute("DELETE FROM auto_strategies WHERE id = ?", (strategy_id,))
+        self._conn.commit()

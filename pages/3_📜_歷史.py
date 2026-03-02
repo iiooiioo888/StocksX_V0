@@ -1,4 +1,4 @@
-# 回測歷史 & 收藏 & 策略預設 & 提醒（現代化緊湊版 v2）
+# 回測歷史 & 收藏 & 策略預設 & 提醒（性能優化版 v3）
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -8,6 +8,127 @@ from src.auth import UserDB
 from src.config import STRATEGY_LABELS, STRATEGY_COLORS
 
 st.set_page_config(page_title="StocksX — 歷史", page_icon="📜", layout="wide")
+
+# ════════════════════════════════════════════════════════════
+# 快取優化 - 減少重複查詢
+# ════════════════════════════════════════════════════════════
+@st.cache_data(ttl=30, show_spinner=False)
+def get_user_history(user_id: int, limit: int = 100):
+    """獲取用戶回測歷史（快取 30 秒）"""
+    db = UserDB()
+    return db.get_history(user_id, limit)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def get_user_favorites(user_id: int):
+    """獲取用戶收藏（快取 30 秒）"""
+    db = UserDB()
+    return db.get_favorites(user_id)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_user_products(user_id: int):
+    """獲取用戶產品（快取 60 秒）"""
+    db = UserDB()
+    return db.get_products(user_id)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_user_presets(user_id: int):
+    """獲取用戶策略預設（快取 60 秒）"""
+    db = UserDB()
+    return db.get_presets(user_id)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_user_alerts(user_id: int):
+    """獲取用戶提醒（快取 60 秒）"""
+    db = UserDB()
+    return db.get_alerts(user_id)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_user_settings(user_id: int):
+    """獲取用戶設定（快取 60 秒）"""
+    db = UserDB()
+    return db.get_settings(user_id)
+
+
+# ════════════════════════════════════════════════════════════
+# 輔助函數
+# ════════════════════════════════════════════════════════════
+def _render_trend_chart(sym: str, data: list):
+    """渲染單一標的的報酬趨勢圖表"""
+    chart_config = {'displayModeBar': False, 'responsive': True}
+    
+    # 計算累積報酬
+    cumulative = []
+    total = 0
+    timestamps = []
+    
+    for d in data:
+        total += d["return"]
+        cumulative.append(total)
+        timestamps.append(datetime.fromtimestamp(d["time"], tz=timezone.utc).strftime("%m/%d"))
+    
+    if not cumulative:
+        st.info("尚無數據")
+        return
+    
+    final_ret = cumulative[-1]
+    line_color = "#00cc96" if final_ret >= 0 else "#ef553b"
+    
+    # 建立圖表
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=timestamps,
+        y=cumulative,
+        mode='lines+markers',
+        line=dict(color=line_color, width=2.5),
+        marker=dict(size=6),
+        name="累積報酬",
+        hovertemplate=f"<b>{sym}</b><br>日期：%{{x}}<br>累積報酬：%{{y:+.2f}}%<extra></extra>"
+    ))
+    
+    # 添加零軸線
+    fig.add_shape(
+        type="line",
+        x0=timestamps[0], x1=timestamps[-1],
+        y0=0, y1=0,
+        line=dict(color="#64748b", width=1, dash="dash"),
+    )
+    
+    # 更新佈局
+    fig.update_layout(
+        title=dict(text=f"📈 累積報酬趨勢", font_size=14, font=dict(color='#e0e0e8')),
+        xaxis=dict(showgrid=False, tickfont=dict(color='#94a3b8')),
+        yaxis=dict(
+            title="累積報酬 %",
+            gridcolor='rgba(50,50,90,0.3)',
+            tickfont=dict(color='#94a3b8'),
+            zeroline=False
+        ),
+        height=280,
+        margin=dict(l=40, r=20, t=35, b=40),
+        showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(30,30,50,0.3)',
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, key=f"trend_{sym}", config=chart_config)
+    
+    # 顯示統計數據
+    stat_cols = st.columns(4)
+    with stat_cols[0]:
+        st.metric("總報酬", f"{final_ret:+.2f}%")
+    with stat_cols[1]:
+        avg_ret = sum(cumulative) / len(cumulative) if cumulative else 0
+        st.metric("平均報酬", f"{avg_ret:+.2f}%")
+    with stat_cols[2]:
+        st.metric("最大獲利", f"{max(cumulative):+.2f}%" if cumulative else "0%")
+    with stat_cols[3]:
+        st.metric("最大虧損", f"{min(cumulative):+.2f}%" if cumulative else "0%")
+
+
+def _clear_cache():
+    """清除所有快取"""
+    st.cache_data.clear()
+
 
 # ════════════════════════════════════════════════════════════
 # CSS 樣式 - 現代化緊湊版
@@ -140,9 +261,23 @@ with st.sidebar:
     st.markdown(f"### 👤 {user['display_name']}")
     st.caption(f"{'👑 管理員' if user['role'] == 'admin' else '👤 用戶'}")
     st.divider()
-    stats = db.get_stats()
-    st.metric("📊 我的回測", len(db.get_history(user["id"], limit=999)))
-    st.metric("⭐ 收藏策略", len(db.get_favorites(user["id"])))
+    
+    # 快取統計數據
+    if "user_stats" not in st.session_state:
+        st.session_state.user_stats = {
+            "history_count": len(get_user_history(user["id"], limit=999)),
+            "favorites_count": len(get_user_favorites(user["id"]))
+        }
+    
+    st.metric("📊 我的回測", st.session_state.user_stats["history_count"])
+    st.metric("⭐ 收藏策略", st.session_state.user_stats["favorites_count"])
+    
+    if st.button("🔄 重新整理", use_container_width=True, help="清除快取並重新載入"):
+        _clear_cache()
+        if "user_stats" in st.session_state:
+            del st.session_state.user_stats
+        st.rerun()
+    
     if st.button("🚪 登出", use_container_width=True):
         st.session_state.pop("user", None)
         st.switch_page("app.py")
@@ -150,7 +285,7 @@ with st.sidebar:
 # 主標籤頁 - 緊湊版
 tabs = st.tabs([
     "📋 回測歷史",
-    "⭐ 收藏", 
+    "⭐ 收藏",
     "📦 產品庫",
     "💾 策略預設",
     "🔔 提醒",
@@ -161,13 +296,14 @@ tabs = st.tabs([
 # Tab 1: 回測歷史
 # ════════════════════════════════════════════════════════════
 with tabs[0]:
-    history = db.get_history(user["id"], limit=100)
+    # 使用快取
+    history = get_user_history(user["id"], limit=100)
     
     if not history:
         st.info("📭 尚無回測歷史")
         st.page_link("pages/2_₿_加密回測.py", label="📊 開始第一次回測", icon="📊", use_container_width=True)
     else:
-        # 頂部工具列 - 緊湊版
+        # 頂部工具列
         tool_col1, tool_col2, tool_col3 = st.columns([3, 1, 1])
         with tool_col1:
             search_query = st.text_input("🔍", placeholder="搜索標的、策略、標籤...", label_visibility="collapsed")
@@ -218,7 +354,7 @@ with tabs[0]:
         
         st.caption(f"共 {len(history)} 筆記錄")
         
-        # 卡片式佈局 - 每排 3 個（更緊湊）
+        # 卡片式佈局 - 每排 3 個
         for i in range(0, len(history), 3):
             cols = st.columns(3)
             for j, col in enumerate(cols):
@@ -228,24 +364,31 @@ with tabs[0]:
                 m = h.get("metrics", {})
                 ret = m.get("total_return_pct", 0)
                 
+                # 計算利潤（如果 metrics 中沒有 total_profit，則從報酬率計算）
+                initial_equity = h.get("initial_equity", 10000)
+                if "total_profit" in m and m["total_profit"] is not None:
+                    profit_val = m.get("total_profit", 0)
+                else:
+                    # 從報酬率推算利潤
+                    profit_val = initial_equity * ret / 100
+
                 strategy_name = STRATEGY_LABELS.get(h["strategy"], h["strategy"])
                 time_str = datetime.fromtimestamp(h["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M")
 
                 with col:
-                    # 卡片標題區
+                    # 卡片標題區 - 加入 ID
                     title_col1, title_col2 = st.columns([3, 2])
                     with title_col1:
                         fav_icon = "⭐" if h.get("is_favorite") else ""
-                        symbol_display = h['symbol'].strip()
-                        st.markdown(f"**{fav_icon} {symbol_display}**")
-                        st.caption(f"{strategy_name[:12]} · {h['timeframe']}")
+                        st.markdown(f"**{fav_icon} {h['symbol']}**")
+                        st.caption(f"#{h['id']} | {strategy_name[:10]} · {h['timeframe']}")
                     with title_col2:
                         ret_color = "🟢" if ret > 0 else "🔴" if ret < 0 else "⚪"
                         st.markdown(f"### {ret:+.2f}% {ret_color}")
                     
                     st.divider()
                     
-                    # 指標區 - 使用 5 個小 column（更清晰）
+                    # 指標區
                     metric_cols = st.columns(5)
                     with metric_cols[0]:
                         st.markdown(f"<div style='text-align:center;'><div style='font-size:1rem;font-weight:700;color:#6ea8fe;'>{m.get('sharpe_ratio', 0):.2f}</div><div style='font-size:0.65rem;color:#64748b;margin-top:2px;'>夏普</div></div>", unsafe_allow_html=True)
@@ -256,9 +399,8 @@ with tabs[0]:
                     with metric_cols[3]:
                         st.markdown(f"<div style='text-align:center;'><div style='font-size:1rem;font-weight:700;color:#6ea8fe;'>{m.get('win_rate_pct', 0):.0f}%</div><div style='font-size:0.65rem;color:#64748b;margin-top:2px;'>勝率</div></div>", unsafe_allow_html=True)
                     with metric_cols[4]:
-                        profit_val = m.get('total_profit', 0)
                         profit_color = "#00cc96" if profit_val >= 0 else "#ef553b"
-                        st.markdown(f"<div style='text-align:center;'><div style='font-size:1rem;font-weight:700;color:{profit_color};'>{profit_val:.0f}</div><div style='font-size:0.65rem;color:#64748b;margin-top:2px;'>利潤</div></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align:center;'><div style='font-size:1rem;font-weight:700;color:{profit_color};'>${profit_val:+,.0f}</div><div style='font-size:0.65rem;color:#64748b;margin-top:2px;'>利潤</div></div>", unsafe_allow_html=True)
                     
                     # 標籤區
                     if h.get("tags"):
@@ -266,7 +408,7 @@ with tabs[0]:
                         if tags_text:
                             st.markdown(f"<div style='font-size:0.75rem;color:#94a3b8;margin:6px 0;'>🏷️ {tags_text}</div>", unsafe_allow_html=True)
                     
-                    # 備註區（截斷顯示）
+                    # 備註區
                     if h.get("notes"):
                         notes = h.get("notes", "")
                         notes_display = notes[:35] + "..." if len(notes) > 35 else notes
@@ -288,29 +430,27 @@ with tabs[0]:
                         fav_text = "⭐ 收藏" if not h.get("is_favorite") else "已收藏"
                         if st.button(fav_text, key=f"fav_{h['id']}", use_container_width=True):
                             db.toggle_favorite(h["id"])
+                            # 更新快取
+                            if "user_stats" in st.session_state:
+                                del st.session_state.user_stats
                             st.rerun()
                     with btn_cols[2]:
-                        # 刪除按鈕 - 二次確認
-                        del_key = f"del_{h['id']}"
-                        if del_key not in st.session_state:
-                            st.session_state[del_key] = False
+                        confirm_key = f"confirm_del_{h['id']}"
                         
-                        if not st.session_state[del_key]:
-                            if st.button("🗑️ 刪除", key=del_key, use_container_width=True, type="secondary"):
-                                st.session_state[del_key] = True
-                                st.session_state["confirm_del_id"] = h["id"]
-                                st.session_state["confirm_del_symbol"] = h["symbol"]
-                                st.rerun()
-                        else:
-                            if st.button("❓ 確定？", key=f"confirm_{h['id']}", use_container_width=True, type="primary"):
+                        if st.session_state.get(confirm_key, False):
+                            if st.button("❓ 確定？", key=f"yes_{h['id']}", use_container_width=True, type="primary"):
                                 db.delete_history(h["id"])
-                                st.session_state.pop(del_key, None)
-                                st.session_state.pop("confirm_del_id", None)
-                                st.session_state.pop("confirm_del_symbol", None)
+                                st.session_state[confirm_key] = False
+                                if "user_stats" in st.session_state:
+                                    del st.session_state.user_stats
                                 st.success(f"✅ 已刪除 {h['symbol']}")
                                 st.rerun()
-                            if st.button("❌ 取消", key=f"cancel_{h['id']}", use_container_width=True):
-                                st.session_state[del_key] = False
+                            if st.button("❌ 取消", key=f"no_{h['id']}", use_container_width=True):
+                                st.session_state[confirm_key] = False
+                                st.rerun()
+                        else:
+                            if st.button("🗑️ 刪除", key=f"del_{h['id']}", use_container_width=True, type="secondary"):
+                                st.session_state[confirm_key] = True
                                 st.rerun()
         
         # 編輯備註彈窗
@@ -330,6 +470,8 @@ with tabs[0]:
                 if st.button("💾 儲存", use_container_width=True, key="save_notes"):
                     db.update_notes(st.session_state["edit_id"], new_notes, new_tags)
                     st.session_state.pop("edit_id", None)
+                    st.session_state.pop("edit_notes", None)
+                    st.session_state.pop("edit_tags", None)
                     st.success("✅ 已儲存")
                     st.rerun()
             with action_cols[1]:
@@ -337,38 +479,25 @@ with tabs[0]:
                     st.session_state.pop("edit_id", None)
                     st.rerun()
             with action_cols[2]:
-                if st.button("🗑️ 刪除記錄", use_container_width=True, key="del_edit", type="secondary"):
-                    # 二次確認
-                    if "confirm_edit_delete" not in st.session_state:
-                        st.session_state["confirm_edit_delete"] = False
-                    
-                    if not st.session_state["confirm_edit_delete"]:
-                        st.session_state["confirm_edit_delete"] = True
-                        st.warning(f"⚠️ 確定要刪除記錄 ID {st.session_state['edit_id']} 嗎？")
-                        st.stop()
-                    else:
-                        db.delete_history(st.session_state["edit_id"])
-                        st.session_state.pop("edit_id", None)
-                        st.session_state.pop("edit_notes", None)
-                        st.session_state.pop("edit_tags", None)
-                        st.session_state.pop("confirm_edit_delete", None)
-                        st.success("✅ 已刪除")
-                        st.rerun()
-            
-            if st.session_state.get("confirm_edit_delete"):
-                action_cols_2 = st.columns(2)
-                with action_cols_2[0]:
+                confirm_key = "confirm_edit_delete"
+                
+                if st.session_state.get(confirm_key, False):
                     if st.button("✅ 確定刪除", use_container_width=True, key="confirm_edit_yes", type="primary"):
                         db.delete_history(st.session_state["edit_id"])
                         st.session_state.pop("edit_id", None)
                         st.session_state.pop("edit_notes", None)
                         st.session_state.pop("edit_tags", None)
-                        st.session_state.pop("confirm_edit_delete", None)
+                        st.session_state[confirm_key] = False
+                        if "user_stats" in st.session_state:
+                            del st.session_state.user_stats
                         st.success("✅ 已刪除")
                         st.rerun()
-                with action_cols_2[1]:
                     if st.button("❌ 取消", use_container_width=True, key="confirm_edit_no"):
-                        st.session_state.pop("confirm_edit_delete", None)
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+                else:
+                    if st.button("🗑️ 刪除記錄", use_container_width=True, key="del_edit", type="secondary"):
+                        st.session_state[confirm_key] = True
                         st.rerun()
         
         # 批量操作
@@ -385,30 +514,36 @@ with tabs[0]:
                             db.toggle_favorite(int(id_str.strip()))
                         except:
                             pass
+                    if "user_stats" in st.session_state:
+                        del st.session_state.user_stats
                     st.rerun()
         with batch_cols[2]:
-            if st.button("🗑️ 批量刪除", use_container_width=True):
-                if batch_ids:
-                    # 二次確認
-                    if "confirm_batch_delete" not in st.session_state:
-                        st.session_state["confirm_batch_delete"] = False
-                    
-                    if not st.session_state["confirm_batch_delete"]:
-                        st.session_state["confirm_batch_delete"] = True
+            confirm_key = "confirm_batch_delete"
+            
+            if st.session_state.get(confirm_key, False):
+                if st.button("✅ 確定刪除", use_container_width=True, key="batch_del_yes", type="primary"):
+                    count = 0
+                    for id_str in st.session_state.get("batch_delete_ids", "").split(","):
+                        try:
+                            db.delete_history(int(id_str.strip()))
+                            count += 1
+                        except:
+                            pass
+                    st.session_state[confirm_key] = False
+                    st.session_state.pop("batch_delete_ids", None)
+                    if "user_stats" in st.session_state:
+                        del st.session_state.user_stats
+                    st.success(f"✅ 已刪除 {count} 筆記錄")
+                    st.rerun()
+                if st.button("❌ 取消", use_container_width=True, key="batch_del_no"):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
+            else:
+                if st.button("🗑️ 批量刪除", use_container_width=True, key="batch_del_btn"):
+                    if batch_ids:
+                        st.session_state[confirm_key] = True
                         st.session_state["batch_delete_ids"] = batch_ids
                         st.warning("⚠️ 確定要刪除這些記錄嗎？此操作無法復原！")
-                        st.stop()
-                    else:
-                        count = 0
-                        for id_str in st.session_state["batch_delete_ids"].split(","):
-                            try:
-                                db.delete_history(int(id_str.strip()))
-                                count += 1
-                            except:
-                                pass
-                        st.session_state.pop("confirm_batch_delete", None)
-                        st.session_state.pop("batch_delete_ids", None)
-                        st.success(f"✅ 已刪除 {count} 筆記錄")
                         st.rerun()
         with batch_cols[3]:
             if st.button("🔄 批量回測", use_container_width=True):
@@ -429,7 +564,7 @@ with tabs[0]:
                         except:
                             pass
         
-        # 📈 報酬趨勢圖表
+        # 報酬趨勢圖表
         st.divider()
         st.markdown("#### 📈 報酬趨勢分析")
         
@@ -453,79 +588,21 @@ with tabs[0]:
         top_symbols = sorted(symbol_stats.items(), key=lambda x: len(x[1]), reverse=True)[:6]
         
         if top_symbols:
-            chart_config = {'displayModeBar': False, 'responsive': True}
-            
             # 使用 tabs 顯示不同標的
-            symbol_tabs = st.tabs([f"{sym[:10]} ({len(data)}次)" for sym, data in top_symbols])
+            symbol_tabs = st.tabs([
+                f"{sym if len(sym) <= 15 else sym[:12]}... ({len(data)}次)"
+                for sym, data in top_symbols
+            ])
             
             for tab, (sym, data) in zip(symbol_tabs, top_symbols):
                 with tab:
-                    # 累積報酬曲線
-                    cumulative = []
-                    total = 0
-                    timestamps = []
-                    strategies = []
-                    
-                    for d in data:
-                        total += d["return"]
-                        cumulative.append(total)
-                        timestamps.append(datetime.fromtimestamp(d["time"], tz=timezone.utc).strftime("%m/%d"))
-                        strategies.append(STRATEGY_LABELS.get(d["strategy"], d["strategy"][:10]))
-                    
-                    # 繪製折線圖
-                    import plotly.graph_objects as go
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=timestamps,
-                        y=cumulative,
-                        mode='lines+markers',
-                        line=dict(color='#6ea8fe', width=2.5),
-                        marker=dict(size=6),
-                        text=[f"{s}<br>{y:+.2f}%" for s, y in zip(strategies, cumulative)],
-                        hoverinfo='text'
-                    ))
-                    
-                    # 添加零軸線
-                    fig.add_shape(
-                        type="line",
-                        x0=timestamps[0], x1=timestamps[-1],
-                        y0=0, y1=0,
-                        line=dict(color="#64748b", width=1, dash="dash")
-                    )
-                    
-                    final_ret = cumulative[-1] if cumulative else 0
-                    line_color = "#00cc96" if final_ret >= 0 else "#ef553b"
-                    
-                    fig.update_layout(
-                        title=dict(text=f"📈 {sym} 累積報酬趨勢", font_size=14, font=dict(color='#e0e0e8')),
-                        xaxis=dict(tickfont=dict(color='#94a3b8')),
-                        yaxis=dict(
-                            title="累積報酬 %",
-                            gridcolor='rgba(50,50,90,0.3)',
-                            tickfont=dict(color='#94a3b8')
-                        ),
-                        height=280,
-                        margin=dict(l=40, r=20, t=35, b=40),
-                        showlegend=False,
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(30,30,50,0.3)',
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True, key=f"trend_{sym}", config=chart_config)
-                    
-                    # 顯示統計數據
-                    stat_cols = st.columns(4)
-                    stat_cols[0].metric("總報酬", f"{final_ret:+.2f}%")
-                    stat_cols[1].metric("平均報酬", f"{sum(cumulative)/len(cumulative):.2f}%" if cumulative else "0%")
-                    stat_cols[2].metric("最大獲利", f"{max(cumulative):.2f}%" if cumulative else "0%")
-                    stat_cols[3].metric("最大虧損", f"{min(cumulative):.2f}%" if cumulative else "0%")
+                    _render_trend_chart(sym, data)
 
 # ════════════════════════════════════════════════════════════
 # Tab 2: 收藏 & 對比
 # ════════════════════════════════════════════════════════════
 with tabs[1]:
-    favs = db.get_favorites(user["id"])
+    favs = get_user_favorites(user["id"])
 
     if not favs:
         st.info("⭐ 尚無收藏。在歷史記錄中點擊 ⭐ 加入。")
@@ -551,8 +628,6 @@ with tabs[1]:
             chart_cols = st.columns(2)
             
             with chart_cols[0]:
-                import plotly.graph_objects as go
-                
                 colors = ["#00cc96" if v > 0 else "#ef553b" for v in df_cmp["報酬%"]]
                 fig_bar = go.Figure()
                 fig_bar.add_trace(go.Bar(
@@ -564,7 +639,7 @@ with tabs[1]:
                     hoverinfo='xy'
                 ))
                 fig_bar.update_layout(
-                    title=dict(text="報酬率對比", font_size=13, font=dict(color='#e0e0e8')),
+                    title=dict(text="報酬率對比", font_size=14, font=dict(color='#e0e0e8')),
                     height=260,
                     margin=dict(l=30, r=20, t=30, b=50),
                     yaxis=dict(title="報酬率 %", gridcolor='rgba(50,50,90,0.3)', tickfont=dict(color='#94a3b8')),
@@ -576,8 +651,6 @@ with tabs[1]:
                 st.plotly_chart(fig_bar, use_container_width=True, key="fav_bar_chart", config=chart_config)
             
             with chart_cols[1]:
-                import plotly.graph_objects as go
-                
                 fig_radar = go.Figure()
                 plotly_colors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#FF6692']
                 
@@ -598,7 +671,7 @@ with tabs[1]:
                         opacity=0.7
                     ))
                 fig_radar.update_layout(
-                    title=dict(text="多維度雷達圖", font_size=13, font=dict(color='#e0e0e8')),
+                    title=dict(text="多維度雷達圖", font_size=14, font=dict(color='#e0e0e8')),
                     height=260,
                     margin=dict(l=30, r=30, t=30, b=20),
                     polar=dict(
@@ -619,15 +692,13 @@ with tabs[1]:
             ret = m.get("total_return_pct", 0)
             strategy_name = STRATEGY_LABELS.get(f["strategy"], f["strategy"])
             
-            # 清理標題
             clean_symbol = f["symbol"].strip()
             expander_title = f'**{clean_symbol}** × {strategy_name[:15]} — {"🟢" if ret > 0 else "🔴" if ret < 0 else "⚪"} {ret:+.2f}%'
             
             with st.expander(expander_title, expanded=False):
-                # 指標區
                 metric_cols = st.columns(5)
                 with metric_cols[0]:
-                    st.markdown(f"<div style='text-align:center;'><div style='font-size:1.1rem;font-weight:700;color:#6ea8fe;'>{m.get("total_return_pct", 0):+.2f}%</div><div style='font-size:0.7rem;color:#64748b;margin-top:3px;'>報酬</div></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center;'><div style='font-size:1.1rem;font-weight:700;color:#6ea8fe;'>{m.get('total_return_pct', 0):+.2f}%</div><div style='font-size:0.7rem;color:#64748b;margin-top:3px;'>報酬</div></div>", unsafe_allow_html=True)
                 with metric_cols[1]:
                     st.markdown(f"<div style='text-align:center;'><div style='font-size:1.1rem;font-weight:700;color:#6ea8fe;'>{m.get('sharpe_ratio', 0):.2f}</div><div style='font-size:0.7rem;color:#64748b;margin-top:3px;'>夏普</div></div>", unsafe_allow_html=True)
                 with metric_cols[2]:
@@ -672,27 +743,26 @@ with tabs[1]:
                 with action_cols[1]:
                     if st.button("⭐ 取消收藏", key=f"unfav_{f['id']}", use_container_width=True):
                         db.toggle_favorite(f["id"])
+                        if "user_stats" in st.session_state:
+                            del st.session_state.user_stats
                         st.rerun()
                 with action_cols[2]:
-                    # 刪除按鈕 - 二次確認
-                    del_key = f"del_fav_{f['id']}"
-                    if del_key not in st.session_state:
-                        st.session_state[del_key] = False
+                    confirm_key = f"confirm_del_fav_{f['id']}"
                     
-                    if not st.session_state[del_key]:
-                        if st.button("🗑️ 刪除", key=del_key, use_container_width=True, type="secondary"):
-                            st.session_state[del_key] = True
-                            st.session_state[f"confirm_del_{f['id']}"] = True
-                            st.rerun()
-                    else:
-                        if st.button("❓ 確定？", key=f"confirm_del_{f['id']}", use_container_width=True, type="primary"):
+                    if st.session_state.get(confirm_key, False):
+                        if st.button("❓ 確定？", key=f"yes_fav_{f['id']}", use_container_width=True, type="primary"):
                             db.delete_history(f["id"])
-                            st.session_state.pop(del_key, None)
-                            st.session_state.pop(f"confirm_del_{f['id']}", None)
+                            st.session_state[confirm_key] = False
+                            if "user_stats" in st.session_state:
+                                del st.session_state.user_stats
                             st.success(f"✅ 已刪除 {clean_symbol}")
                             st.rerun()
-                        if st.button("❌ 取消", key=f"cancel_del_{f['id']}", use_container_width=True):
-                            st.session_state[del_key] = False
+                        if st.button("❌ 取消", key=f"no_fav_{f['id']}", use_container_width=True):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
+                    else:
+                        if st.button("🗑️ 刪除", key=f"del_fav_{f['id']}", use_container_width=True):
+                            st.session_state[confirm_key] = True
                             st.rerun()
 
 # ════════════════════════════════════════════════════════════
@@ -702,7 +772,7 @@ with tabs[2]:
     st.markdown("#### 📦 產品庫")
     st.caption("管理關注的交易對和股票")
     
-    products = db.get_products(user["id"])
+    products = get_user_products(user["id"])
     sys_count = sum(1 for p in products if p.get("is_system"))
     user_count = sum(1 for p in products if not p.get("is_system"))
     
@@ -732,6 +802,9 @@ with tabs[2]:
                         result = db.add_product(p_symbol, p_name, p_exchange, p_market, p_category, user["id"])
                         if isinstance(result, int):
                             st.success(f"✅ 已新增 {p_symbol}")
+                            # 清除快取
+                            if f"products_{user['id']}" in st.session_state:
+                                del st.session_state[f"products_{user['id']}"]
                             st.rerun()
                         else:
                             st.error(result)
@@ -743,11 +816,26 @@ with tabs[2]:
             st.markdown("##### 自訂產品")
             for p in user_prods:
                 prod_cols = st.columns([4, 2, 1])
-                prod_cols[0].markdown(f"**{p['symbol']}** — {p['name']}　`{p['category']}`")
+                prod_cols[0].markdown(f"**{p['symbol']}** — {p['name']} `{p['category']}`")
                 prod_cols[1].caption(f"交易所：{p['exchange']}")
-                if prod_cols[2].button("🗑️", key=f"del_prod_{p['id']}", type="secondary"):
-                    db.delete_product(p["id"])
-                    st.rerun()
+                
+                confirm_key = f"confirm_prod_{p['id']}"
+                
+                if st.session_state.get(confirm_key, False):
+                    if prod_cols[2].button("❓", key=f"yes_prod_{p['id']}", type="primary"):
+                        db.delete_product(p["id"])
+                        st.session_state[confirm_key] = False
+                        if f"products_{user['id']}" in st.session_state:
+                            del st.session_state[f"products_{user['id']}"]
+                        st.success(f"✅ 已刪除 {p['symbol']}")
+                        st.rerun()
+                    if prod_cols[2].button("❌", key=f"no_prod_{p['id']}"):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+                else:
+                    if prod_cols[2].button("🗑️", key=f"del_prod_{p['id']}", type="secondary"):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
         
         sys_prods = [p for p in products if p.get("is_system")]
         if sys_prods:
@@ -767,7 +855,7 @@ with tabs[3]:
     st.markdown("#### 💾 策略預設")
     st.caption("儲存常用參數組合")
     
-    presets = db.get_presets(user["id"])
+    presets = get_user_presets(user["id"])
     
     with st.expander("➕ 新增預設", expanded=False):
         with st.form("save_preset"):
@@ -794,6 +882,8 @@ with tabs[3]:
                     }
                     db.save_preset(user["id"], preset_name, config)
                     st.success(f"✅「{preset_name}」已儲存")
+                    if f"presets_{user['id']}" in st.session_state:
+                        del st.session_state[f"presets_{user['id']}"]
                     st.rerun()
     
     if presets:
@@ -808,9 +898,24 @@ with tabs[3]:
                     if st.button("📊 載入回測", key=f"load_{p['id']}", use_container_width=True):
                         st.session_state["_rerun_config"] = c
                         st.switch_page("pages/2_₿_加密回測.py")
-                    if st.button("🗑️ 刪除", key=f"del_preset_{p['id']}", use_container_width=True):
-                        db.delete_preset(p["id"])
-                        st.rerun()
+                    
+                    confirm_key = f"confirm_preset_{p['id']}"
+                    
+                    if st.session_state.get(confirm_key, False):
+                        if st.button("❓ 確定？", key=f"yes_preset_{p['id']}", use_container_width=True, type="primary"):
+                            db.delete_preset(p["id"])
+                            st.session_state[confirm_key] = False
+                            if f"presets_{user['id']}" in st.session_state:
+                                del st.session_state[f"presets_{user['id']}"]
+                            st.success(f"✅ 已刪除 {p['name']}")
+                            st.rerun()
+                        if st.button("❌ 取消", key=f"no_preset_{p['id']}", use_container_width=True):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
+                    else:
+                        if st.button("🗑️ 刪除", key=f"del_preset_{p['id']}", use_container_width=True):
+                            st.session_state[confirm_key] = True
+                            st.rerun()
 
 # ════════════════════════════════════════════════════════════
 # Tab 5: 提醒設定
@@ -819,7 +924,7 @@ with tabs[4]:
     st.markdown("#### 🔔 提醒")
     st.caption("回測達標自動通知")
     
-    alerts = db.get_alerts(user["id"])
+    alerts = get_user_alerts(user["id"])
     
     with st.expander("➕ 新增提醒", expanded=False):
         with st.form("add_alert"):
@@ -840,6 +945,8 @@ with tabs[4]:
             if st.form_submit_button("➕ 新增", use_container_width=True):
                 db.add_alert(user["id"], a_symbol or "*", a_type[1], a_threshold, a_msg)
                 st.success("✅ 已新增")
+                if f"alerts_{user['id']}" in st.session_state:
+                    del st.session_state[f"alerts_{user['id']}"]
                 st.rerun()
     
     if alerts:
@@ -856,9 +963,24 @@ with tabs[4]:
             alert_cols = st.columns([4, 1])
             alert_cols[0].markdown(f"🔔 **{a['symbol']}** — {cond} **{a['threshold']}%**" +
                                   (f" 💬 {a['message']}" if a["message"] else ""))
-            if alert_cols[1].button("🗑️", key=f"del_alert_{a['id']}", type="secondary"):
-                db.delete_alert(a["id"])
-                st.rerun()
+            
+            confirm_key = f"confirm_alert_{a['id']}"
+            
+            if st.session_state.get(confirm_key, False):
+                if alert_cols[1].button("❓", key=f"yes_alert_{a['id']}", type="primary"):
+                    db.delete_alert(a["id"])
+                    st.session_state[confirm_key] = False
+                    if f"alerts_{user['id']}" in st.session_state:
+                        del st.session_state[f"alerts_{user['id']}"]
+                    st.success("✅ 已刪除")
+                    st.rerun()
+                if alert_cols[1].button("❌", key=f"no_alert_{a['id']}"):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
+            else:
+                if alert_cols[1].button("🗑️", key=f"del_alert_{a['id']}", type="secondary"):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
 
 # ════════════════════════════════════════════════════════════
 # Tab 6: 偏好設定
@@ -866,7 +988,7 @@ with tabs[4]:
 with tabs[5]:
     st.markdown("#### ⚙️ 設定")
     
-    settings = db.get_settings(user["id"])
+    settings = get_user_settings(user["id"])
     
     setting_cols = st.columns(2)
     with setting_cols[0]:
@@ -882,6 +1004,9 @@ with tabs[5]:
             st.session_state["user"]["display_name"] = new_name
         db.save_settings(user["id"], {"default_equity": default_equity, "default_leverage": default_leverage})
         st.success("✅ 已儲存")
+        if f"settings_{user['id']}" in st.session_state:
+            del st.session_state[f"settings_{user['id']}"]
+        st.rerun()
     
     st.divider()
     
