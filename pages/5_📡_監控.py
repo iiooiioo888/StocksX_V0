@@ -5,6 +5,8 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import time as _time
+import sqlite3
+import json
 from datetime import datetime, timezone
 from src.auth import UserDB
 from src.config import format_price, STRATEGY_LABELS
@@ -430,16 +432,33 @@ with tabs[1]:
 
     with col2:
         # 使用快取的分類
-        _cats = get_categories_cached(_mt)
-        _sel_cat = st.selectbox("分類", _cats if _cats else ["全部"], key="w_cat")
+        try:
+            _cats = get_categories_cached(_mt)
+            _sel_cat = st.selectbox("分類", _cats if _cats else ["全部"], key="w_cat")
+        except Exception as e:
+            st.error(f"載入分類失敗：{e}")
+            _sel_cat = "全部"
 
     # 產品選擇 - 使用快取
-    _products = get_products_cached(user["id"], market_type=_mt, category=_sel_cat if _sel_cat != "全部" else "")
-    _prod_options = [f"{p['symbol']} — {p['name']}" for p in _products]
-    _prod_options.append("✏️ 自訂輸入")
+    try:
+        _products = get_products_cached(user["id"], market_type=_mt, category=_sel_cat if _sel_cat != "全部" else "")
+        _prod_options = [f"{p['symbol']} — {p['name']}" for p in _products]
+        if not _prod_options:
+            _prod_options = ["✏️ 自訂輸入"]
+        else:
+            _prod_options.append("✏️ 自訂輸入")
+    except Exception as e:
+        st.error(f"載入產品失敗：{e}")
+        _prod_options = ["✏️ 自訂輸入"]
 
     _sel = st.selectbox("選擇產品", _prod_options, key="w_prod")
-    _symbol = st.text_input("自訂", value="BTC/USDT") if _sel == "✏️ 自訂輸入" else _sel.split(" — ")[0]
+    
+    # 處理自訂輸入
+    if _sel == "✏️ 自訂輸入":
+        _symbol = st.text_input("自訂交易對", value="BTC/USDT", key="w_symbol_custom")
+    else:
+        _symbol = _sel.split(" — ")[0]
+    
     _exchange = "binance" if _mt == "crypto" else "yfinance"
 
     # 策略選擇
@@ -461,16 +480,40 @@ with tabs[1]:
         _fee = st.number_input("手續費%", min_value=0.0, value=0.05, step=0.01, key="w_fee")
 
     # 訂閱按鈕
+    st.divider()
     if st.button("📋 加入訂閱", type="primary", use_container_width=True):
         if _symbol:
-            wid = db.add_watch(user["id"], _symbol, _exchange, _tf, _strat, {}, _eq, _lev)
-            if wid:
+            try:
+                # 檢查 watchlist 表是否有 account_id 欄位
+                test_conn = sqlite3.connect("cache/users.sqlite")
+                cur = test_conn.execute("PRAGMA table_info(watchlist)")
+                columns = [row[1] for row in cur.fetchall()]
+                
+                if "account_id" not in columns:
+                    # 如果沒有 account_id 欄位，使用舊版插入
+                    cur = test_conn.execute(
+                        """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy,
+                           strategy_params, initial_equity, leverage, created_at)
+                           VALUES (?,?,?,?,?,?,?,?,?)""",
+                        (user["id"], _symbol, _exchange, _tf, _strat,
+                         json.dumps({}), _eq, _lev, time.time()),
+                    )
+                else:
+                    # 有 account_id 欄位，使用新版插入
+                    test_conn.close()
+                    wid = db.add_watch(user["id"], _symbol, _exchange, _tf, _strat, {}, _eq, _lev)
+                
+                test_conn.commit()
+                test_conn.close()
+                
                 st.success(f"✅ 已新增 {_symbol} × {STRATEGY_LABELS.get(_strat, _strat)} 到訂閱列表")
                 # 清除快取
                 get_watchlist_cached.clear()
                 st.rerun()
-            else:
-                st.error("❌ 新增失敗")
+            except Exception as e:
+                st.error(f"❌ 新增失敗：{e}")
+                import traceback
+                st.code(traceback.format_exc())
         else:
             st.warning("請輸入交易對")
 
