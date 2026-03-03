@@ -1,0 +1,147 @@
+# StocksX V1 - Docker Compose 配置
+version: '3.8'
+
+services:
+  # Redis（任務隊列 + 快取）
+  redis:
+    image: redis:7-alpine
+    container_name: stocksx_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stocksx_network
+
+  # PostgreSQL（生產環境資料庫）
+  postgres:
+    image: postgres:15-alpine
+    container_name: stocksx_postgres
+    environment:
+      POSTGRES_DB: stocksx
+      POSTGRES_USER: stocksx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stocksx_secure_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stocksx"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stocksx_network
+    profiles:
+      - production
+
+  # FastAPI 後端
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stocksx_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://stocksx:${POSTGRES_PASSWORD:-stocksx_secure_password}@postgres:5432/stocksx
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/cache:/app/cache
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - stocksx_network
+    restart: unless-stopped
+
+  # Celery Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stocksx_worker
+    command: celery -A app.workers.tasks worker --loglevel=info -Q backtest,optimizer,notify
+    environment:
+      - DATABASE_URL=postgresql://stocksx:${POSTGRES_PASSWORD:-stocksx_secure_password}@postgres:5432/stocksx
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/cache:/app/cache
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - stocksx_network
+    restart: unless-stopped
+
+  # Celery Beat（定時任務）
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stocksx_beat
+    command: celery -A app.workers.tasks beat --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - stocksx_network
+    restart: unless-stopped
+
+  # React 前端
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stocksx_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - stocksx_network
+    restart: unless-stopped
+
+  # Flower（Celery 監控，可選）
+  flower:
+    image: mher/flower:2.0
+    container_name: stocksx_flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - stocksx_network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  stocksx_network:
+    driver: bridge

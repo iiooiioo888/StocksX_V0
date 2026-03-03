@@ -12,8 +12,14 @@ from __future__ import annotations
 - 加密貨幣：CoinGecko、CoinMarketCap、Glassnode
 - 券商交易：Alpaca
 - 情緒數據：Fear & Greed Index、CBOE VIX
+
+v2.0 更新：
+- 加入 API 限流器（令牌桶演算法）
+- 加入結構化日誌
+- 加入請求計時與統計
 """
 
+import time
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -34,6 +40,22 @@ from src.config_secrets import (
 )
 from .yfinance_source import YfinanceOhlcvSource
 from .crypto_ccxt import CcxtOhlcvSource
+
+# 引入限流器與日誌
+try:
+    from src.utils.rate_limiter import (
+        RateLimiter,
+        RateLimitExceeded,
+        get_api_limiter,
+        log_api_call,
+    )
+    from src.utils.logger import get_logger
+    
+    logger = get_logger('stocksx.api_hub')
+    USE_RATE_LIMITER = True
+except ImportError:
+    USE_RATE_LIMITER = False
+    logger = None
 
 
 def fetch_traditional_ohlcv(
@@ -87,32 +109,76 @@ def fetch_polymarket_markets(
     if query:
         params["search"] = query
 
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    data = resp.json()
+    # 限流檢查
+    if USE_RATE_LIMITER:
+        limiter, config = get_api_limiter("polymarket")
+        try:
+            allowed, wait_time = limiter.allow_request(
+                key="polymarket",
+                capacity=config["capacity"],
+                refill_rate=config["refill_rate"],
+                wait=False
+            )
+            if not allowed:
+                log_api_call(
+                    logger, "polymarket", "/markets",
+                    params=params, status="rate_limited",
+                    retry_after=wait_time
+                )
+                raise RateLimitExceeded(
+                    f"Polymarket rate limit exceeded. Retry after {wait_time:.1f}s",
+                    retry_after=wait_time
+                )
+        except Exception as e:
+            if "rate limit" in str(e).lower():
+                raise
+            logger.warning(f"Rate limiter check failed: {e}")
 
-    markets: List[Dict[str, Any]] = []
-    if isinstance(data, list):
-        iterable = data
-    else:
-        # 部分社群範例會回傳 {"markets": [...]}，做個保守處理
-        iterable = data.get("markets", []) if isinstance(data, dict) else []
+    # 發送請求
+    start_time = time.time()
+    status = "success"
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
 
-    for m in iterable:
-        if not isinstance(m, dict):
-            continue
-        markets.append(
-            {
-                "id": m.get("id"),
-                "title": m.get("title"),
-                "yes_bid": m.get("yesBid"),
-                "no_bid": m.get("noBid"),
-                "volume": m.get("volume"),
-                "status": m.get("status"),
-            }
+        markets: List[Dict[str, Any]] = []
+        if isinstance(data, list):
+            iterable = data
+        else:
+            iterable = data.get("markets", []) if isinstance(data, dict) else []
+
+        for m in iterable:
+            if not isinstance(m, dict):
+                continue
+            markets.append(
+                {
+                    "id": m.get("id"),
+                    "title": m.get("title"),
+                    "yes_bid": m.get("yesBid"),
+                    "no_bid": m.get("noBid"),
+                    "volume": m.get("volume"),
+                    "status": m.get("status"),
+                }
+            )
+
+        response_time = (time.time() - start_time) * 1000
+        log_api_call(
+            logger, "polymarket", "/markets",
+            params=params, response_time_ms=response_time,
+            status=status, result_count=len(markets)
         )
+        return markets
 
-    return markets
+    except requests.exceptions.RequestException as e:
+        status = "failed"
+        response_time = (time.time() - start_time) * 1000
+        log_api_call(
+            logger, "polymarket", "/markets",
+            params=params, response_time_ms=response_time,
+            status=status, error=str(e)
+        )
+        raise
 
 
 # ───────────────────────────────── 宏觀經濟數據：FRED ─────────────────────────────────
@@ -146,9 +212,49 @@ def fetch_fred_series(
     if units:
         params["units"] = units
 
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    # 限流檢查
+    if USE_RATE_LIMITER:
+        limiter, config = get_api_limiter("fred")
+        allowed, wait_time = limiter.allow_request(
+            key="fred",
+            capacity=config["capacity"],
+            refill_rate=config["refill_rate"],
+            wait=False
+        )
+        if not allowed:
+            log_api_call(
+                logger, "fred", "/series/observations",
+                params=params, status="rate_limited",
+                retry_after=wait_time
+            )
+            raise RateLimitExceeded(
+                f"FRED rate limit exceeded. Retry after {wait_time:.1f}s",
+                retry_after=wait_time
+            )
+
+    # 發送請求
+    start_time = time.time()
+    status = "success"
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        response_time = (time.time() - start_time) * 1000
+        log_api_call(
+            logger, "fred", "/series/observations",
+            params=params, response_time_ms=response_time,
+            status=status, series_id=series_id
+        )
+        return resp.json()
+
+    except requests.exceptions.RequestException as e:
+        status = "failed"
+        response_time = (time.time() - start_time) * 1000
+        log_api_call(
+            logger, "fred", "/series/observations",
+            params=params, response_time_ms=response_time,
+            status=status, error=str(e)
+        )
+        raise
 
 
 # ───────────────────────────── 股市 / 外匯：Alpha Vantage ─────────────────────────────
@@ -174,9 +280,49 @@ def fetch_alpha_vantage(
         params["symbol"] = symbol
     params.update(extra)
 
-    resp = requests.get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    # 限流檢查
+    if USE_RATE_LIMITER:
+        limiter, config = get_api_limiter("alpha_vantage")
+        allowed, wait_time = limiter.allow_request(
+            key="alpha_vantage",
+            capacity=config["capacity"],
+            refill_rate=config["refill_rate"],
+            wait=False
+        )
+        if not allowed:
+            log_api_call(
+                logger, "alpha_vantage", function,
+                params=params, status="rate_limited",
+                retry_after=wait_time
+            )
+            raise RateLimitExceeded(
+                f"Alpha Vantage rate limit exceeded. Retry after {wait_time:.1f}s",
+                retry_after=wait_time
+            )
+
+    # 發送請求
+    start_time = time.time()
+    status = "success"
+    try:
+        resp = requests.get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        response_time = (time.time() - start_time) * 1000
+        log_api_call(
+            logger, "alpha_vantage", function,
+            params=params, response_time_ms=response_time,
+            status=status, symbol=symbol
+        )
+        return resp.json()
+
+    except requests.exceptions.RequestException as e:
+        status = "failed"
+        response_time = (time.time() - start_time) * 1000
+        log_api_call(
+            logger, "alpha_vantage", function,
+            params=params, response_time_ms=response_time,
+            status=status, error=str(e)
+        )
+        raise
 
 
 # ─────────────────────────────── 股市：Polygon.io ───────────────────────────────

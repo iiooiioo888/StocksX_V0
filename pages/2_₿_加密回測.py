@@ -1,16 +1,25 @@
-# 加密貨幣回測
+# 加密貨幣回測（增強版 v4.0）
+# 新增：策略參數管理、參數預設、快捷設定
+
 import streamlit as st
 import time as _time_mod
 from datetime import datetime, timezone
 from src.backtest.fees import get_fee_rate, get_slippage, EXCHANGE_FEES
 from src.backtest import strategies as backtest_strategies
 from src.data.crypto import CryptoDataFetcher
-from src.data.integrity import validate_ohlcv, compute_data_hash
+from src.data.integrity import validate_ohlcv
 from src.auth import UserDB
 from src.config import STRATEGY_LABELS, CRYPTO_CATEGORIES, EXCHANGE_OPTIONS
 from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
 from src.ui_backtest import ALL_STRATEGIES, run_all_strategies, render_summary_line, \
     render_kline_chart, render_equity_curves, render_performance_table, render_trade_details
+from src.ui_strategy_params import (
+    render_strategy_params,
+    render_param_shortcuts,
+    render_preset_manager,
+    STRATEGY_PARAMS,
+    validate_params,
+)
 
 st.set_page_config(page_title="StocksX — 加密回測", page_icon="💰", layout="wide")
 apply_theme()
@@ -50,6 +59,50 @@ with st.sidebar:
         user_fee = st.number_input("手續費%", min_value=0.0, value=_fee, step=0.01)
         user_slip = st.number_input("滑點%", min_value=0.0, value=_slip, step=0.01)
 
+    # 回測模式選擇
+    mode = st.radio(
+        "回測模式",
+        ["全部策略", "單一策略（自訂參數）"],
+        index=0,
+        key="backtest_mode"
+    )
+    
+    selected_strategy = None
+    custom_params = {}
+    
+    if mode == "單一策略（自訂參數）":
+        # 策略選擇
+        selected_strategy = st.selectbox(
+            "選擇策略",
+            options=list(STRATEGY_PARAMS.keys()),
+            format_func=lambda x: STRATEGY_PARAMS[x]["name"],
+            index=0
+        )
+        
+        # 快捷設定
+        shortcuts = render_param_shortcuts(selected_strategy, key_prefix=f"shortcut_{selected_strategy}")
+        
+        # 參數設定
+        custom_params = render_strategy_params(
+            selected_strategy,
+            key_prefix=f"custom_{selected_strategy}"
+        )
+        
+        # 參數預設管理
+        if _user:
+            render_preset_manager(
+                _user["id"],
+                selected_strategy,
+                custom_params,
+                key_prefix=f"preset_{selected_strategy}"
+            )
+        
+        # 驗證參數
+        if custom_params:
+            is_valid, error_msg = validate_params(selected_strategy, custom_params)
+            if not is_valid:
+                st.error(error_msg)
+    
     run_btn = st.button("🚀 執行回測", type="primary", use_container_width=True)
 
 def _to_ms(d):
@@ -71,20 +124,40 @@ if run_btn and since_ms < until_ms:
     except Exception as e:
         st.error(f"❌ {e}")
         rows = None
+    
     if rows:
-        _bar.progress(40, text=f"回測 {len(ALL_STRATEGIES)} 策略…")
-        results = run_all_strategies(rows, exchange_id, symbol, timeframe, since_ms, until_ms,
-                                     initial_equity, leverage, None, None, user_fee, user_slip)
+        if mode == "全部策略":
+            # 執行所有策略
+            _bar.progress(40, text=f"回測 {len(ALL_STRATEGIES)} 策略…")
+            results = run_all_strategies(rows, exchange_id, symbol, timeframe, since_ms, until_ms,
+                                         initial_equity, leverage, None, None, user_fee, user_slip)
+        else:
+            # 執行單一策略（自訂參數）
+            if selected_strategy and custom_params:
+                _bar.progress(40, text=f"回測策略：{STRATEGY_LABELS.get(selected_strategy, selected_strategy)}…")
+                from src.backtest.engine import run_backtest as run_single_backtest
+                result = run_single_backtest(
+                    rows, exchange_id, symbol, timeframe, since_ms, until_ms,
+                    initial_equity, leverage, selected_strategy, custom_params, user_fee, user_slip
+                )
+                results = {selected_strategy: result}
+            else:
+                st.error("請選擇策略並設定參數")
+                results = {}
+        
         _bar.progress(100, text="✅ 完成")
         _elapsed = _time_mod.time() - _t0
         st.session_state["crypto_results"] = results
         st.session_state["crypto_rows"] = rows
-        st.markdown(f'<div class="success-banner">🎉 完成！{_elapsed:.1f}s　|　{len(rows)} K線 × {len(ALL_STRATEGIES)} 策略</div>',
+        st.markdown(f'<div class="success-banner">🎉 完成！{_elapsed:.1f}s</div>',
                     unsafe_allow_html=True)
+        
+        # 保存歷史
         if _user:
             for s, r in results.items():
                 if not r.error:
-                    _db.save_backtest(_user["id"], symbol, exchange_id or "okx", timeframe, s, {}, r.metrics)
+                    params_to_save = custom_params if mode == "單一策略（自訂參數）" and s == selected_strategy else {}
+                    _db.save_backtest(_user["id"], symbol, exchange_id or "okx", timeframe, s, params_to_save, r.metrics)
 
 if "crypto_results" in st.session_state:
     results = st.session_state["crypto_results"]

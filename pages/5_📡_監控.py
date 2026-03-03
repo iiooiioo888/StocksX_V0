@@ -304,15 +304,26 @@ with tabs[0]:
         for w in watchlist:
             s_label = STRATEGY_LABELS.get(w["strategy"], w["strategy"])
             status_icon = "🟢" if w.get("is_active", True) else "⏸️"
-            
+
             # 計算數據
             _w_equity = w.get("initial_equity", 10000)
             _w_pnl = w.get("pnl_pct", 0)
             _w_pos = w.get("position", 0)
-            _w_value = _w_equity * (1 + _w_pnl / 100) if _w_pos != 0 else _w_equity
-            _w_sig = {1: "🟢做多", -1: "🔴做空", 0: "⚪觀望"}.get(w.get("last_signal", 0), "⚪觀望")
-            _w_pnl_str = f"{'🟢' if _w_pnl > 0 else '🔴' if _w_pnl < 0 else '⚪'}{_w_pnl:+.2f}%"
             
+            # 取得已實現 P&L
+            _w_stats = db.get_trade_stats(w["id"])
+            _w_realized_pnl = _w_stats.get("total_pnl", 0)  # 已實現 P&L（美元）
+            
+            # 計算未實現 P&L（美元）
+            _w_unrealized_profit = _w_equity * (_w_pnl / 100) if _w_pos != 0 else 0
+            
+            # 帳戶價值 = 初始資金 + 已實現 P&L + 未實現 P&L
+            _w_value = _w_equity + _w_realized_pnl + _w_unrealized_profit
+            _w_total_pnl_pct = (_w_value - _w_equity) / _w_equity * 100 if _w_equity > 0 else 0
+            
+            _w_sig = {1: "🟢做多", -1: "🔴做空", 0: "⚪觀望"}.get(w.get("last_signal", 0), "⚪觀望")
+            _w_pnl_str = f"{'🟢' if _w_total_pnl_pct > 0 else '🔴' if _w_total_pnl_pct < 0 else '⚪'}{_w_total_pnl_pct:+.2f}%"
+
             # 標題
             _header = f"{status_icon} **{w['symbol']}** × {s_label} | {_w_sig} | 💰${_w_value:,.0f} | {_w_pnl_str}"
             
@@ -395,9 +406,20 @@ with tabs[0]:
                 _equity = w.get("initial_equity", 10000)
                 _pnl = w.get("pnl_pct", 0)
                 _position = w.get("position", 0)
-                _current_value = _equity * (1 + _pnl / 100) if _position != 0 else _equity
-                _profit = _current_value - _equity
                 
+                # 取得已實現 P&L（從 trade_stats）
+                _stats = db.get_trade_stats(w["id"])
+                _realized_pnl = _stats.get("total_pnl", 0)  # 已實現 P&L（美元）
+                
+                # 計算未實現 P&L（美元）
+                _unrealized_profit = _equity * (_pnl / 100) if _position != 0 else 0
+                
+                # 帳戶價值 = 初始資金 + 已實現 P&L + 未實現 P&L
+                _current_value = _equity + _realized_pnl + _unrealized_profit
+                
+                # 總利潤 = 已實現 + 未實現
+                _total_profit = _realized_pnl + _unrealized_profit
+
                 # 主要指標
                 r1, r2, r3 = st.columns(3)
                 r1.metric("💰 即時價格", format_price(w.get("last_price", 0)) if w.get("last_price") else "—")
@@ -405,16 +427,23 @@ with tabs[0]:
                 r2.metric("📡 當前信號", sig_text)
                 pos_text = {1: "🟢 多頭", -1: "🔴 空頭", 0: "⬜ 空倉"}.get(_position, "⬜ 空倉")
                 pos_class = "position-long" if _position == 1 else "position-short" if _position == -1 else "position-flat"
-                r3.metric("📊 持倉狀態", f'<span class="{pos_class}">{pos_text}</span>', unsafe_allow_html=True)
-                
-                # 帳戶價值
+                # 使用 markdown 渲染 HTML 而不是 metric
+                r3.markdown(f'<div class="metric-card"><div style="font-size:0.75rem;color:#64748b;">📊 持倉狀態</div><div class="{pos_class}" style="font-size:1.2rem;font-weight:700;">{pos_text}</div></div>', unsafe_allow_html=True)
+
+                # 帳戶價值（包含已實現和未實現 P&L）
                 v1, v2, v3, v4 = st.columns(4)
-                _val_color = "normal" if _profit >= 0 else "inverse"
-                v1.metric("🏦 帳戶價值", f"${_current_value:,.2f}", delta=f"{_profit:+,.2f}", delta_color=_val_color)
-                v2.metric("💹 未實現 P&L", f"{_pnl:+.2f}%", delta=f"${_profit:+,.2f}", delta_color=_val_color)
+                _val_color = "normal" if _total_profit >= 0 else "inverse"
+                v1.metric("🏦 帳戶價值", f"${_current_value:,.2f}", delta=f"{_total_profit:+,.2f}", delta_color=_val_color)
+                
+                # 分開顯示已實現和未實現 P&L
+                v2.metric("💹 未實現 P&L", f"{_pnl:+.2f}%", delta=f"${_unrealized_profit:+,.2f}", delta_color=_val_color)
+                
+                # 新增已實現 P&L 顯示
+                realized_color = "normal" if _realized_pnl >= 0 else "inverse"
+                v3.metric("✅ 已實現 P&L", f"${_realized_pnl:+,.2f}", delta="已平倉利潤", delta_color=realized_color)
+                
                 entry = w.get("entry_price", 0)
-                v3.metric("📍 進場價", format_price(entry) if entry else "—")
-                v4.metric("💵 初始資金", f"${_equity:,.2f}")
+                v4.metric("📍 進場價", format_price(entry) if entry else "—")
                 
                 # 手動操作按鈕
                 st.divider()
