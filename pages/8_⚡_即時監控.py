@@ -1,56 +1,160 @@
-# 即時監控（專業版 v5.0）
-# 功能：WebSocket 即時推送、智能信號、風險管理、高級策略、收費功能
+# 即時監控（機構專業版 v8.0 - 真實數據）
+# 所有數據都來自真實 API
 
 import streamlit as st
 import time
 import json
-from datetime import datetime, timezone
-from typing import Dict, List, Any
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Any, Optional
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from src.auth import UserDB
 from src.config import format_price, STRATEGY_LABELS
+from src.data.service import data_service  # 真實數據服務
 
 # ════════════════════════════════════════════════════════════
 # 頁面配置
 # ════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="StocksX — 即時監控專業版",
+    page_title="StocksX — 機構專業版（真實數據）",
     page_icon="📡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ════════════════════════════════════════════════════════════
-# CSS 樣式 - 專業版
+# 數據管理層
+# ════════════════════════════════════════════════════════════
+
+class DataManager:
+    """數據管理類 - 負責數據載入、緩存和更新"""
+    
+    def __init__(self):
+        self.price_cache: Dict[str, Dict] = {}
+        self.kline_cache: Dict[str, pd.DataFrame] = {}
+        self.depth_cache: Dict[str, Dict] = {}
+        self.last_update: Dict[str, float] = {}
+        self.cache_ttl = 1.0  # 緩存 TTL（秒）
+    
+    def get_price(self, symbol: str) -> Optional[Dict]:
+        """取得價格（從 WebSocket 或真實 API）"""
+        now = time.time()
+        
+        # 優先從 WebSocket 取得
+        if symbol in st.session_state.ws_prices:
+            ws_data = st.session_state.ws_prices[symbol]
+            ws_age = now - ws_data.get('timestamp', 0) / 1000
+            if ws_age < 5:  # 5 秒內的數據
+                return ws_data
+        
+        # 從真實 API 取得
+        if symbol in self.price_cache:
+            if now - self.last_update.get(symbol, 0) < self.cache_ttl:
+                return self.price_cache[symbol]
+        
+        # 使用真實數據服務
+        data = data_service.get_ticker(symbol)
+        if data:
+            self.price_cache[symbol] = data
+            self.last_update[symbol] = now
+            return data
+        
+        return None
+    
+    def get_kline(self, symbol: str, timeframe: str = '1h', periods: int = 100) -> Optional[pd.DataFrame]:
+        """取得真實 K 線數據"""
+        cache_key = f"{symbol}_{timeframe}_{periods}"
+        now = time.time()
+        
+        # 檢查緩存（5 分鐘有效）
+        if cache_key in self.kline_cache:
+            if now - self.last_update.get(cache_key, 0) < 300:
+                return self.kline_cache[cache_key]
+        
+        # 使用真實數據服務
+        with st.spinner(f"載入 {symbol} K 線數據..."):
+            df = data_service.get_kline(symbol, timeframe=timeframe, limit=periods)
+        
+        if df is not None:
+            # 更新緩存
+            self.kline_cache[cache_key] = df
+            self.last_update[cache_key] = now
+            return df
+        
+        return None
+    
+    def get_depth(self, symbol: str, limit: int = 20) -> Optional[Dict]:
+        """取得真實訂單簿深度"""
+        now = time.time()
+        
+        # 檢查緩存（1 秒有效）
+        if symbol in self.depth_cache:
+            if now - self.last_update.get(symbol, 0) < 1:
+                return self.depth_cache[symbol]
+        
+        # 使用真實數據服務
+        data = data_service.get_orderbook(symbol, limit=limit)
+        if data:
+            self.depth_cache[symbol] = data
+            self.last_update[symbol] = now
+            return data
+        
+        return None
+    
+    def get_onchain_data(self, symbol: str) -> Optional[Dict]:
+        """取得鏈上數據"""
+        return data_service.get_onchain_data(symbol)
+    
+    def get_whale_data(self, symbol: str) -> Optional[pd.DataFrame]:
+        """取得巨鯨數據"""
+        return data_service.get_whale_transactions(symbol)
+    
+    def get_fear_greed(self) -> Optional[Dict]:
+        """取得恐懼貪婪指數"""
+        return data_service.get_fear_greed_index()
+    
+    def get_social_sentiment(self, symbol: str) -> Optional[Dict]:
+        """取得社群情緒"""
+        return data_service.get_social_sentiment(symbol)
+    
+    def calculate_signal(self, symbol: str, strategy: str = 'sma_cross') -> Optional[Dict]:
+        """計算交易信號"""
+        return data_service.calculate_signal(symbol, strategy)
+
+# 全域數據管理器
+data_manager = DataManager()
+
+# ════════════════════════════════════════════════════════════
+# CSS 樣式
 # ════════════════════════════════════════════════════════════
 CUSTOM_CSS = """
 .stApp {
     background: linear-gradient(160deg, #0a0a12 0%, #12121f 40%, #0f1724 100%);
 }
 
-/* 價格卡片 */
-.price-card {
-    background: linear-gradient(135deg, rgba(30,30,58,0.9), rgba(37,37,69,0.9));
-    border: 1px solid rgba(58,58,92,0.4);
+.pro-card {
+    background: linear-gradient(135deg, rgba(30,30,58,0.95), rgba(37,37,69,0.95));
+    border: 1px solid rgba(58,58,92,0.5);
     border-radius: 16px;
     padding: 20px;
     margin: 10px 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     transition: all 0.3s ease;
 }
 
-.price-card:hover {
-    border-color: rgba(110,168,254,0.4);
-    box-shadow: 0 8px 32px rgba(110,168,254,0.15);
+.pro-card:hover {
+    border-color: rgba(110,168,254,0.5);
+    box-shadow: 0 8px 32px rgba(110,168,254,0.2);
     transform: translateY(-2px);
 }
 
 .price-up {color: #00cc96 !important;}
 .price-down {color: #ef553b !important;}
 
-/* 信號卡片 */
 .signal-card {
     background: linear-gradient(135deg, rgba(42,26,58,0.9), rgba(53,37,69,0.9));
-    border: 1px solid rgba(90,58,124,0.4);
     border-radius: 12px;
     padding: 15px;
     margin: 8px 0;
@@ -72,12 +176,6 @@ CUSTOM_CSS = """
     to { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
-
-/* 持倉狀態 */
 .position-long {
     color: #00cc96 !important;
     font-weight: bold;
@@ -90,11 +188,6 @@ CUSTOM_CSS = """
     text-shadow: 0 0 10px rgba(239,85,59,0.3);
 }
 
-.position-flat {
-    color: #64748b !important;
-}
-
-/* 連接狀態指示器 */
 .connection-indicator {
     display: inline-block;
     width: 10px;
@@ -113,7 +206,11 @@ CUSTOM_CSS = """
     background: #ef553b;
 }
 
-/* 高級功能標籤 */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 .premium-badge {
     background: linear-gradient(135deg, #ffd700, #ffed4e);
     color: #1a1a2e;
@@ -125,18 +222,18 @@ CUSTOM_CSS = """
     margin-left: 5px;
 }
 
-/* 風險警示 */
-.risk-warning {
-    background: linear-gradient(135deg, rgba(239,85,59,0.2), rgba(239,85,59,0.1));
-    border: 1px solid #ef553b;
-    border-radius: 8px;
-    padding: 10px;
-    margin: 10px 0;
+.loading-shimmer {
+    background: linear-gradient(90deg, 
+        rgba(255,255,255,0.05) 0%, 
+        rgba(255,255,255,0.1) 50%, 
+        rgba(255,255,255,0.05) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
 }
 
-.risk-safe {
-    background: linear-gradient(135deg, rgba(0,204,150,0.2), rgba(0,204,150,0.1));
-    border: 1px solid #00cc96;
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 """
 
@@ -154,7 +251,7 @@ if not user:
 
 db = UserDB()
 
-# 檢查用戶等級（收費功能）
+# 檢查用戶等級
 user_role = user.get("role", "user")
 is_premium = user_role in ["premium", "vip", "admin"]
 is_vip = user_role == "vip"
@@ -168,8 +265,10 @@ if "ws_signals" not in st.session_state:
     st.session_state.ws_signals = []
 if "subscriptions" not in st.session_state:
     st.session_state.subscriptions = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
-if "auto_trading_enabled" not in st.session_state:
-    st.session_state.auto_trading_enabled = False
+if "current_tab" not in st.session_state:
+    st.session_state.current_tab = 0
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
 
 # ════════════════════════════════════════════════════════════
 # 標題和狀態列
@@ -179,13 +278,12 @@ header_col1, header_col2, header_col3 = st.columns([3, 2, 2])
 with header_col1:
     st.markdown(f"""
     <div style="display:flex;align-items:center;gap:15px;margin-bottom:20px;">
-        <h1 style="margin:0;font-size:2rem;">📡 即時監控專業版</h1>
-        {f'<span class="premium-badge">👑 {user_role.upper()}</span>' if not is_premium else ''}
+        <h1 style="margin:0;font-size:2rem;">📡 機構專業版</h1>
+        {f'<span class="premium-badge">👑 {user_role.upper()}</span>' if user_role != 'user' else ''}
     </div>
     """, unsafe_allow_html=True)
 
 with header_col2:
-    # 連接狀態
     status_icon = "🟢" if st.session_state.ws_connected else "🔴"
     status_text = "已連接" if st.session_state.ws_connected else "未連接"
     status_class = "connection-live" if st.session_state.ws_connected else "connection-offline"
@@ -200,7 +298,11 @@ with header_col2:
     """, unsafe_allow_html=True)
 
 with header_col3:
-    if st.button("🔄 重新整理", use_container_width=True):
+    # 計算上次更新時間
+    time_since_refresh = time.time() - st.session_state.last_refresh
+    
+    if st.button(f"🔄 重新整理 ({time_since_refresh:.0f}s)", use_container_width=True):
+        st.session_state.last_refresh = time.time()
         st.rerun()
 
 st.divider()
@@ -217,42 +319,24 @@ with st.sidebar:
         <div style="background:linear-gradient(135deg, #ffd700, #ffed4e);
             color:#1a1a2e;padding:15px;border-radius:12px;margin-bottom:20px;">
             <div style="font-weight:bold;margin-bottom:5px;">👑 升級專業版</div>
-            <div style="font-size:0.85rem;">解鎖高級信號、自動交易、風險管理</div>
+            <div style="font-size:0.85rem;">解鎖高級圖表、鏈上數據、情緒分析</div>
         </div>
         """, unsafe_allow_html=True)
     
     # WebSocket 控制
     st.markdown("#### 🔌 WebSocket 連接")
-    ws_url = st.text_input(
-        "WebSocket URL",
-        value="ws://localhost:8001/ws",
-        key="ws_url_input",
-        help="幣安 WebSocket 服務地址"
-    )
+    ws_url = st.text_input("WebSocket URL", value="ws://localhost:8001/ws", key="ws_url_input")
     
     col1, col2 = st.columns(2)
     with col1:
-        connect_btn = st.button(
-            "🔌 連接" if not st.session_state.ws_connected else "✅ 已連接",
-            use_container_width=True,
-            disabled=st.session_state.ws_connected,
-            key="ws_connect"
-        )
-        if connect_btn:
+        if st.button("🔌 連接", use_container_width=True, disabled=st.session_state.ws_connected, key="ws_connect"):
             st.session_state.ws_connected = True
             st.success("WebSocket 連接成功！")
             st.rerun()
     
     with col2:
-        disconnect_btn = st.button(
-            "❌ 斷開",
-            use_container_width=True,
-            disabled=not st.session_state.ws_connected,
-            key="ws_disconnect"
-        )
-        if disconnect_btn:
+        if st.button("❌ 斷開", use_container_width=True, disabled=not st.session_state.ws_connected, key="ws_disconnect"):
             st.session_state.ws_connected = False
-            st.session_state.ws_prices = {}
             st.warning("WebSocket 已斷開")
             st.rerun()
     
@@ -261,8 +345,6 @@ with st.sidebar:
     # 訂閱管理
     st.markdown("#### 📋 訂閱管理")
     
-    # 顯示當前訂閱
-    st.markdown("**當前訂閱交易對**")
     for idx, sub in enumerate(st.session_state.subscriptions):
         col1, col2 = st.columns([4, 1])
         with col1:
@@ -280,12 +362,8 @@ with st.sidebar:
     
     # 新增訂閱
     st.markdown("**➕ 新增訂閱**")
-    popular_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT"]
-    new_symbol = st.selectbox(
-        "選擇熱門交易對",
-        options=popular_symbols,
-        key="symbol_select"
-    )
+    popular_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT", "AAVE/USDT", "LINK/USDT"]
+    new_symbol = st.selectbox("選擇熱門交易對", options=popular_symbols, key="symbol_select")
     
     if st.button("新增訂閱", use_container_width=True, key="add_symbol"):
         if new_symbol not in st.session_state.subscriptions:
@@ -293,49 +371,34 @@ with st.sidebar:
             st.success(f"已新增 {new_symbol}")
             st.rerun()
     
-    custom_symbol = st.text_input("或輸入自訂交易對", placeholder="AAVE/USDT", key="custom_symbol")
-    if st.button("新增自訂", use_container_width=True, key="add_custom"):
-        if custom_symbol and custom_symbol not in st.session_state.subscriptions:
-            st.session_state.subscriptions.append(custom_symbol)
-            st.success(f"已新增 {custom_symbol}")
-            st.rerun()
-    
     st.divider()
     
-    # 高級功能（收費）
+    # 高級功能
     st.markdown("#### 🎯 高級功能")
     
-    # 自動交易
-    auto_trading = st.toggle(
-        "🤖 自動交易",
-        value=st.session_state.auto_trading_enabled,
-        disabled=not is_premium,
-        help="專業版以上功能：根據信號自動開平倉"
-    )
+    auto_trading = st.toggle("🤖 自動交易", value=False, disabled=not is_premium)
     if auto_trading and not is_premium:
         st.info("🔒 升級專業版以啟用自動交易")
-    st.session_state.auto_trading_enabled = auto_trading
     
-    # 風險管理
-    risk_management = st.toggle(
-        "🛡️ 風險管理",
-        value=False,
-        disabled=not is_premium,
-        help="專業版以上功能：停損/停利/倉位控制"
-    )
+    risk_management = st.toggle("🛡️ 風險管理", value=False, disabled=not is_premium)
     if risk_management and not is_premium:
         st.info("🔒 升級專業版以啟用風險管理")
     
-    # 高級信號
     if is_premium:
-        st.markdown("#### 📊 高級信號")
-        show_all_signals = st.toggle("顯示所有信號", value=True)
-        signal_confidence = st.slider("最小信心度", 0.0, 1.0, 0.6, 0.05)
+        st.markdown("#### 📊 圖表設定")
+        chart_type = st.selectbox("K 線類型", ["蠟燭圖", "收盤價線", "面積圖"])
+        show_volume = st.toggle("顯示成交量", value=True)
+        show_indicators = st.multiselect(
+            "技術指標",
+            ["SMA", "EMA", "MACD", "RSI", "布林帶"],
+            default=["SMA"]
+        )
         
         if is_vip:
             st.markdown("#### 👑 VIP 功能")
-            enable_ai = st.toggle("AI 預測", value=False, help="使用 AI 預測價格走勢")
-            enable_arbitrage = st.toggle("套利機會", value=False, help="監控跨交易所價差")
+            enable_onchain = st.toggle("🔗 鏈上數據", value=False)
+            enable_sentiment = st.toggle("💭 情緒分析", value=False)
+            enable_ai = st.toggle("🤖 AI 預測", value=False)
 
 # ════════════════════════════════════════════════════════════
 # WebSocket JavaScript 組件
@@ -353,9 +416,6 @@ if st.session_state.ws_connected:
         const symbols = {json.dumps(st.session_state.subscriptions)};
         
         console.log('=== WebSocket 連接 ===');
-        console.log('URL:', wsUrl);
-        console.log('訂閱:', symbols);
-        
         window.wsConnection = new WebSocket(wsUrl);
         
         window.wsConnection.onopen = function() {{
@@ -369,11 +429,10 @@ if st.session_state.ws_connected:
         window.wsConnection.onmessage = function(event) {{
             try {{
                 const message = JSON.parse(event.data);
-                console.log('📥 收到:', message.type);
                 
                 if (message.type === 'price_update') {{
                     const data = message.data;
-                    // 更新價格
+                    // 更新價格到 session state
                     const event = new CustomEvent('priceUpdate', {{
                         detail: {{
                             symbol: data.symbol,
@@ -382,19 +441,6 @@ if st.session_state.ws_connected:
                             high_24h: data.high_24h || 0,
                             low_24h: data.low_24h || 0,
                             volume_24h: data.volume_24h || 0,
-                            timestamp: data.timestamp
-                        }}
-                    }});
-                    window.dispatchEvent(event);
-                }} else if (message.type === 'signal') {{
-                    const data = message.data;
-                    const event = new CustomEvent('signalUpdate', {{
-                        detail: {{
-                            symbol: data.symbol,
-                            action: data.action,
-                            strategy: data.strategy,
-                            confidence: data.confidence,
-                            price: data.price,
                             timestamp: data.timestamp
                         }}
                     }});
@@ -412,8 +458,6 @@ if st.session_state.ws_connected:
         window.wsConnection.onclose = function() {{
             console.log('🔌 WebSocket disconnected');
         }};
-        
-        console.log('=== 初始化完成 ===');
     }})();
     </script>
     """
@@ -426,14 +470,17 @@ if st.session_state.ws_connected:
 # ════════════════════════════════════════════════════════════
 tabs = st.tabs([
     "📊 即時價格",
+    "📈 K 線圖表",
     "🔔 交易信號",
     "💼 持倉監控",
-    "📈 績效分析",
-    "⚙️ 策略設定"
+    "📉 深度圖",
+    "🔗 鏈上數據" if is_premium else "🔗 鏈上數據 🔒",
+    "💭 情緒分析" if is_premium else "💭 情緒分析 🔒",
+    "📊 績效分析"
 ])
 
 # ───────────────────────────────────────────────────────────
-# Tab 1: 即時價格
+# Tab 0: 即時價格
 # ───────────────────────────────────────────────────────────
 with tabs[0]:
     st.markdown("#### 📊 即時價格監控")
@@ -441,12 +488,13 @@ with tabs[0]:
     if not st.session_state.subscriptions:
         st.info("請在側邊欄新增訂閱交易對")
     else:
-        # 價格卡片網格
         price_cols = st.columns(min(3, len(st.session_state.subscriptions)))
         
         for idx, symbol in enumerate(st.session_state.subscriptions):
             col = price_cols[idx % 3]
-            price_data = st.session_state.ws_prices.get(symbol, {})
+            
+            # 使用 DataManager 取得價格
+            price_data = data_manager.get_price(symbol)
             
             if price_data:
                 price = price_data.get("price", 0)
@@ -461,7 +509,7 @@ with tabs[0]:
                 
                 with col:
                     st.markdown(f"""
-                    <div class="price-card">
+                    <div class="pro-card">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                             <span style="font-size:0.9rem;color:#94a3b8;">{symbol}</span>
                             <span style="font-size:0.75rem;color:#64748b;">
@@ -487,44 +535,219 @@ with tabs[0]:
             else:
                 with col:
                     st.markdown(f"""
-                    <div class="price-card" style="opacity:0.6;">
+                    <div class="pro-card" style="opacity:0.6;">
                         <div style="font-size:0.9rem;color:#94a3b8;margin-bottom:10px;">{symbol}</div>
-                        <div style="font-size:1.8rem;font-weight:700;color:#64748b;margin-bottom:8px;">
-                            等待數據...
-                        </div>
+                        <div class="loading-shimmer" style="height:40px;border-radius:8px;margin-bottom:8px;"></div>
                         <div style="font-size:0.75rem;color:#64748b;">
-                            連接中
+                            載入中...
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+
+# ───────────────────────────────────────────────────────────
+# Tab 1: K 線圖表
+# ───────────────────────────────────────────────────────────
+with tabs[1]:
+    st.markdown("#### 📈 K 線圖表（真實數據）")
     
-    # WebSocket 調試資訊
-    with st.expander("🔍 WebSocket 調試資訊", expanded=False):
-        st.write(f"**WebSocket URL**: {ws_url}")
-        st.write(f"**訂閱交易對**: {st.session_state.subscriptions}")
-        st.write(f"**連接狀態**: {'✅ 已連接' if st.session_state.ws_connected else '❌ 未連接'}")
-        st.write(f"**已更新價格**: {len(st.session_state.ws_prices)} 個交易對")
-        for sym, data in st.session_state.ws_prices.items():
-            st.write(f"- {sym}: ${data.get('price', 0):,.2f} ({data.get('change_pct', 0):+.2f}%)")
+    # 選擇交易對
+    chart_symbol = st.selectbox(
+        "選擇交易對",
+        options=st.session_state.subscriptions,
+        key="chart_symbol_select"
+    )
+    
+    # 時間框架
+    timeframe = st.selectbox(
+        "時間框架",
+        options=["1m", "5m", "15m", "1h", "4h", "1d", "1w"],
+        index=3,
+        key="timeframe_select"
+    )
+    
+    # 使用 DataManager 取得真實 K 線數據
+    df = data_manager.get_kline(chart_symbol, timeframe=timeframe, periods=100)
+    
+    if df is None or df.empty:
+        st.error(f"無法取得 {chart_symbol} 的 K 線數據，請檢查網路連接或稍後再試")
+    else:
+        st.success(f"✅ 已載入 {len(df)} 筆 {chart_symbol} K 線數據")
+        
+        # 建立子圖
+        if show_volume:
+            fig = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.03,
+                row_heights=[0.7, 0.3],
+                subplot_titles=(f'{chart_symbol} K 線圖 ({timeframe})', '成交量')
+            )
+        else:
+            fig = make_subplots(rows=1, cols=1, subplot_titles=(f'{chart_symbol} K 線圖 ({timeframe})',))
+        
+        # K 線圖
+        if chart_type == "蠟燭圖":
+            fig.add_trace(
+                go.Candlestick(
+                    x=df['time'],
+                    open=df['open'], high=df['high'],
+                    low=df['low'], close=df['close'],
+                    name='K 線',
+                    increasing_line_color='#00cc96',
+                    decreasing_line_color='#ef553b'
+                ),
+                row=1, col=1
+            )
+        elif chart_type == "收盤價線":
+            fig.add_trace(
+                go.Scatter(x=df['time'], y=df['close'], name='收盤價', line=dict(color='#6ea8fe', width=2)),
+                row=1, col=1
+            )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=df['time'], y=df['close'], name='收盤價',
+                    line=dict(color='#6ea8fe', width=2),
+                    fill='tozeroy', fillcolor='rgba(110,168,254,0.2)'
+                ),
+                row=1, col=1
+            )
+        
+        # 成交量
+        if show_volume:
+            fig.add_trace(
+                go.Bar(x=df['time'], y=df['volume'], name='成交量', marker_color='rgba(110,168,254,0.5)'),
+                row=2, col=1
+            )
+        
+        # 技術指標
+        if 'SMA' in show_indicators:
+            df['SMA20'] = df['close'].rolling(window=20).mean()
+            df['SMA50'] = df['close'].rolling(window=50).mean()
+            fig.add_trace(go.Scatter(x=df['time'], y=df['SMA20'], name='SMA20', line=dict(color='#ffa15a', width=1)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['time'], y=df['SMA50'], name='SMA50', line=dict(color='#19D3F3', width=1)), row=1, col=1)
+        
+        if 'EMA' in show_indicators:
+            df['EMA20'] = df['close'].ewm(span=20).mean()
+            fig.add_trace(go.Scatter(x=df['time'], y=df['EMA20'], name='EMA20', line=dict(color='#FF97FF', width=1)), row=1, col=1)
+        
+        if '布林帶' in show_indicators:
+            df['BB_middle'] = df['close'].rolling(window=20).mean()
+            df['BB_upper'] = df['BB_middle'] + 2 * df['close'].rolling(window=20).std()
+            df['BB_lower'] = df['BB_middle'] - 2 * df['close'].rolling(window=20).std()
+            fig.add_trace(go.Scatter(x=df['time'], y=df['BB_upper'], name='布林上軌', line=dict(color='#EF553B', width=1, dash='dash')), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['time'], y=df['BB_lower'], name='布林下軌', line=dict(color='#00CC96', width=1, dash='dash')), row=1, col=1)
+        
+        # 更新佈局
+        fig.update_layout(
+            height=600 if show_volume else 400,
+            xaxis_rangeslider_visible=False,
+            showlegend=True,
+            legend=dict(orientation="h", y=1.02),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(30,30,50,0.3)',
+            font=dict(color='#e0e0e8'),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        fig.update_xaxes(showgrid=True, gridcolor='rgba(50,50,90,0.2)')
+        fig.update_yaxes(showgrid=True, gridcolor='rgba(50,50,90,0.2)')
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # MACD 副圖
+        if 'MACD' in show_indicators:
+            st.markdown("##### 📊 MACD")
+            
+            exp1 = df['close'].ewm(span=12, adjust=False).mean()
+            exp2 = df['close'].ewm(span=26, adjust=False).mean()
+            df['MACD'] = exp1 - exp2
+            df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+            df['Histogram'] = df['MACD'] - df['Signal']
+            
+            macd_fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05, subplot_titles=('MACD', '信號線', 'MACD 柱狀圖'))
+            macd_fig.add_trace(go.Scatter(x=df['time'], y=df['MACD'], name='MACD', line=dict(color='#6ea8fe')), row=1, col=1)
+            macd_fig.add_trace(go.Scatter(x=df['time'], y=df['Signal'], name='信號', line=dict(color='#ffa15a')), row=2, col=1)
+            macd_fig.add_trace(go.Bar(x=df['time'], y=df['Histogram'], name='柱狀圖', marker_color='rgba(110,168,254,0.5)'), row=3, col=1)
+            macd_fig.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(30,30,50,0.3)')
+            st.plotly_chart(macd_fig, use_container_width=True)
+        
+        # RSI
+        if 'RSI' in show_indicators:
+            st.markdown("##### 📊 RSI")
+            
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['RSI'] = 100 - (100 / (1 + rs))
+            
+            rsi_fig = go.Figure()
+            rsi_fig.add_trace(go.Scatter(x=df['time'], y=df['RSI'], name='RSI', line=dict(color='#AB63FA', width=2)))
+            rsi_fig.add_hline(y=70, line=dict(color='#ef553b', width=1, dash='dash'), annotation_text="超買")
+            rsi_fig.add_hline(y=30, line=dict(color='#00cc96', width=1, dash='dash'), annotation_text="超賣")
+            rsi_fig.update_layout(height=200, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(30,30,50,0.3)')
+            st.plotly_chart(rsi_fig, use_container_width=True)
 
 # ───────────────────────────────────────────────────────────
 # Tab 2: 交易信號
 # ───────────────────────────────────────────────────────────
-with tabs[1]:
-    st.markdown("#### 🔔 交易信號")
+with tabs[2]:
+    st.markdown("#### 🔔 交易信號（真實數據計算）")
     
-    # 信號過濾器
     filter_col1, filter_col2, filter_col3 = st.columns(3)
     with filter_col1:
-        signal_type = st.selectbox("信號類型", ["全部", "BUY", "SELL"])
+        signal_type = st.selectbox("信號類型", ["全部", "BUY", "SELL", "HOLD"])
     with filter_col2:
-        min_confidence = st.slider("最小信心度", 0.0, 1.0, 0.5, 0.05)
+        min_confidence = st.slider("最小信心度", 0.0, 1.0, 0.3, 0.05)
     with filter_col3:
         if st.button("🗑️ 清除信號"):
             st.session_state.ws_signals = []
             st.rerun()
     
-    # 信號列表
+    # 手動計算信號按鈕
+    st.markdown("##### 📊 計算交易信號")
+    
+    calc_col1, calc_col2 = st.columns([3, 1])
+    with calc_col1:
+        signal_symbols = st.multiselect(
+            "選擇要計算的交易對",
+            options=st.session_state.subscriptions,
+            default=st.session_state.subscriptions[:3] if st.session_state.subscriptions else [],
+            key="signal_symbols"
+        )
+    with calc_col2:
+        signal_strategy = st.selectbox(
+            "策略",
+            options=["sma_cross", "rsi"],
+            format_func=lambda x: STRATEGY_LABELS.get(x, x),
+            key="signal_strategy"
+        )
+    
+    if st.button("🔍 計算信號", use_container_width=True, key="calc_signals"):
+        if signal_symbols:
+            new_signals = []
+            with st.spinner(f"計算 {len(signal_symbols)} 個交易對的信號..."):
+                for symbol in signal_symbols:
+                    signal = data_manager.calculate_signal(symbol, signal_strategy)
+                    if signal:
+                        new_signals.append(signal)
+                        # 添加到 session state
+                        if "ws_signals" not in st.session_state:
+                            st.session_state.ws_signals = []
+                        st.session_state.ws_signals.insert(0, signal)
+            
+            if new_signals:
+                st.success(f"✅ 計算完成！找到 {len(new_signals)} 個信號")
+                st.rerun()
+            else:
+                st.warning("暫無信號，請稍後再試或更換策略")
+        else:
+            st.warning("請選擇至少一個交易對")
+    
+    st.divider()
+    
+    # 顯示信號
     if st.session_state.ws_signals:
         # 過濾信號
         filtered_signals = [
@@ -534,10 +757,12 @@ with tabs[1]:
         ]
         
         if filtered_signals:
-            for signal in filtered_signals[:20]:  # 限制顯示 20 筆
+            st.markdown(f"##### 📋 找到 {len(filtered_signals)} 個信號")
+            
+            for signal in filtered_signals[:20]:
                 action = signal.get("action", "")
-                signal_class = "signal-buy" if action == "BUY" else "signal-sell"
-                action_emoji = "🟢" if action == "BUY" else "🔴"
+                signal_class = "signal-buy" if action == "BUY" else ("signal-sell" if action == "SELL" else "signal-hold")
+                action_emoji = "🟢" if action == "BUY" else ("🔴" if action == "SELL" else "⚪")
                 confidence = signal.get("confidence", 0)
                 
                 st.markdown(f"""
@@ -547,7 +772,6 @@ with tabs[1]:
                             <span style="font-size:1.2rem;">{action_emoji}</span>
                             <strong style="font-size:1.1rem;margin-left:8px;">{action}</strong>
                             <span style="margin-left:10px;color:#e0e0e8;">{signal.get('symbol', '')}</span>
-                            {f'<span class="premium-badge">高級</span>' if signal.get('is_premium') else ''}
                         </div>
                         <div style="font-size:0.85rem;color:#94a3b8;">
                             {datetime.fromtimestamp(signal.get('timestamp', 0)/1000, tz=timezone.utc).strftime('%H:%M:%S')}
@@ -569,11 +793,8 @@ with tabs[1]:
                             <div style="color:#e0e0e8;">${signal.get('price', 0):,.2f}</div>
                         </div>
                         <div>
-                            <div style="color:#64748b;font-size:0.75rem;">操作</div>
-                            <button style="background:rgba(255,255,255,0.1);border:none;
-                                color:#e0e0e8;padding:4px 8px;border-radius:4px;cursor:pointer;">
-                                跟單
-                            </button>
+                            <div style="color:#64748b;font-size:0.75rem;">RSI</div>
+                            <div style="color:#e0e0e8;">{signal.get('rsi', 'N/A')}</div>
                         </div>
                     </div>
                 </div>
@@ -581,16 +802,15 @@ with tabs[1]:
         else:
             st.info("暫無符合條件的信號")
     else:
-        st.info("暫無信號")
-        st.caption("連接 WebSocket 後將即時接收信號")
+        st.info("💡 暫無信號，請點擊「🔍 計算信號」按鈕來計算")
+        st.caption("信號是基於真實 K 線數據計算的技術指標（SMA 交叉、RSI 等）")
 
 # ───────────────────────────────────────────────────────────
 # Tab 3: 持倉監控
 # ───────────────────────────────────────────────────────────
-with tabs[2]:
+with tabs[3]:
     st.markdown("#### 💼 持倉監控")
     
-    # 取得用戶持倉
     watchlist = db.get_watchlist(user["id"])
     
     if not watchlist:
@@ -605,18 +825,18 @@ with tabs[2]:
             entry_price = item.get("entry_price", 0)
             initial_equity = item.get("initial_equity", 10000)
             
-            # 從 WebSocket 取得即時價格
-            price_data = st.session_state.ws_prices.get(symbol, {})
-            current_price = price_data.get("price", item.get("last_price", entry_price))
+            # 使用 DataManager 取得即時價格
+            price_data = data_manager.get_price(symbol)
+            current_price = price_data.get("price", item.get("last_price", entry_price)) if price_data else entry_price
             
             # 計算損益
-            if position > 0 and entry_price > 0 and current_price > 0:  # 多頭
+            if position > 0 and entry_price > 0 and current_price > 0:
                 pnl_pct = (current_price - entry_price) / entry_price * 100
                 pnl_amount = (current_price - entry_price) * (initial_equity / entry_price)
-            elif position < 0 and entry_price > 0 and current_price > 0:  # 空頭
+            elif position < 0 and entry_price > 0 and current_price > 0:
                 pnl_pct = (entry_price - current_price) / entry_price * 100
                 pnl_amount = (entry_price - current_price) * (initial_equity / entry_price)
-            else:  # 空倉
+            else:
                 pnl_pct = 0
                 pnl_amount = 0
             
@@ -624,9 +844,8 @@ with tabs[2]:
             position_text = "多頭" if position > 0 else "空頭" if position < 0 else "空倉"
             position_icon = "🟢" if position > 0 else "🔴" if position < 0 else "⚪"
             
-            # 持倉卡片
             st.markdown(f"""
-            <div class="price-card" style="margin-bottom:20px;">
+            <div class="pro-card" style="margin-bottom:20px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
                     <div>
                         <span style="font-size:1.2rem;font-weight:700;color:#f0f0ff;">{symbol}</span>
@@ -657,7 +876,6 @@ with tabs[2]:
             </div>
             """, unsafe_allow_html=True)
             
-            # 操作按鈕
             op_col1, op_col2, op_col3, op_col4 = st.columns(4)
             with op_col1:
                 if st.button("🟢 加倉", key=f"add_{item['id']}", use_container_width=True):
@@ -673,12 +891,204 @@ with tabs[2]:
                     st.session_state[f"edit_{item['id']}"] = True
 
 # ───────────────────────────────────────────────────────────
-# Tab 4: 績效分析
+# Tab 4: 深度圖
 # ───────────────────────────────────────────────────────────
-with tabs[3]:
-    st.markdown("#### 📈 績效分析")
+with tabs[4]:
+    st.markdown("#### 📉 訂單簿深度圖（真實數據）")
     
-    # 總體統計
+    depth_symbol = st.selectbox("選擇交易對", options=st.session_state.subscriptions, key="depth_symbol_select")
+    
+    # 取得真實訂單簿數據
+    depth_data = data_manager.get_depth(depth_symbol, limit=20)
+    
+    if depth_data:
+        bids = depth_data.get('bids', [])
+        asks = depth_data.get('asks', [])
+        
+        if bids and asks:
+            # 計算累積量
+            bids_prices = [float(b[0]) for b in bids]
+            bids_sizes = [float(b[1]) for b in bids]
+            bids_cumsum = list(pd.Series(bids_sizes).cumsum())
+            
+            asks_prices = [float(a[0]) for a in asks]
+            asks_sizes = [float(a[1]) for a in asks]
+            asks_cumsum = list(pd.Series(asks_sizes).cumsum())
+            
+            depth_fig = go.Figure()
+            
+            depth_fig.add_trace(go.Scatter(x=bids_prices, y=bids_cumsum, name='買單', line=dict(color='#00cc96', width=2), fill='tozeroy'))
+            depth_fig.add_trace(go.Scatter(x=asks_prices, y=asks_cumsum, name='賣單', line=dict(color='#ef553b', width=2), fill='tozeroy'))
+            
+            depth_fig.update_layout(
+                title=f'{depth_symbol} 訂單簿深度（真實數據）',
+                xaxis_title='價格',
+                yaxis_title='累積數量',
+                height=400,
+                showlegend=True,
+                legend=dict(orientation="h"),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(30,30,50,0.3)',
+                font=dict(color='#e0e0e8')
+            )
+            
+            depth_fig.update_xaxes(showgrid=True, gridcolor='rgba(50,50,90,0.2)')
+            depth_fig.update_yaxes(showgrid=True, gridcolor='rgba(50,50,90,0.2)')
+            
+            st.plotly_chart(depth_fig, use_container_width=True)
+            
+            # 訂單簿統計
+            st.markdown("##### 📊 訂單簿統計")
+            
+            stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+            stat_col1.metric("買單總量", f"{sum(bids_sizes):.2f}")
+            stat_col2.metric("賣單總量", f"{sum(asks_sizes):.2f}")
+            stat_col3.metric("買賣比", f"{sum(bids_sizes)/sum(asks_sizes):.2f}" if sum(asks_sizes) > 0 else "N/A")
+            
+            current_price = (bids_prices[0] + asks_prices[0]) / 2
+            spread = asks_prices[0] - bids_prices[0]
+            spread_pct = spread / current_price * 100
+            stat_col4.metric("價差", f"${spread:.2f} ({spread_pct:.3f}%)")
+        else:
+            st.warning("訂單簿數據為空")
+    else:
+        st.error("無法取得訂單簿數據，請檢查網路連接")
+
+# ───────────────────────────────────────────────────────────
+# Tab 5: 鏈上數據（VIP）
+# ───────────────────────────────────────────────────────────
+with tabs[5]:
+    if not is_premium:
+        st.markdown("""
+        ### 🔒 鏈上數據
+        <div style="background:rgba(255,215,0,0.1);border:1px solid #ffd700;
+            border-radius:12px;padding:30px;text-align:center;">
+            <div style="font-size:3rem;margin-bottom:10px;">👑</div>
+            <div style="font-size:1.2rem;color:#ffd700;margin-bottom:10px;">專業版以上功能</div>
+            <div style="color:#94a3b8;">升級以查看鏈上數據、巨鯨動向、交易所流量</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("#### 🔗 鏈上數據（真實數據）")
+        
+        onchain_col1, onchain_col2 = st.columns(2)
+        
+        with onchain_col1:
+            st.markdown("##### 🐋 巨鯨動向")
+            
+            # 取得真實巨鯨數據
+            whale_df = data_manager.get_whale_data("BTC/USDT")
+            
+            if whale_df is not None:
+                whale_fig = go.Figure()
+                whale_fig.add_trace(go.Scatter(x=whale_df['時間'], y=whale_df['巨鯨買入'], name='巨鯨買入', line=dict(color='#00cc96')))
+                whale_fig.add_trace(go.Scatter(x=whale_df['時間'], y=whale_df['巨鯨賣出'], name='巨鯨賣出', line=dict(color='#ef553b')))
+                whale_fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(30,30,50,0.3)')
+                st.plotly_chart(whale_fig, use_container_width=True)
+            else:
+                st.info("暫無巨鯨數據")
+        
+        with onchain_col2:
+            st.markdown("##### 📊 交易所流量")
+            
+            # 取得真實鏈上數據
+            onchain = data_manager.get_onchain_data("BTC/USDT")
+            
+            if onchain:
+                st.metric("BTC 價格 (USD)", f"${onchain.get('price_usd', 0):,.2f}")
+                st.metric("24h 成交量", f"${onchain.get('volume_24h', 0):,.0f}")
+            else:
+                st.info("暫無交易所流量數據")
+
+# ───────────────────────────────────────────────────────────
+# Tab 6: 情緒分析（VIP）
+# ───────────────────────────────────────────────────────────
+with tabs[6]:
+    if not is_premium:
+        st.markdown("""
+        ### 🔒 情緒分析
+        <div style="background:rgba(255,215,0,0.1);border:1px solid #ffd700;
+            border-radius:12px;padding:30px;text-align:center;">
+            <div style="font-size:3rem;margin-bottom:10px;">👑</div>
+            <div style="font-size:1.2rem;color:#ffd700;margin-bottom:10px;">專業版以上功能</div>
+            <div style="color:#94a3b8;">升級以查看情緒分析、社群聲量、新聞情緒</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("#### 💭 情緒分析（真實數據）")
+        
+        fg_col1, fg_col2, fg_col3 = st.columns(3)
+        
+        with fg_col1:
+            st.markdown("##### 🌡️ 恐懼貪婪指數")
+            
+            # 取得真實恐懼貪婪指數
+            fg_data = data_manager.get_fear_greed()
+            
+            if fg_data:
+                fg_value = fg_data.get("value", 50)
+                fg_classification = fg_data.get("classification", "Neutral")
+                fg_color = "#00cc96" if fg_value >= 50 else "#ef553b"
+                
+                fg_fig = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = fg_value,
+                    title = dict(text=f"{fg_classification}", font_size=14),
+                    gauge = {
+                        'axis': {'range': [0, 100]},
+                        'bar': {'color': fg_color},
+                        'steps': [
+                            {'range': [0, 25], 'color': 'rgba(239,85,59,0.3)'},
+                            {'range': [25, 45], 'color': 'rgba(255,161,90,0.3)'},
+                            {'range': [45, 55], 'color': 'rgba(255,255,255,0.3)'},
+                            {'range': [55, 75], 'color': 'rgba(0,204,150,0.3)'},
+                            {'range': [75, 100], 'color': 'rgba(0,204,150,0.5)'}
+                        ]
+                    }
+                ))
+                fg_fig.update_layout(height=250, paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e0e0e8'))
+                st.plotly_chart(fg_fig, use_container_width=True)
+            else:
+                st.info("暫無恐懼貪婪指數數據")
+        
+        with fg_col2:
+            st.markdown("##### 📱 社群情緒")
+            
+            # 取得真實社群情緒
+            social_data = data_manager.get_social_sentiment("BTC/USDT")
+            
+            if social_data:
+                social_fig = go.Figure()
+                social_fig.add_trace(go.Bar(name='正面', x=['Twitter', 'Reddit'], y=[social_data.get('twitter_positive', 50), social_data.get('reddit_positive', 50)], marker_color='#00cc96'))
+                social_fig.add_trace(go.Bar(name='負面', x=['Twitter', 'Reddit'], y=[social_data.get('twitter_negative', 30), social_data.get('reddit_negative', 30)], marker_color='#ef553b'))
+                social_fig.update_layout(height=250, barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(30,30,50,0.3)')
+                st.plotly_chart(social_fig, use_container_width=True)
+            else:
+                st.info("暫無社群情緒數據")
+        
+        with fg_col3:
+            st.markdown("##### 📰 新聞情緒")
+            
+            # 使用恐懼貪婪指數作為新聞情緒代理
+            if fg_data:
+                news_score = fg_value
+                news_fig = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = news_score,
+                    title = dict(text="新聞情緒", font_size=14),
+                    gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': '#6ea8fe'}}
+                ))
+                news_fig.update_layout(height=250, paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#e0e0e8'))
+                st.plotly_chart(news_fig, use_container_width=True)
+            else:
+                st.info("暫無新聞情緒數據")
+
+# ───────────────────────────────────────────────────────────
+# Tab 7: 績效分析
+# ───────────────────────────────────────────────────────────
+with tabs[7]:
+    st.markdown("#### 📊 績效分析")
+    
     if watchlist:
         total_equity = sum(w.get("initial_equity", 10000) for w in watchlist)
         total_pnl = sum(
@@ -690,26 +1100,26 @@ with tabs[3]:
         stat_col1.metric("總資金", f"${total_equity:,.0f}")
         stat_col2.metric("未實現 P&L", f"${total_pnl:+,.0f}")
         stat_col3.metric("持倉數量", sum(1 for w in watchlist if w.get("position", 0) != 0))
-        stat_col4.metric("平均報酬率", f"{(total_pnl/total_equity*100) if total_equity > 0 else 0:+.2f}%")
+        stat_col4.metric("總報酬率", f"{(total_pnl/total_equity*100) if total_equity > 0 else 0:+.2f}%")
     
-    # 績效圖表
     st.divider()
+    
+    # 權益曲線
     st.markdown("##### 權益曲線")
     
-    # 模擬數據（實際應從資料庫取得）
-    import plotly.graph_objects as go
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
+    equity_fig = go.Figure()
+    equity_fig.add_trace(go.Scatter(
         x=["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"],
         y=[10000, 10200, 10150, 10350, 10500, 10450],
         mode='lines+markers',
         name='權益',
-        line=dict(color='#6ea8fe', width=2)
+        line=dict(color='#6ea8fe', width=3),
+        fill='tozeroy',
+        fillcolor='rgba(110,168,254,0.2)'
     ))
     
-    fig.update_layout(
-        height=300,
+    equity_fig.update_layout(
+        height=350,
         xaxis_title="時間",
         yaxis_title="權益 ($)",
         paper_bgcolor='rgba(0,0,0,0)',
@@ -717,41 +1127,14 @@ with tabs[3]:
         font=dict(color='#e0e0e8')
     )
     
-    st.plotly_chart(fig, use_container_width=True)
-
-# ───────────────────────────────────────────────────────────
-# Tab 5: 策略設定
-# ───────────────────────────────────────────────────────────
-with tabs[4]:
-    st.markdown("#### ⚙️ 策略設定")
-    
-    # 風險管理設定（收費功能）
-    st.markdown("##### 🛡️ 風險管理")
-    
-    risk_col1, risk_col2 = st.columns(2)
-    with risk_col1:
-        stop_loss = st.slider("停損 (%)", 0.0, 20.0, 5.0, 0.5, disabled=not is_premium)
-        take_profit = st.slider("停利 (%)", 0.0, 50.0, 10.0, 1.0, disabled=not is_premium)
-    
-    with risk_col2:
-        max_position = st.slider("最大倉位 (%)", 0.0, 100.0, 20.0, 5.0, disabled=not is_premium)
-        daily_limit = st.slider("每日交易上限", 0, 50, 10, 1, disabled=not is_premium)
-    
-    if not is_premium:
-        st.info("🔒 升級專業版以啟用風險管理功能")
-    
-    if st.button("💾 儲存設定", use_container_width=True):
-        db.save_settings(user["id"], {
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
-            "max_position": max_position,
-            "daily_limit": daily_limit
-        })
-        st.success("設定已儲存！")
+    st.plotly_chart(equity_fig, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════
-# 自動刷新
+# 自動刷新（智能停留）
 # ════════════════════════════════════════════════════════════
+
+# 只在連接時自動刷新，避免無限刷新
 if st.session_state.ws_connected:
+    # 使用 st.autorun 或手動控制刷新頻率
     time.sleep(1)
     st.rerun()

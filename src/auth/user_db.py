@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS strategy_presets (
 CREATE TABLE IF NOT EXISTS watchlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
+    account_id TEXT UNIQUE NOT NULL,  -- 唯一帳戶號碼
     symbol TEXT NOT NULL,
     exchange TEXT DEFAULT 'okx',
     timeframe TEXT DEFAULT '1h',
@@ -189,11 +190,108 @@ class UserDB:
         self._rate_limits: dict[str, list[float]] = {}
 
     def _migrate(self) -> None:
+        """資料庫遷移 - 為舊資料庫添加新欄位"""
+        # backtest_history 表遷移
         try:
             self._conn.execute("ALTER TABLE backtest_history ADD COLUMN tags TEXT DEFAULT ''")
             self._conn.commit()
         except sqlite3.OperationalError:
             pass
+        
+        # watchlist 表遷移 - 添加 account_id 欄位
+        try:
+            self._conn.execute("ALTER TABLE watchlist ADD COLUMN account_id TEXT")
+            self._conn.commit()
+            
+            # 為現有記錄生成 account_id
+            cur = self._conn.execute("SELECT id FROM watchlist WHERE account_id IS NULL")
+            null_account_rows = cur.fetchall()
+            for row in null_account_rows:
+                account_id = self._generate_account_id(row[0])
+                self._conn.execute("UPDATE watchlist SET account_id=? WHERE id=?", (account_id, row[0]))
+            self._conn.commit()
+            
+            # 設置 NOT NULL 約束（需要重建表）
+            self._conn.execute("CREATE TABLE IF NOT EXISTS watchlist_new AS SELECT * FROM watchlist")
+            self._conn.execute("DROP TABLE watchlist")
+            self._conn.execute("""
+                CREATE TABLE watchlist (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    account_id TEXT UNIQUE NOT NULL,
+                    symbol TEXT NOT NULL,
+                    exchange TEXT DEFAULT 'okx',
+                    timeframe TEXT DEFAULT '1h',
+                    strategy TEXT NOT NULL,
+                    strategy_params TEXT DEFAULT '{}',
+                    initial_equity REAL DEFAULT 10000,
+                    leverage REAL DEFAULT 1.0,
+                    is_active INTEGER DEFAULT 1,
+                    created_at REAL NOT NULL,
+                    last_check REAL DEFAULT 0,
+                    last_signal INTEGER DEFAULT 0,
+                    last_price REAL DEFAULT 0,
+                    entry_price REAL DEFAULT 0,
+                    position INTEGER DEFAULT 0,
+                    pnl_pct REAL DEFAULT 0,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+            self._conn.execute("INSERT INTO watchlist SELECT * FROM watchlist_new")
+            self._conn.execute("DROP TABLE watchlist_new")
+            self._conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                pass
+        
+        # watchlist 表遷移 - 添加 last_price 欄位
+        try:
+            self._conn.execute("ALTER TABLE watchlist ADD COLUMN last_price REAL DEFAULT 0")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        
+        # watchlist 表遷移 - 添加 entry_price 欄位
+        try:
+            self._conn.execute("ALTER TABLE watchlist ADD COLUMN entry_price REAL DEFAULT 0")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        
+        # watchlist 表遷移 - 添加 position 欄位
+        try:
+            self._conn.execute("ALTER TABLE watchlist ADD COLUMN position INTEGER DEFAULT 0")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        
+        # watchlist 表遷移 - 添加 pnl_pct 欄位
+        try:
+            self._conn.execute("ALTER TABLE watchlist ADD COLUMN pnl_pct REAL DEFAULT 0")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass
+    
+    def _generate_account_id(self, watch_id: int = None) -> str:
+        """生成唯一帳戶號碼"""
+        import random
+        import string
+        from datetime import datetime
+        
+        # 格式：ACC-YYYYMMDD-XXXXXX
+        # YYYYMMDD: 日期
+        # XXXXXX: 6 位隨機字元（數字 + 大寫字母）
+        
+        date_str = datetime.now().strftime("%Y%m%d")
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
+        account_id = f"ACC-{date_str}-{random_str}"
+        
+        # 確保唯一性
+        if watch_id:
+            account_id = f"ACC-{date_str}-{watch_id:06d}"
+        
+        return account_id
 
     def _ensure_admin(self) -> None:
         cur = self._conn.execute("SELECT id FROM users WHERE username='admin'")
@@ -597,11 +695,14 @@ class UserDB:
     def add_watch(self, user_id: int, symbol: str, exchange: str, timeframe: str,
                   strategy: str, strategy_params: dict, initial_equity: float = 10000,
                   leverage: float = 1.0) -> int:
+        # 生成唯一帳戶號碼
+        account_id = self._generate_account_id()
+        
         cur = self._conn.execute(
-            """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy, 
+            """INSERT INTO watchlist (user_id, account_id, symbol, exchange, timeframe, strategy,
                strategy_params, initial_equity, leverage, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (user_id, symbol, exchange, timeframe, strategy,
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (user_id, account_id, symbol, exchange, timeframe, strategy,
              json.dumps(strategy_params, ensure_ascii=False), initial_equity, leverage, time.time()),
         )
         self._conn.commit()
@@ -613,6 +714,16 @@ class UserDB:
         for r in cur.fetchall():
             d = dict(r)
             d["strategy_params"] = json.loads(d.get("strategy_params") or "{}")
+            
+            # 確保數值欄位正確轉換
+            d["initial_equity"] = float(d.get("initial_equity", 10000) or 10000)
+            d["leverage"] = float(d.get("leverage", 1.0) or 1.0)
+            d["last_price"] = float(d.get("last_price", 0) or 0)
+            d["entry_price"] = float(d.get("entry_price", 0) or 0)
+            d["position"] = int(d.get("position", 0) or 0)
+            d["pnl_pct"] = float(d.get("pnl_pct", 0) or 0)
+            d["is_active"] = int(d.get("is_active", 1) or 1)
+            
             rows.append(d)
         return rows
 

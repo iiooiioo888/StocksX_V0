@@ -1,289 +1,526 @@
-# StocksX — 通用回測平台
+# StocksX — 機構級專業回測與交易監控平台
 
-跨市場策略回測平台，支援加密貨幣、美股、台股、ETF、期貨、指數。內建 15 種交易策略、31 個交易所手續費資料庫、即時策略監控、用戶系統與管理員後台。
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Streamlit](https://img.shields.io/badge/streamlit-1.28.0-red.svg)](https://streamlit.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 功能總覽
+## 📊 平台概覽
 
-### 📊 回測引擎
-- **15 種策略**：雙均線交叉、EMA 交叉、MACD 交叉、RSI、布林帶、唐奇安通道、超級趨勢、雙推力、VWAP 回歸、一目均衡表、KD 隨機指標、威廉指標、ADX 趨勢、拋物線 SAR、買入持有
-- **Mark-to-Market**：權益曲線即時反映未實現盈虧
-- **手續費系統**：31 個交易所/協議費率（CEX、DEX、傳統市場），含滑點模擬
-- **批量最優搜尋**：窮舉 策略 × K線週期 × 參數，找出全局最優組合
-- **自訂策略參數**：每個策略的參數均可在 UI 中調整
+**StocksX** 是一個機構級的專業回測與交易監控平台，整合了：
 
-### 🌍 多市場支援
+- 🔍 **多市場回測** - 加密貨幣、美股、台股、ETF、期貨
+- 📈 **15+ 專業策略** - 雙均線、MACD、RSI、布林帶等
+- ⚡ **即時監控** - WebSocket 實時推送、自動交易
+- 🤖 **AI 增強** - 情緒分析、鏈上數據、AI 預測
+- 📊 **專業圖表** - Plotly 互動圖表、技術指標
 
-| 大類 | 細類 | 數據來源 |
-|------|------|----------|
-| ₿ 加密貨幣 | 主流永續、主流現貨、DeFi、Layer2/新幣、Meme | CCXT（11 交易所） |
-| 🏛️ 傳統市場 | 美股、台股、ETF、期貨/商品、指數 | Yahoo Finance |
+---
 
-**參考來源**：傳統市場 K 線、首頁期貨報價與熱門標的均以 [Yahoo Finance](https://finance.yahoo.com/) 為參考與數據來源。
+## 🎯 核心功能
 
-**行情架構（矩陣式）**：一級為**資產類別**（加密資產、傳統股票/指數、外匯、大宗商品、情緒儀表板），二級為**交易類型**（現貨、期貨/合約、期權、指標）。期貨歸屬到對應資產下（股指期貨→傳統、商品期貨→大宗、外匯期貨→外匯），情緒/預測市場獨立為儀表板，避免與資產並列。
+### 1. 回測系統
 
-**支援交易所**：OKX、Bitget、Gate.io、KuCoin、MEXC、HTX、BingX、WOO X、Crypto.com、Binance*、Bybit*（*受地區限制，自動回退）
+| 功能 | 說明 |
+|------|------|
+| **多市場支援** | 加密貨幣（11 個交易所）、美股、台股、ETF、期貨 |
+| **15+ 專業策略** | 趨勢、擺盪、突破、均值回歸 |
+| **參數優化** | 網格搜索、最佳化推薦 |
+| **績效分析** | Sharpe、Sortino、Calmar、最大回撤 |
+| **Walk-Forward** | 向前分析、避免過擬合 |
 
-## 數據 API 申請與來源
+### 2. 即時監控
 
-以下是依「數據類型」分類的主要 API 來源，方便日後擴充實盤數據或宏觀/情緒指標：
+| 功能 | 說明 |
+|------|------|
+| **WebSocket 推送** | 幣安真實數據、1 秒更新 |
+| **策略訂閱** | 多交易對 × 多策略組合 |
+| **自動交易** | 根據信號自動開平倉 |
+| **風險管理** | 停損/停利、倉位控制 |
+| **持倉追蹤** | 未實現 P&L、即時損益 |
 
-### API Key 設定與統一入口
+### 3. 專業圖表
 
-- **環境變數 / .env**：  
-  - 所有外部 API 金鑰一律走環境變數，建議在專案根目錄建立 `.env`（不納入 git）並搭配 `python-dotenv` 自動載入。  
-  - 主要變數名稱（對應上列服務）：  
-    - `FRED_API_KEY`  
-    - `TRADING_ECONOMICS_API_KEY`  
-    - `COINGECKO_API_KEY`  
-    - `COINMARKETCAP_API_KEY`  
-    - `GLASSNODE_API_KEY`  
-    - `ALPHA_VANTAGE_API_KEY`  
-    - `FMP_API_KEY`  
-    - `POLYGON_API_KEY`  
-    - `ALPACA_API_KEY` / `ALPACA_API_SECRET`  
-    - `DASHSCOPE_API_KEY`（Qwen AI，用於 `src/ai/qwen_client.py`）
-- **程式端入口**：  
-  - 統一由 `src/config_secrets.py` 讀取與檢查金鑰，避免在各模組重複處理。  
-  - 數據抓取函式集中在 `src/data/sources/api_hub.py`，例如：  
-    - `fetch_fred_series(...)`  
-    - `fetch_alpha_vantage(...)`  
-    - `fetch_polygon(...)`  
-    - `fetch_coingecko(...)`  
-    - `fetch_coinmarketcap(...)`  
-    - `fetch_glassnode(...)`  
-    - `fetch_trading_economics(...)`  
-    - `fetch_polymarket_markets(...)`
+| 圖表 | 說明 |
+|------|------|
+| **K 線圖** | 蠟燭圖、收盤價線、面積圖 |
+| **技術指標** | SMA/EMA、MACD、RSI、布林帶 |
+| **深度圖** | 真實訂單簿、買賣累積曲線 |
+| **權益曲線** | 累積報酬、收益分佈 |
+| **情緒儀表** | 恐懼貪婪、社群情緒、新聞情緒 |
 
-### 1. 宏觀經濟數據 (Macro Economic)
+### 4. 數據整合
 
-- **FRED (Federal Reserve Economic Data)**  
-  - **網址**：[`https://fred.stlouisfed.org/`](https://fred.stlouisfed.org/)  
-  - **費用**：免費（需註冊 API Key）  
-  - **數據**：美國 CPI、非農就業、利率、GDP 等權威宏觀數據。
-- **TradingEconomics**  
-  - **網址**：[`https://tradingeconomics.com/`](https://tradingeconomics.com/)  
-  - **費用**：有限免費 / 付費  
-  - **數據**：全球各國宏觀指標與經濟日曆。
+| 數據源 | 說明 |
+|--------|------|
+| **CCXT** | 11 個加密交易所（Binance、OKX、Bybit 等） |
+| **Yahoo Finance** | 美股、台股、ETF、期貨、指數 |
+| **Blockchain.com** | BTC 鏈上數據、巨鯨動向 |
+| **Alternative.me** | 恐懼貪婪指數 |
+| **WebSocket** | 幣安即時推送（1 秒更新） |
 
-### 2. 加密貨幣市場與鏈上數據 (Crypto & On-Chain)
+---
 
-- **CoinGecko**  
-  - **網址**：[`https://www.coingecko.com/`](https://www.coingecko.com/)  
-  - **費用**：免費層級有限 / 付費  
-  - **數據**：代幣價格、市值、交易量等基本市場數據。
-- **CoinMarketCap**  
-  - **網址**：[`https://coinmarketcap.com/`](https://coinmarketcap.com/)  
-  - **費用**：免費層級有限 / 付費  
-  - **數據**：代幣價格、排名、交易所資訊。
-- **Glassnode**  
-  - **網址**：[`https://glassnode.com/`](https://glassnode.com/)  
-  - **費用**：免費層級有限 / 付費  
-  - **數據**：鏈上指標（活躍地址、哈希率、MVRV 等）。
+## 🚀 快速開始
 
-### 3. 股市與綜合金融數據 (Stocks & General)
-
-- **Alpha Vantage**  
-  - **網址**：[`https://www.alphavantage.co/`](https://www.alphavantage.co/)  
-  - **費用**：免費（有每日呼叫上限）/ 付費  
-  - **數據**：美股、匯率、常用技術指標。
-- **Financial Modeling Prep (FMP)**  
-  - **網址**：[`https://financialmodelingprep.com/`](https://financialmodelingprep.com/)  
-  - **費用**：免費層級有限 / 付費  
-  - **數據**：財報、股價、部分經濟數據。
-- **Polygon.io**  
-  - **網址**：[`https://polygon.io/`](https://polygon.io/)  
-  - **費用**：免費層級有限 / 付費  
-  - **數據**：美股、外匯、加密的即時與歷史數據。
-
-### 4. 券商交易接口 (Brokerage API)
-
-- **Interactive Brokers (IBKR)**  
-  - **網址**：[`https://www.interactivebrokers.com/`](https://www.interactivebrokers.com/)  
-  - **費用**：需開戶（市場數據可能需額外付費）  
-  - **數據**：全球市場即時行情與下單交易接口。
-- **Alpaca**  
-  - **網址**：[`https://alpaca.markets/`](https://alpaca.markets/)  
-  - **費用**：免費（美股）  
-  - **數據**：美股即時數據與交易（適合程式交易 / 模擬帳戶）。
-
-### 5. 情緒與另類數據 (Sentiment & Alternative)
-
-- **Alternative.me — Crypto Fear & Greed Index**  
-  - **網址**：[`https://alternative.me/crypto/fear-and-greed-index/`](https://alternative.me/crypto/fear-and-greed-index/)  
-  - **費用**：免費（無需 API Key，直接存取 URL）  
-  - **數據**：加密貨幣恐懼與貪婪情緒指標。
-- **CBOE**  
-  - **網址**：[`https://www.cboe.com/`](https://www.cboe.com/)  
-  - **費用**：部分公開 / 付費  
-  - **數據**：VIX 波動率指數與相關衍生商品數據。
-
-### 6. 預測市場 (Prediction Markets)
-
-- **Polymarket / Gamma API**  
-  - **Base URL**：[`https://gamma-api.polymarket.com`](https://gamma-api.polymarket.com)  
-  - **權限**：公開市場數據無需 API Key，下單/持倉相關需錢包簽名。  
-  - **限制**：有頻率限制，實務上建議在應用端增加快取（例如記憶體 / SQLite / Redis）。  
-  - **數據內容**：事件概率、成交量、開盤/結算狀態、結果等。  
-  - **常見端點**（社群整理，非官方文件）：  
-    - 取得市場列表：`GET /markets`  
-    - 取得事件詳情：`GET /events/{id}`  
-    - 取得使用者相關通知/持倉：`GET /notifications`（需認證）  
-  - **Python 抓取範例**（簡化版）：
-
-    ```python
-    import requests
-    from typing import List, Dict, Any
-
-    BASE_URL = "https://gamma-api.polymarket.com"
-
-    def get_polymarket_markets(query: str = "", limit: int = 10) -> List[Dict[str, Any]]:
-        """從 Polymarket Gamma API 抓取市場列表（僅示意用）"""
-        url = f"{BASE_URL}/markets"
-        params = {"limit": limit}
-        if query:
-            params["search"] = query
-
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # 依常見欄位做基本整理（實際欄位可能會有變動）
-        markets: List[Dict[str, Any]] = []
-        for m in data:
-            markets.append(
-                {
-                    "title": m.get("title"),
-                    "yes_bid": m.get("yesBid"),
-                    "volume": m.get("volume"),
-                    "status": m.get("status"),
-                }
-            )
-        return markets
-    ```
-
-  - **整合建議**：  
-    - 可在 `MARKET_HIERARCHY` 中新增一個大類，例如：  
-      - `🎲 預測市場` → `加密事件 / 宏觀事件` 等子分類，只儲存自定義代碼（例如 `POLY_BTC_100K`）與顯示名稱。  
-    - 在數據層以這些代碼對應到實際 Polymarket 查詢條件或市場 ID，由獨立模組（例如 `src/data/sources/polymarket.py`）負責呼叫 Gamma API 並轉換成平台統一格式。  
-    - 需注意端點屬「非官方文件」，可能隨時間變動，建議加上錯誤處理與快取機制。
-
-### 📈 互動圖表
-- Plotly K 線圖（Candlestick）+ 成交量 + 買賣點標記
-- 多策略權益曲線對比
-- 回撤分析圖
-- 交易損益分佈直方圖
-- 持倉時長分佈圖
-- 每日報酬率熱力圖
-- 策略信號視覺化
-
-### 👤 用戶系統
-- 註冊/登入（PBKDF2 密碼雜湊、帳號鎖定、Rate Limiting）
-- 回測歷史自動保存、備註標籤
-- 策略收藏 & 對比圖
-- 策略參數預設儲存/載入
-- 回測提醒（報酬率/回撤/夏普閾值通知）
-- 偏好設定、修改密碼
-
-### 📡 策略監控
-- 訂閱任意交易對 × 策略組合
-- 即時價格、策略信號、持倉狀態
-- 帳戶價值 & 未實現 P&L 追蹤
-- 暫停/啟用/刪除訂閱
-
-### 🛠️ 管理員後台
-- 系統統計（用戶數、回測數、熱門標的）
-- 用戶 CRUD（新增、修改角色、重設密碼、停用、刪除）
-- 安全日誌（登入記錄、失敗次數）
-- 數據快取管理
-
-### 🔒 安全防護
-- PBKDF2 密碼雜湊（100k 迭代）
-- 登入失敗 5 次鎖定 5 分鐘
-- 輸入消毒（XSS/SQL Injection 防護）
-- Session 1 小時自動過期
-- Rate Limiting（登入 10次/分、註冊 5次/5分）
-
-## 安裝
+### 安裝依賴
 
 ```bash
+# 克隆專案
+git clone https://github.com/yourusername/StocksX.git
+cd StocksX
+
+# 安裝依賴
 pip install -r requirements.txt
 ```
 
-依賴：`ccxt`、`streamlit`、`pandas`、`plotly`、`yfinance`、`python-dotenv`、`dashscope`（可選）
-
-## 啟動
+### 環境配置
 
 ```bash
-streamlit run app.py
+# 複製環境變數範例
+cp .env.example .env
+
+# 編輯 .env（填入 API Key 等配置）
 ```
 
-瀏覽器開啟後：
-1. 預設管理員帳號：`admin` / `admin123`
-2. 選擇市場大類（加密貨幣 / 傳統市場）→ 細類 → 交易對
-3. 點擊「🚀 執行回測」
+### 啟動應用
 
-## 專案結構
+```bash
+# 啟動 Streamlit
+streamlit run app.py
+
+# 訪問：http://localhost:8501
+```
+
+### 啟動 WebSocket（可選）
+
+```bash
+# 啟動幣安 WebSocket 服務
+python -m src.websocket_binance
+
+# WebSocket URL: ws://localhost:8001/ws
+```
+
+---
+
+## 📁 專案結構
 
 ```
 StocksX_V0/
-├── app.py                        # 多頁面入口（Landing Page）
+├── app.py                          # 主頁（儀表板）
 ├── pages/
-│   ├── 1_🔐_登入.py              # 登入/註冊
-│   ├── 2_📊_回測.py              # 回測主頁（10策略、K線圖、績效分析）
-│   ├── 3_📜_歷史.py              # 回測歷史、收藏、預設、提醒、設定
-│   ├── 4_🛠️_管理.py             # 管理員後台
-│   └── 5_📡_監控.py              # 策略訂閱 & 即時監控
+│   ├── 1_🔐_登入.py                 # 用戶登入
+│   ├── 2_₿_加密回測.py              # 加密貨幣回測
+│   ├── 2_🏛️_傳統回測.py            # 傳統市場回測
+│   ├── 3_📜_歷史.py                 # 回測歷史
+│   ├── 4_🛠️_管理.py                # 管理後台
+│   ├── 5_📡_監控.py                 # 策略監控（優化版）
+│   ├── 6_📰_新聞.py                 # 市場新聞
+│   ├── 7_🏥_健康檢查.py             # 系統健康
+│   └── 8_⚡_即時監控.py             # 即時監控（真實數據）
 ├── src/
-│   ├── auth/                     # 用戶認證系統
-│   │   └── user_db.py            # SQLite 用戶 DB、登入日誌、Rate Limiting
-│   ├── backtest/                 # 回測引擎
-│   │   ├── engine.py             # 回測核心（含手續費、Mark-to-Market）
-│   │   ├── strategies.py         # 15 種交易策略
-│   │   ├── optimizer.py          # 批量最優搜尋
-│   │   └── fees.py               # 23 交易所手續費資料庫
-│   ├── data/                     # 數據層
-│   │   ├── crypto/               # 加密貨幣數據（CCXT + SQLite 快取）
-│   │   ├── traditional/          # 傳統市場數據（Yahoo Finance + SQLite 快取）
-│   │   ├── sources/              # 數據來源（CCXT、yfinance）
-│   │   ├── storage/              # SQLite 儲存層
-│   │   └── live.py               # 即時價格 & 策略信號
-│   └── ai/                       # Qwen AI 客戶端（可選）
-├── cache/                        # SQLite 快取（gitignored）
-├── requirements.txt
-├── AGENTS.md                     # Cloud Agent 開發指引
-└── README.md
+│   ├── auth/
+│   │   └── user_db.py              # 用戶資料庫
+│   ├── backtest/
+│   │   ├── engine.py               # 回測引擎
+│   │   ├── strategies.py           # 策略庫（15+）
+│   │   ├── optimizer.py            # 參數優化
+│   │   └── fees.py                 # 手續費計算
+│   ├── data/
+│   │   ├── crypto/                 # 加密數據
+│   │   ├── traditional/            # 傳統數據
+│   │   ├── sources/                # 數據源（API Hub）
+│   │   └── service.py              # 數據服務（真實 API）
+│   ├── utils/
+│   │   ├── logger.py               # 日誌系統
+│   │   ├── rate_limiter.py         # API 限流
+│   │   ├── health_check.py         # 健康檢查
+│   │   └── ui_modern.py            # 現代化 UI
+│   └── websocket_binance.py        # 幣安 WebSocket
+├── requirements.txt                # 依賴配置
+├── .env.example                    # 環境範例
+└── README.md                       # 本文件
 ```
 
-## 交易策略
+---
 
-| 策略 | 類型 | 說明 |
+## 📊 頁面導覽
+
+### 主頁（app.py）
+
+- 🎯 **Hero Banner** - 平台介紹、統計數據
+- 📊 **績效儀表板** - 累積報酬、收益分佈、熱門策略
+- ⚡ **快捷操作** - 常用回測快捷鍵
+- 📈 **市場行情** - 期貨報價、熱門標的、加密貨幣
+- 🌡️ **情緒儀表板** - 恐懼貪婪、VIX、BTC 主導性
+
+### 加密回測（pages/2_₿_加密回測.py）
+
+- 📊 **11 個交易所** - Binance、OKX、Bybit、Gate.io 等
+- 🧠 **15+ 策略** - 雙均線、MACD、RSI、布林帶等
+- ⚙️ **參數管理** - 展開設定、儲存預設、快捷設定
+- 📈 **結果展示** - K 線圖、權益曲線、績效表、交易明細
+
+### 傳統回測（pages/2_🏛️_傳統回測.py）
+
+- 📊 **多市場** - 美股、台股、ETF、期貨、指數
+- 💰 **Yahoo Finance** - 真實市場數據
+- 📈 **財報整合** - 營收、獲利、資產負債（VIP）
+
+### 歷史記錄（pages/3_📜_歷史.py）
+
+- 📋 **分頁/篩選/排序** - 策略、交易對、日期、報酬率
+- 📊 **多筆對比** - 5 筆權益曲線對比、績效指標表格
+- 📥 **匯出功能** - CSV、Excel、PDF
+
+### 策略監控（pages/5_📡_監控.py）
+
+- 📊 **我的訂閱** - 持倉詳情、即時損益、手動操作
+- ➕ **新增訂閱** - 市場選擇、策略設定、資金配置
+- 🤖 **自動策略** - 策略池、績效評估、風險管理
+
+### 即時監控（pages/8_⚡_即時監控.py）
+
+- 📊 **即時價格** - WebSocket 真實數據、1 秒更新
+- 📈 **K 線圖表** - 真實 K 線、技術指標、互動圖表
+- 🔔 **交易信號** - SMA 交叉、RSI 計算、信心度
+- 💼 **持倉監控** - 即時損益、自動交易
+- 📉 **深度圖** - 真實訂單簿、買賣累積
+- 🔗 **鏈上數據** - 巨鯨動向、交易所流量
+- 💭 **情緒分析** - 恐懼貪婪、社群情緒、新聞情緒
+
+---
+
+## 🎨 UI/UX 特色
+
+### 現代化設計
+
+- 🌌 **深色主題** - 玻璃擬態、漸變背景
+- ✨ **動畫效果** - 淡入、脈衝、滑入、閃爍
+- 📱 **響應式** - 桌面/平板/手機自適應
+- 🎯 **互動元件** - 懸停效果、點擊反饋
+
+### 專業圖表
+
+- 📊 **Plotly** - 互動式圖表、縮放/平移
+- 🕯️ **K 線圖** - 蠟燭圖、成交量、技術指標
+- 📉 **深度圖** - 訂單簿累積曲線
+- 📈 **權益曲線** - 累積報酬、收益分佈
+
+---
+
+## 🔧 技術架構
+
+### 後端技術
+
+| 技術 | 用途 |
+|------|------|
+| **Python 3.10+** | 主要語言 |
+| **Streamlit** | Web UI |
+| **SQLite/PostgreSQL** | 資料庫 |
+| **CCXT** | 加密貨幣 API |
+| **yfinance** | Yahoo Finance |
+| **Plotly** | 圖表可視化 |
+| **Pandas** | 數據處理 |
+| **FastAPI** | WebSocket 服務 |
+| **Redis** | 快取/隊列 |
+| **Celery** | 任務隊列 |
+
+### 前端技術
+
+| 技術 | 用途 |
+|------|------|
+| **Streamlit Components** | UI 元件 |
+| **Plotly.js** | 互動圖表 |
+| **WebSocket** | 即時推送 |
+| **Custom CSS** | 現代化主題 |
+
+---
+
+## 📈 效能優化
+
+### 數據快取
+
+| 數據類型 | TTL | 說明 |
+|----------|-----|------|
+| **價格** | 1 秒 | WebSocket 即時更新 |
+| **K 線** | 5 分鐘 | 減少 API 呼叫 |
+| **訂單簿** | 1 秒 | 保持即時性 |
+| **用戶數據** | 30 秒 | 減少 DB 查詢 |
+
+### 批量操作
+
+```python
+# 批量取得價格（一次性加載）
+prices = batch_get_live_prices(symbols_to_load)
+
+# 批量計算信號
+signals = batch_get_signals(symbols, strategies)
+```
+
+### 異步更新
+
+```python
+# WebSocket 即時推送
+# 前端自動更新，無需手動刷新
+```
+
+---
+
+## 🔐 安全機制
+
+### 用戶認證
+
+- ✅ **密碼加密** - bcrypt 哈希
+- ✅ **JWT 令牌** - Access/Refresh Token
+- ✅ **Session 管理** - 超時自動登出
+- ✅ **登入日誌** - 安全審計
+
+### API 保護
+
+- ✅ **限流機制** - 令牌桶演算法
+- ✅ **頻率控制** - 避免觸發 API 限制
+- ✅ **錯誤處理** - 優雅降級
+
+---
+
+## 📊 策略庫
+
+### 趨勢策略
+
+| 策略 | 說明 | 參數 |
 |------|------|------|
-| 雙均線交叉 | 趨勢 | 快慢 SMA 交叉做多空 |
-| EMA 交叉 | 趨勢 | 指數均線交叉，反應更快 |
-| MACD 交叉 | 趨勢 | MACD 線與信號線交叉 |
-| RSI | 擺盪 | 超買賣反轉信號 |
-| 布林帶 | 均值回歸 | 突破上下軌反向交易 |
-| 唐奇安通道 | 突破 | N 期高低突破做多空 |
-| 超級趨勢 | 趨勢 | 基於 ATR 的動態趨勢帶 |
-| 雙推力 | 突破 | 開盤價 ± Range 突破 |
-| VWAP 回歸 | 均值回歸 | 偏離成交量加權均價反轉 |
-| 買入持有 | 基準 | 持續持有作為對照基準 |
+| **雙均線交叉** | 快線穿越慢線 | fast_period, slow_period |
+| **EMA 交叉** | 指數移動平均 | fast_period, slow_period |
+| **MACD 交叉** | 趨勢動能 | fast_period, slow_period, signal_period |
+| **ADX 趨勢** | 趨勢強度 | period, threshold |
+| **超級趨勢** | ATR 趨勢跟隨 | period, multiplier |
+| **拋物線 SAR** | 趨勢反轉 | acceleration, maximum |
 
-## 手續費
+### 擺盪策略
 
-回測引擎支援真實手續費模擬，每筆交易扣除 `(手續費 + 滑點) × 2`（開倉+平倉）。
+| 策略 | 說明 | 參數 |
+|------|------|------|
+| **RSI** | 相對強弱指標 | period, oversold, overbought |
+| **KD 隨機指標** | 隨機振盪器 | k_period, d_period |
+| **威廉指標** | 超買超賣 | period, oversold, overbought |
+| **布林帶** | 波動率通道 | period, std_dev |
+| **一目均衡表** | 綜合指標 | tenkan_period, kijun_period |
 
-內建 31 個交易所/協議費率：
-- **CEX**：Binance 0.04%、OKX 0.05%、MEXC 0.03%…
-- **DEX**：Uniswap 0.3%、Curve 0.04%、GMX 0.07%…
-- **DEX-Perp**：dYdX 0.05%、Hyperliquid 0.035%…
-- **傳統**：美股零佣金、台股 0.1425%+0.3%稅
+### 突破策略
 
-## 免責聲明
+| 策略 | 說明 | 參數 |
+|------|------|------|
+| **唐奇安通道** | 通道突破 | period |
+| **雙推力** | 區間突破 | lookback, k1, k2 |
 
-本專案僅供學習與回測研究使用，不構成投資建議。回測結果基於歷史數據，不代表未來表現。實盤交易請以交易所為準。
+### 均值回歸
 
-## 授權
+| 策略 | 說明 | 參數 |
+|------|------|------|
+| **VWAP 回歸** | 成交量加權回歸 | period, threshold |
 
-依專案設定為準。
+### 基準策略
+
+| 策略 | 說明 |
+|------|------|
+| **買入持有** | 基準比較 |
+
+---
+
+## 📊 績效指標
+
+### 報酬指標
+
+| 指標 | 說明 | 計算方式 |
+|------|------|----------|
+| **總報酬** | 累積報酬率 | (最終權益 - 初始) / 初始 |
+| **年化報酬** | 年化報酬率 | (1 + 總報酬)^(1/年數) - 1 |
+| **平均報酬** | 平均每筆報酬 | Σ報酬 / 交易次數 |
+
+### 風險指標
+
+| 指標 | 說明 | 計算方式 |
+|------|------|----------|
+| **最大回撤** | 最大虧損幅度 | max(peak - trough) / peak |
+| **標準差** | 報酬波動 | stdev(報酬) |
+| **VaR** | 風險價值 | 95% 信賴區間 |
+
+### 風險調整指標
+
+| 指標 | 說明 | 計算方式 |
+|------|------|----------|
+| **Sharpe** | 風險調整報酬 | (報酬 - 無風險) / 標準差 |
+| **Sortino** | 下行風險調整 | (報酬 - 無風險) / 下行標準差 |
+| **Calmar** | 回撤調整 | 年化報酬 / 最大回撤 |
+
+### 交易統計
+
+| 指標 | 說明 | 計算方式 |
+|------|------|----------|
+| **勝率** | 獲利交易比例 | 獲利次數 / 總次數 |
+| **利潤因子** | 盈虧比 | 總獲利 / 總虧損 |
+| **平均獲利** | 平均獲利金額 | Σ獲利 / 獲利次數 |
+| **平均虧損** | 平均虧損金額 | Σ虧損 / 虧損次數 |
+| **最大連勝** | 最長連勝記錄 | max(consecutive wins) |
+| **最大連敗** | 最長連敗記錄 | max(consecutive losses) |
+
+---
+
+## 🚀 部署指南
+
+### Docker 部署
+
+```bash
+# 建立 Docker 映像
+docker build -t stocksx .
+
+# 啟動容器
+docker run -d -p 8501:8501 stocksx
+
+# 或使用 Docker Compose
+docker-compose up -d
+```
+
+### 生產環境
+
+```bash
+# 1. 安裝 PostgreSQL
+# 2. 配置 Redis
+# 3. 設定環境變數
+# 4. 啟動 Celery Worker
+celery -A src.tasks worker --loglevel=info
+
+# 5. 啟動 Celery Beat
+celery -A src.tasks beat --loglevel=info
+
+# 6. 啟動 FastAPI
+uvicorn src.websocket_binance:app --host 0.0.0.0 --port 8001
+
+# 7. 啟動 Streamlit
+streamlit run app.py --server.port=8501
+```
+
+---
+
+## 📚 API 文件
+
+### 數據 API
+
+```python
+from src.data.service import data_service
+
+# 取得價格
+ticker = data_service.get_ticker("BTC/USDT")
+
+# 取得 K 線
+df = data_service.get_kline("BTC/USDT", timeframe="1h", limit=100)
+
+# 取得訂單簿
+depth = data_service.get_orderbook("BTC/USDT", limit=20)
+
+# 計算信號
+signal = data_service.calculate_signal("BTC/USDT", strategy="sma_cross")
+```
+
+### 資料庫 API
+
+```python
+from src.auth import UserDB
+
+db = UserDB()
+
+# 取得 watchlist
+watchlist = db.get_watchlist(user_id)
+
+# 取得交易記錄
+trade_log = db.get_trade_log(watch_id, limit=50)
+
+# 取得統計
+stats = db.get_trade_stats(watch_id)
+```
+
+---
+
+## 🤝 貢獻指南
+
+### 開發流程
+
+1. Fork 專案
+2. 建立功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交變更 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 開啟 Pull Request
+
+### 程式碼規範
+
+- 遵循 PEP 8
+- 添加型別提示
+- 撰寫單元測試
+- 更新文件
+
+---
+
+## 📝 更新日誌
+
+### v4.0 (2024-03-03)
+
+- ✅ 真實數據整合（CCXT、Yahoo Finance）
+- ✅ WebSocket 即時推送
+- ✅ 專業圖表（K 線、深度圖、技術指標）
+- ✅ 情緒分析（恐懼貪婪、社群情緒）
+- ✅ 鏈上數據（巨鯨動向、交易所流量）
+- ✅ 唯一帳戶號碼
+- ✅ 交易記錄列表與匯出
+- ✅ 現代化 UI（玻璃擬態、動畫效果）
+
+### v3.0 (2024-02-01)
+
+- ✅ 架構優化（日誌、限流、任務隊列）
+- ✅ 健康檢查端點
+- ✅ FastAPI + React 前後端分離
+
+### v2.0 (2024-01-01)
+
+- ✅ 策略訂閱功能
+- ✅ 即時監控頁面
+- ✅ 自動交易基礎
+
+---
+
+## 📧 聯絡方式
+
+- **專案網址**: https://github.com/yourusername/StocksX
+- **問題回報**: https://github.com/yourusername/StocksX/issues
+- **電子郵件**: your.email@example.com
+
+---
+
+## 📄 授權條款
+
+本專案採用 [MIT 授權條款](LICENSE)
+
+---
+
+## ⚠️ 免責聲明
+
+**本軟體僅供學習與研究，不構成投資建議。**
+
+- 回測結果基於歷史數據，不代表未來表現
+- 交易涉及風險，請謹慎評估
+- 開發者不對任何損失負責
+
+---
+
+## 🙏 致謝
+
+感謝以下開源專案：
+
+- [Streamlit](https://streamlit.io)
+- [CCXT](https://github.com/ccxt/ccxt)
+- [Plotly](https://plotly.com)
+- [yfinance](https://github.com/ranaroussi/yfinance)
+- [FastAPI](https://fastapi.tiangolo.com)
+
+---
+
+**Made with ❤️ by StocksX Team**
