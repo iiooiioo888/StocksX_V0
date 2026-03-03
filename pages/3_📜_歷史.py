@@ -1,5 +1,5 @@
-# 回測歷史（增強版 v4.0）
-# 功能：分頁、篩選、排序、對比、匯出、統計
+# 回測歷史（增強版 v5.0 - 詳細視圖）
+# 功能：分頁、篩選、排序、對比、匯出、統計、詳細視圖
 
 import streamlit as st
 import pandas as pd
@@ -20,6 +20,7 @@ from src.ui_history_enhanced import (
     render_export_buttons,
     render_statistics,
 )
+from src.ui_backtest_detail import render_backtest_detail, render_backtest_comparison
 
 st.set_page_config(page_title="StocksX — 歷史記錄", page_icon="📜", layout="wide")
 
@@ -246,6 +247,50 @@ if paginated["items"]:
         st.success("已更新收藏狀態")
         st.cache_data.clear()
         st.rerun()
+
+# ════════════════════════════════════════════════════════════
+# 詳細視圖
+# ════════════════════════════════════════════════════════════
+if st.session_state.get("detail_item"):
+    detail_item = st.session_state["detail_item"]
+
+    st.divider()
+
+    # 返回按鈕
+    if st.button("⬅️ 返回記錄列表", key="back_to_list"):
+        st.session_state["detail_item"] = None
+        st.rerun()
+
+    st.divider()
+
+    # 渲染詳細視圖
+    render_backtest_detail(detail_item)
+else:
+    # 單筆操作（只在沒有顯示詳細視圖時顯示）
+    st.markdown("##### 🔧 單筆操作")
+    
+    action_cols = st.columns(5)
+    
+    selected_id = action_cols[0].number_input(
+        "記錄 ID",
+        min_value=1,
+        max_value=max(item.get("id", 1) for item in all_history),
+        value=paginated["items"][0].get("id") if paginated["items"] else 1,
+        key="action_id"
+    )
+    
+    if action_cols[1].button("👁️ 查看詳情", use_container_width=True, key="view_detail_btn"):
+        # 找到對應記錄
+        detail_item = next((item for item in all_history if item.get("id") == selected_id), None)
+        if detail_item:
+            st.session_state["detail_item"] = detail_item
+            st.rerun()
+    
+    if action_cols[2].button("⭐ 加入收藏", use_container_width=True, key="togglefav_btn"):
+        db.toggle_favorite(selected_id)
+        st.success("已更新收藏狀態")
+        st.cache_data.clear()
+        st.rerun()
     
     if action_cols[3].button("📝 編輯備註", use_container_width=True, key="edit_note_btn"):
         st.session_state["edit_note_id"] = selected_id
@@ -253,7 +298,7 @@ if paginated["items"]:
     
     if action_cols[4].button("🗑️ 刪除記錄", use_container_width=True, key="delete_btn", type="secondary"):
         db.delete_history(selected_id)
-        st.success("已刪除")
+        st.success("已刪除記錄")
         st.cache_data.clear()
         st.rerun()
     
@@ -269,8 +314,6 @@ if paginated["items"]:
                     st.cache_data.clear()
                     st.session_state["edit_note_id"] = None
                     st.rerun()
-else:
-    st.info("尚無回測記錄")
 
 st.divider()
 
