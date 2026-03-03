@@ -1,5 +1,5 @@
-# 策略訂閱 & 即時監控（優化版 v3.0）
-# 優化：批量數據加載、智能快取、異步更新
+# 策略訂閱 & 即時監控（優化版 v3.0 - 即時信號）
+# 優化：批量數據加載、智能快取、異步更新、即時信號計算
 
 import streamlit as st
 import pandas as pd
@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 from src.auth import UserDB
 from src.config import format_price, STRATEGY_LABELS
 from src.ui_common import require_login
+from src.data.live_monitor import (
+    batch_get_live_prices,
+    batch_calculate_signals,
+    get_live_price
+)
 
 st.set_page_config(page_title="StocksX — 策略監控", page_icon="📡", layout="wide")
 
@@ -137,7 +142,17 @@ tabs = st.tabs(["📊 我的訂閱", "➕ 新增訂閱", "🤖 自動策略"])
 # ════════════════════════════════════════════════════════════
 
 with tabs[0]:
-    st.markdown("#### 📊 我的訂閱策略")
+    st.markdown("#### 📊 我的訂閱策略（即時監控）")
+    
+    # 顯示上次更新時間
+    if "last_signal_update" not in st.session_state:
+        st.session_state.last_signal_update = _time.time()
+    
+    time_since_update = _time.time() - st.session_state.last_signal_update
+    st.caption(f"🕐 上次信號更新：{time_since_update:.0f}秒前")
+    
+    # 自動重新整理選項
+    auto_refresh = st.checkbox("🔄 自動重新整理（每 10 秒）", value=True)
     
     if not watchlist:
         st.info("📭 尚無訂閱。點擊「➕ 新增訂閱」開始。")
@@ -148,8 +163,16 @@ with tabs[0]:
         if symbols_to_load:
             with st.spinner(f"載入 {len(symbols_to_load)} 個價格..."):
                 prices = batch_get_live_prices(symbols_to_load)
+            
+            # 批量計算信號
+            with st.spinner(f"計算 {len(symbols_to_load)} 個信號..."):
+                signals = batch_calculate_signals(watchlist)
+            
+            # 更新 session state
+            st.session_state.last_signal_update = _time.time()
         else:
             prices = {}
+            signals = {}
         
         # 顯示訂閱列表（優化佈局）
         for idx, w in enumerate(watchlist):
@@ -162,7 +185,25 @@ with tabs[0]:
             
             # 取得價格數據
             price_data = prices.get(symbol, {})
-            current_price = price_data.get("price", w.get("last_price", 0))
+            current_price = price_data.get("price", 0)
+            
+            # 如果沒有即時價格，使用資料庫數據
+            if not current_price:
+                current_price = float(w.get("last_price", 0) or 0)
+            
+            # 取得信號數據
+            signal_data = signals.get(w["id"], {})
+            
+            # 如果有新信號，自動更新
+            if signal_data:
+                new_signal = signal_data.get("signal", 0)
+                action = signal_data.get("action", "HOLD")
+                confidence = signal_data.get("confidence", 0)
+                
+                # 顯示信號
+                if new_signal != 0:
+                    signal_emoji = "🟢" if new_signal == 1 else "🔴"
+                    st.toast(f"{signal_emoji} {symbol} {strategy}: {action} (信心度：{confidence:.0f}%)")
             
             # 計算損益
             position = w["position"]
@@ -170,7 +211,8 @@ with tabs[0]:
             _equity = w["initial_equity"]
             
             # 確保價格是數值類型
-            current_price = float(price_data.get("price", 0) or 0)
+            current_price = float(current_price or 0)
+            entry_price = float(entry_price or 0)
             
             if position > 0 and entry_price > 0 and current_price > 0:
                 _pnl = (current_price - entry_price) / entry_price * 100
@@ -179,28 +221,64 @@ with tabs[0]:
                 _pnl = (entry_price - current_price) / entry_price * 100
                 _profit = (entry_price - current_price) * (_equity / entry_price)
             else:
-                _pnl = w["pnl_pct"]
+                _pnl = float(w.get("pnl_pct", 0) or 0)
                 _profit = 0
             
             _pnl_color = "normal" if _pnl >= 0 else "inverse"
             _position_text = {1: "🟢 多頭", -1: "🔴 空頭", 0: "⚪ 空倉"}.get(position, "⚪ 空倉")
             
-            # 使用 expander 優化顯示（包含帳戶號碼）
+            # 使用 expander 優化顯示（包含帳戶號碼和即時信號）
             account_id = w.get("account_id", "N/A")
-            with st.expander(f"**{symbol}** × {s_label} | {_position_text} | 💰${_equity:,.0f} | {_pnl:+.2f}%", expanded=False):
+            
+            # 準備信號顯示
+            if signal_data:
+                signal_action = signal_data.get("action", "HOLD")
+                signal_confidence = signal_data.get("confidence", 0)
+                signal_icon = "🟢" if signal_action == "BUY" else ("🔴" if signal_action == "SELL" else "⚪")
+                signal_display = f"{signal_icon} {signal_action} ({signal_confidence:.0f}%)"
+            else:
+                signal_display = "計算中..."
+            
+            with st.expander(f"**{symbol}** × {s_label} | {_position_text} | 💰${_equity:,.0f} | {_pnl:+.2f}% | {signal_display}", expanded=False):
                 # 顯示帳戶號碼
                 st.caption(f"📋 帳戶號碼：`{account_id}`")
                 
-                # 主要指標
+                # 即時價格和信號
                 r1, r2, r3 = st.columns(3)
-                r1.metric("💰 即時價格", format_price(current_price) if current_price else "—")
+                with r1:
+                    if current_price > 0:
+                        st.metric("💰 即時價格", format_price(current_price))
+                    else:
+                        st.markdown("💰 即時價格：`等待數據...`")
                 
-                sig_text = {1: "🟢 做多", -1: "🔴 做空", 0: "⚪ 觀望"}.get(w.get("last_signal", 0), "⚪ 觀望")
-                r2.metric("📡 當前信號", sig_text)
+                with r2:
+                    if signal_data:
+                        st.metric("📡 即時信號", signal_display)
+                    else:
+                        st.markdown("📡 即時信號：`計算中...`")
                 
-                pos_class = "position-long" if position == 1 else "position-short" if position == -1 else "position-flat"
-                r3.markdown(f'<div style="font-size:1.2rem;font-weight:700;" class="{pos_class}">{_position_text}</div>', unsafe_allow_html=True)
-
+                with r3:
+                    pos_class = "position-long" if position == 1 else "position-short" if position == -1 else "position-flat"
+                    st.markdown(f'<div style="font-size:1.2rem;font-weight:700;" class="{pos_class}">{_position_text}</div>', unsafe_allow_html=True)
+                
+                # 信號詳情
+                if signal_data:
+                    st.divider()
+                    st.markdown("**🔍 信號詳情**")
+                    sig_col1, sig_col2, sig_col3 = st.columns(3)
+                    
+                    with sig_col1:
+                        st.markdown(f"**策略**: {s_label}")
+                    with sig_col2:
+                        st.markdown(f"**信心度**: {signal_confidence:.1f}%")
+                    with sig_col3:
+                        if "rsi" in signal_data:
+                            st.markdown(f"**RSI**: {signal_data['rsi']:.2f}")
+                        elif "macd" in signal_data:
+                            st.markdown(f"**MACD**: {signal_data['macd']:.4f}")
+                        elif "upper_band" in signal_data:
+                            st.markdown(f"**布林帶**: 上軌 {signal_data['upper_band']:.2f} / 下軌 {signal_data['lower_band']:.2f}")
+                
                 # 帳戶價值
                 v1, v2, v3, v4 = st.columns(4)
                 _val_color = "normal" if _profit >= 0 else "inverse"
@@ -209,7 +287,7 @@ with tabs[0]:
                 entry = w.get("entry_price", 0)
                 v3.metric("📍 進場價", format_price(entry) if entry else "—")
                 v4.metric("💵 初始資金", f"${_equity:,.2f}")
-
+                
                 # 手動操作按鈕
                 st.divider()
                 st.markdown("**🎯 手動持倉操作**")
@@ -330,6 +408,11 @@ with tabs[0]:
                         )
                     else:
                         st.info("暫無交易記錄")
+
+# 自動重新整理
+if auto_refresh and watchlist:
+    _time.sleep(10)
+    st.rerun()
 
 # ════════════════════════════════════════════════════════════
 # Tab 2: 新增訂閱（優化版）
