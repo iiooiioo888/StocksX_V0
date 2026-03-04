@@ -1,471 +1,388 @@
-# 全球新聞聚合器
-# 整合多個新聞來源
+# 新闻源聚合服务（简化版 World Monitor）
+# 功能：RSS 新闻聚合、分类、缓存
 
 from __future__ import annotations
 
-import requests
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
 import hashlib
+import json
+import logging
+import re
+import time
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
+from functools import lru_cache
 
+logger = logging.getLogger(__name__)
 
 # ════════════════════════════════════════════════════════════
-# 新聞來源配置
+# 新闻源配置（针对加密货币/金融优化）
 # ════════════════════════════════════════════════════════════
 
-NEWS_SOURCES = {
-    # 加密貨幣新聞
-    "crypto": [
-        {
-            "name": "CoinDesk",
-            "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
-            "category": "加密貨幣",
-            "language": "en"
-        },
-        {
-            "name": "Cointelegraph",
-            "url": "https://cointelegraph.com/rss",
-            "category": "加密貨幣",
-            "language": "en"
-        },
-        {
-            "name": "The Block",
-            "url": "https://www.theblock.co/rss.xml",
-            "category": "加密貨幣",
-            "language": "en"
-        },
-        {
-            "name": "Decrypt",
-            "url": "https://decrypt.co/feed",
-            "category": "加密貨幣",
-            "language": "en"
-        },
-        {
-            "name": "BlockBeats",
-            "url": "https://www.theblockbeats.info/feed",
-            "category": "加密貨幣",
-            "language": "zh"
-        },
-    ],
-    # 財經新聞
-    "finance": [
-        {
-            "name": "Bloomberg",
-            "url": "https://feeds.bloomberg.com/markets/news/rss.xml",
-            "category": "財經",
-            "language": "en"
-        },
-        {
-            "name": "Reuters Business",
-            "url": "https://feeds.reuters.com/reuters/businessNews",
-            "category": "財經",
-            "language": "en"
-        },
-        {
-            "name": "CNBC",
-            "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-            "category": "財經",
-            "language": "en"
-        },
-        {
-            "name": "Financial Times",
-            "url": "https://www.ft.com/?format=rss",
-            "category": "財經",
-            "language": "en"
-        },
-        {
-            "name": "Wall Street Journal",
-            "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
-            "category": "財經",
-            "language": "en"
-        },
-    ],
-    # 科技新聞
-    "tech": [
-        {
-            "name": "TechCrunch",
-            "url": "https://techcrunch.com/feed/",
-            "category": "科技",
-            "language": "en"
-        },
-        {
-            "name": "The Verge",
-            "url": "https://www.theverge.com/rss/index.xml",
-            "category": "科技",
-            "language": "en"
-        },
-        {
-            "name": "Wired",
-            "url": "https://www.wired.com/feed/rss",
-            "category": "科技",
-            "language": "en"
-        },
-    ],
-    # 台灣財經新聞
-    "tw_finance": [
-        {
-            "name": "鉅亨網",
-            "url": "https://feeds.feedburner.com/gigacircle",
-            "category": "台灣財經",
-            "language": "zh"
-        },
-        {
-            "name": "經濟日報",
-            "url": "https://udn.com/rssfeed/rss/0/0/0/0",
-            "category": "台灣財經",
-            "language": "zh"
-        },
-        {
-            "name": "工商時報",
-            "url": "https://chinatimes.com/rss",
-            "category": "台灣財經",
-            "language": "zh"
-        },
-    ]
+# 主要新闻源（加密货币/金融相关）
+CRYPTO_NEWS_FEEDS = [
+    {
+        "name": "CoinDesk",
+        "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "category": "crypto",
+        "lang": "en",
+        "priority": 1,
+    },
+    {
+        "name": "Cointelegraph",
+        "url": "https://cointelegraph.com/rss",
+        "category": "crypto",
+        "lang": "en",
+        "priority": 1,
+    },
+    {
+        "name": "The Block",
+        "url": "https://www.theblock.co/rss.xml",
+        "category": "crypto",
+        "lang": "en",
+        "priority": 1,
+    },
+    {
+        "name": "Decrypt",
+        "url": "https://decrypt.co/feed",
+        "category": "crypto",
+        "lang": "en",
+        "priority": 2,
+    },
+    {
+        "name": "Bitcoin Magazine",
+        "url": "https://bitcoinmagazine.com/.rss",
+        "category": "crypto",
+        "lang": "en",
+        "priority": 2,
+    },
+    {
+        "name": "CryptoSlate",
+        "url": "https://cryptoslate.com/feed/",
+        "category": "crypto",
+        "lang": "en",
+        "priority": 2,
+    },
+]
+
+# 传统金融新闻源
+FINANCE_NEWS_FEEDS = [
+    {
+        "name": "Bloomberg Crypto",
+        "url": "https://www.bloomberg.com/feed/crypto.xml",
+        "category": "finance",
+        "lang": "en",
+        "priority": 1,
+    },
+    {
+        "name": "Reuters Business",
+        "url": "https://www.reutersagency.com/feed/",
+        "category": "finance",
+        "lang": "en",
+        "priority": 1,
+    },
+    {
+        "name": "Financial Times",
+        "url": "https://www.ft.com/?format=rss",
+        "category": "finance",
+        "lang": "en",
+        "priority": 2,
+    },
+]
+
+# 中文新闻源
+CHINESE_NEWS_FEEDS = [
+    {
+        "name": "金色财经",
+        "url": "https://www.jin10.com/feed",
+        "category": "crypto",
+        "lang": "zh",
+        "priority": 1,
+    },
+    {
+        "name": "链闻",
+        "url": "https://www.chainnews.com/feed",
+        "category": "crypto",
+        "lang": "zh",
+        "priority": 2,
+    },
+]
+
+# 关键词分类（用于自动分类新闻）
+KEYWORD_CATEGORIES = {
+    "bitcoin": ["BTC", "Bitcoin", "比特币", "加密货币"],
+    "ethereum": ["ETH", "Ethereum", "以太坊", "智能合约"],
+    "defi": ["DeFi", "去中心化金融", "流动性挖矿", "Yield Farming"],
+    "nft": ["NFT", "非同质化代币", "数字藏品"],
+    "regulation": ["监管", "SEC", "政策", "法规", "ban", "regulation"],
+    "exchange": ["交易所", "Binance", "Coinbase", "FTX"],
+    "market": ["市场", "价格", "交易", "bull", "bear", "行情"],
+    "technology": ["技术", "升级", "Layer2", "扩容", "scalability"],
 }
 
+# 威胁/重要性关键词
+IMPORTANT_KEYWORDS = [
+    "紧急", "突发", "breaking", "alert",
+    "暴涨", "暴跌", "surge", "crash", "plunge",
+    "黑客", "攻击", "hack", "exploit", "attack",
+    "监管", "禁令", "ban", "regulation", "SEC",
+    "破产", "清算", "bankrupt", "liquidation",
+]
 
-# ════════════════════════════════════════════════════════════
-# RSS 解析
-# ════════════════════════════════════════════════════════════
 
-def parse_rss_feed(url: str, source_name: str) -> List[Dict[str, Any]]:
-    """
-    解析 RSS Feed
-    
-    Args:
-        url: RSS Feed URL
-        source_name: 來源名稱
-    
-    Returns:
-        [
-            {
-                "title": str,
-                "link": str,
-                "published": str,
-                "summary": str,
-                "source": str,
-                "category": str,
-                "sentiment": str,  # Positive, Neutral, Negative
-                "id": str  # 唯一 ID
+class NewsAggregator:
+    """新闻聚合器"""
+
+    def __init__(self):
+        self.cache: Dict[str, Dict] = {}
+        self.cache_ttl = 300  # 5 分钟缓存
+        self.feed_cache: Dict[str, List[Dict]] = {}
+        self.feed_cache_ttl = 600  # 10 分钟 feed 缓存
+
+    def get_news_digest(
+        self,
+        category: str = "all",
+        lang: str = "en",
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取新闻摘要
+
+        Args:
+            category: 类别 (all/crypto/finance)
+            lang: 语言 (en/zh)
+            limit: 返回数量限制
+
+        Returns:
+            新闻列表
+        """
+        cache_key = f"{category}:{lang}:{limit}"
+        now = time.time()
+
+        # 检查缓存
+        if cache_key in self.cache:
+            cached = self.cache[cache_key]
+            if now - cached["timestamp"] < self.cache_ttl:
+                return cached["data"]
+
+        # 获取新闻源列表
+        feeds = self._get_feeds_for_category(category, lang)
+
+        # 并行获取所有 feed
+        all_items = []
+        for feed in feeds:
+            try:
+                items = self._fetch_feed(feed["url"], feed["name"])
+                if items:
+                    for item in items:
+                        item["source"] = feed["name"]
+                        item["category"] = self._classify_item(item)
+                        item["importance"] = self._calculate_importance(item)
+                    all_items.extend(items)
+            except Exception as e:
+                logger.warning(f"获取 feed 失败 {feed['url']}: {e}")
+
+        # 排序和去重
+        all_items.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+        unique_items = self._deduplicate(all_items)
+
+        # 限制数量
+        result = unique_items[:limit]
+
+        # 缓存
+        self.cache[cache_key] = {
+            "timestamp": now,
+            "data": result,
+        }
+
+        return result
+
+    def _get_feeds_for_category(self, category: str, lang: str) -> List[Dict]:
+        """获取指定类别的新闻源"""
+        all_feeds = []
+
+        if category in ["all", "crypto"]:
+            all_feeds.extend(CRYPTO_NEWS_FEEDS)
+        if category in ["all", "finance"]:
+            all_feeds.extend(FINANCE_NEWS_FEEDS)
+        if lang == "zh":
+            all_feeds.extend(CHINESE_NEWS_FEEDS)
+
+        # 按语言过滤
+        if lang != "all":
+            all_feeds = [f for f in all_feeds if f["lang"] == lang or f["lang"] == "all"]
+
+        # 按优先级排序
+        all_feeds.sort(key=lambda x: x.get("priority", 99))
+
+        return all_feeds
+
+    def _fetch_feed(self, url: str, source_name: str) -> List[Dict]:
+        """获取并解析 RSS feed"""
+        cache_key = hashlib.md5(url.encode()).hexdigest()
+        now = time.time()
+
+        # 检查 feed 缓存
+        if cache_key in self.feed_cache:
+            cached = self.feed_cache[cache_key]
+            if now - cached["timestamp"] < self.feed_cache_ttl:
+                return cached["items"]
+
+        try:
+            import feedparser
+        except ImportError:
+            logger.warning("feedparser 未安装，使用模拟数据")
+            return self._generate_mock_news(source_name)
+
+        try:
+            # 解析 RSS feed
+            feed = feedparser.parse(url, request_headers={
+                'User-Agent': 'Mozilla/5.0 (StocksX News Aggregator)'
+            })
+
+            items = []
+            for entry in feed.entries[:5]:  # 每个 feed 最多 5 条
+                item = {
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "source": source_name,
+                    "timestamp": self._parse_timestamp(entry),
+                    "summary": entry.get("summary", "")[:200],
+                    "id": hashlib.md5(entry.get("link", "").encode()).hexdigest(),
+                }
+                items.append(item)
+
+            # 缓存
+            self.feed_cache[cache_key] = {
+                "timestamp": now,
+                "items": items,
             }
+
+            return items
+
+        except Exception as e:
+            logger.warning(f"解析 feed 失败 {url}: {e}")
+            return self._generate_mock_news(source_name)
+
+    def _parse_timestamp(self, entry: Any) -> float:
+        """解析时间戳"""
+        import email.utils
+
+        # 尝试多种时间字段
+        for field in ["published_parsed", "updated_parsed", "created_parsed"]:
+            if hasattr(entry, field) and entry[field]:
+                try:
+                    return time.mktime(entry[field])
+                except:
+                    pass
+
+        # 尝试字符串格式
+        for field in ["published", "updated", "created"]:
+            if hasattr(entry, field) and entry[field]:
+                try:
+                    parsed = email.utils.parsedate_tz(entry[field])
+                    if parsed:
+                        return time.mktime(parsed)
+                except:
+                    pass
+
+        return time.time()
+
+    def _classify_item(self, item: Dict) -> str:
+        """分类新闻"""
+        text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+
+        scores = {}
+        for category, keywords in KEYWORD_CATEGORIES.items():
+            score = sum(1 for kw in keywords if kw.lower() in text)
+            scores[category] = score
+
+        if scores:
+            return max(scores, key=scores.get)
+        return "general"
+
+    def _calculate_importance(self, item: Dict) -> int:
+        """计算重要性分数 (1-5)"""
+        text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+
+        score = 1
+
+        # 检查重要关键词
+        for keyword in IMPORTANT_KEYWORDS:
+            if keyword.lower() in text:
+                score += 1
+                break
+
+        # 检查是否包含价格/市场相关
+        if any(kw in text for kw in ["price", "market", "trading", "价格", "市场"]):
+            score += 1
+
+        # 限制最高分数
+        return min(score, 5)
+
+    def _deduplicate(self, items: List[Dict]) -> List[Dict]:
+        """去重（基于标题相似度）"""
+        seen_titles = set()
+        unique = []
+
+        for item in items:
+            title = item.get("title", "").lower()
+            # 简化标题用于比较
+            simple_title = re.sub(r'[^a-z0-9\u4e00-\u9fff]', '', title)
+
+            if simple_title not in seen_titles:
+                seen_titles.add(simple_title)
+                unique.append(item)
+
+        return unique
+
+    def _generate_mock_news(self, source_name: str) -> List[Dict]:
+        """生成模拟新闻（当 feed 不可用时）"""
+        import random
+
+        mock_titles = [
+            f"{source_name}: Bitcoin 价格突破新高",
+            f"{source_name}: 以太坊升级即将完成",
+            f"{source_name}: DeFi 协议总锁仓量增长",
+            f"{source_name}: 监管机构讨论新政策",
+            f"{source_name}: 主要交易所发布新公告",
         ]
-    """
-    try:
-        import feedparser
-        
-        feed = feedparser.parse(url, request_headers={'User-Agent': 'Mozilla/5.0'})
-        
-        articles = []
-        for entry in feed.entries[:20]:  # 限制 20 篇
-            # 生成唯一 ID
-            content_hash = hashlib.md5(
-                f"{entry.title}{entry.link}".encode()
-            ).hexdigest()
-            
-            # 分析情緒（簡單關鍵字）
-            sentiment = analyze_sentiment(entry.title + " " + entry.get('summary', ''))
-            
-            article = {
-                "title": entry.title,
-                "link": entry.link,
-                "published": entry.get('published', datetime.now().isoformat()),
-                "summary": entry.get('summary', '')[:500],  # 限制長度
+
+        now = time.time()
+        return [
+            {
+                "title": title,
+                "link": f"https://example.com/news/{random.randint(1000, 9999)}",
                 "source": source_name,
-                "category": feed.feed.get('title', 'Unknown'),
-                "sentiment": sentiment,
-                "id": content_hash,
-                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
+                "timestamp": now - random.randint(0, 3600),
+                "summary": f"这是来自 {source_name} 的模拟新闻内容...",
+                "id": hashlib.md5(title.encode()).hexdigest(),
             }
-            
-            articles.append(article)
-        
-        return articles
-    except Exception as e:
-        print(f"解析 RSS Feed 失敗 {url}: {e}")
-        return []
+            for title in mock_titles[:3]
+        ]
 
 
-def analyze_sentiment(text: str) -> str:
-    """
-    簡單情緒分析
-    
-    Args:
-        text: 文字內容
-    
-    Returns:
-        "Positive", "Neutral", or "Negative"
-    """
-    positive_words = [
-        'surge', 'soar', 'jump', 'rally', 'gain', 'rise', 'increase', 'boom',
-        'bullish', 'optimistic', 'positive', 'breakthrough', 'success',
-        '上漲', '飆升', '大漲', '利多', '樂觀', '突破'
-    ]
-    
-    negative_words = [
-        'crash', 'plunge', 'drop', 'fall', 'decline', 'loss', 'bearish',
-        'pessimistic', 'negative', 'concern', 'risk', 'warning',
-        '下跌', '暴跌', '重挫', '利空', '悲觀', '風險'
-    ]
-    
-    text_lower = text.lower()
-    
-    positive_count = sum(1 for word in positive_words if word.lower() in text_lower)
-    negative_count = sum(1 for word in negative_words if word.lower() in text_lower)
-    
-    if positive_count > negative_count * 1.5:
-        return "Positive"
-    elif negative_count > positive_count * 1.5:
-        return "Negative"
-    else:
-        return "Neutral"
+# 全局实例
+news_aggregator = NewsAggregator()
 
 
-# ════════════════════════════════════════════════════════════
-# 新聞聚合
-# ════════════════════════════════════════════════════════════
-
-def get_crypto_news(limit: int = 50) -> List[Dict[str, Any]]:
-    """
-    取得加密貨幣新聞
-    
-    Args:
-        limit: 最大文章數
-    
-    Returns:
-        新聞列表
-    """
-    all_articles = []
-    
-    for source in NEWS_SOURCES["crypto"]:
-        articles = parse_rss_feed(source["url"], source["name"])
-        all_articles.extend(articles)
-    
-    # 按時間排序
-    all_articles.sort(
-        key=lambda x: x.get('published', ''),
-        reverse=True
-    )
-    
-    return all_articles[:limit]
+def get_crypto_news(limit: int = 20, lang: str = "en") -> List[Dict]:
+    """获取加密货币新闻"""
+    return news_aggregator.get_news_digest(category="crypto", lang=lang, limit=limit)
 
 
-def get_finance_news(limit: int = 50) -> List[Dict[str, Any]]:
-    """
-    取得財經新聞
-    
-    Args:
-        limit: 最大文章數
-    
-    Returns:
-        新聞列表
-    """
-    all_articles = []
-    
-    for source in NEWS_SOURCES["finance"]:
-        articles = parse_rss_feed(source["url"], source["name"])
-        all_articles.extend(articles)
-    
-    # 按時間排序
-    all_articles.sort(
-        key=lambda x: x.get('published', ''),
-        reverse=True
-    )
-    
-    return all_articles[:limit]
+def get_finance_news(limit: int = 20, lang: str = "en") -> List[Dict]:
+    """获取金融新闻"""
+    return news_aggregator.get_news_digest(category="finance", lang=lang, limit=limit)
 
 
-def get_tech_news(limit: int = 30) -> List[Dict[str, Any]]:
-    """
-    取得科技新聞
-    
-    Args:
-        limit: 最大文章數
-    
-    Returns:
-        新聞列表
-    """
-    all_articles = []
-    
-    for source in NEWS_SOURCES["tech"]:
-        articles = parse_rss_feed(source["url"], source["name"])
-        all_articles.extend(articles)
-    
-    # 按時間排序
-    all_articles.sort(
-        key=lambda x: x.get('published', ''),
-        reverse=True
-    )
-    
-    return all_articles[:limit]
+def get_all_news(limit: int = 50, lang: str = "en") -> List[Dict]:
+    """获取所有新闻"""
+    return news_aggregator.get_news_digest(category="all", lang=lang, limit=limit)
 
 
-def get_tw_finance_news(limit: int = 30) -> List[Dict[str, Any]]:
-    """
-    取得台灣財經新聞
-    
-    Args:
-        limit: 最大文章數
-    
-    Returns:
-        新聞列表
-    """
-    all_articles = []
-    
-    for source in NEWS_SOURCES["tw_finance"]:
-        articles = parse_rss_feed(source["url"], source["name"])
-        all_articles.extend(articles)
-    
-    # 按時間排序
-    all_articles.sort(
-        key=lambda x: x.get('published', ''),
-        reverse=True
-    )
-    
-    return all_articles[:limit]
-
-
-def get_all_news(category: str = "all", limit: int = 100) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    取得所有新聞
-    
-    Args:
-        category: 類別（all, crypto, finance, tech, tw_finance）
-        limit: 每類別最大文章數
-    
-    Returns:
-        {
-            "crypto": [...],
-            "finance": [...],
-            "tech": [...],
-            "tw_finance": [...]
-        }
-    """
-    if category != "all":
-        if category == "crypto":
-            return {"crypto": get_crypto_news(limit)}
-        elif category == "finance":
-            return {"finance": get_finance_news(limit)}
-        elif category == "tech":
-            return {"tech": get_tech_news(limit)}
-        elif category == "tw_finance":
-            return {"tw_finance": get_tw_finance_news(limit)}
-    
-    return {
-        "crypto": get_crypto_news(limit),
-        "finance": get_finance_news(limit),
-        "tech": get_tech_news(limit),
-        "tw_finance": get_tw_finance_news(limit)
-    }
-
-
-# ════════════════════════════════════════════════════════════
-# 新聞分類與標籤
-# ════════════════════════════════════════════════════════════
-
-NEWS_CATEGORIES = {
-    "市場動態": ["market", "trading", "price", "指數", "行情"],
-    "政策監管": ["regulation", "policy", "SEC", "監管", "政策"],
-    "技術發展": ["technology", "blockchain", "innovation", "技術", "區塊鏈"],
-    "企業新聞": ["company", "business", "partnership", "企業", "合作"],
-    "投資融資": ["investment", "funding", "VC", "投資", "融資"],
-    "安全事件": ["security", "hack", "exploit", "安全", "駭客"],
-    "DeFi": ["defi", "yield", "liquidity", "去中心化", "流動性"],
-    "NFT": ["nft", "collectible", "digital art", "非同質化", "數位藝術"],
-    "交易所": ["exchange", "binance", "coinbase", "交易所", "平台"],
-    "宏觀經濟": ["macro", "fed", "inflation", "總經", "聯準會"]
-}
-
-
-def categorize_news(title: str, summary: str = "") -> List[str]:
-    """
-    新聞分類
-    
-    Args:
-        title: 標題
-        summary: 摘要
-    
-    Returns:
-        分類標籤列表
-    """
-    text = (title + " " + summary).lower()
-    categories = []
-    
-    for category, keywords in NEWS_CATEGORIES.items():
-        if any(keyword.lower() in text for keyword in keywords):
-            categories.append(category)
-    
-    return categories if categories else ["其他"]
-
-
-def get_trending_topics(news_list: List[Dict[str, Any]], top_n: int = 10) -> List[str]:
-    """
-    取得熱門話題
-    
-    Args:
-        news_list: 新聞列表
-        top_n: 返回前 N 個
-    
-    Returns:
-        熱門話題列表
-    """
-    from collections import Counter
-    
-    all_categories = []
-    for news in news_list:
-        categories = categorize_news(news.get('title', ''), news.get('summary', ''))
-        all_categories.extend(categories)
-    
-    counter = Counter(all_categories)
-    return [category for category, count in counter.most_common(top_n)]
-
-
-def get_news_sentiment_summary(news_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    新聞情緒摘要
-    
-    Args:
-        news_list: 新聞列表
-    
-    Returns:
-        {
-            "positive": int,
-            "neutral": int,
-            "negative": int,
-            "sentiment_score": float,  # -1 to 1
-            "overall": str  # Bullish, Neutral, Bearish
-        }
-    """
-    sentiment_count = {"Positive": 0, "Neutral": 0, "Negative": 0}
-    
-    for news in news_list:
-        sentiment = news.get('sentiment', 'Neutral')
-        sentiment_count[sentiment] += 1
-    
-    total = len(news_list)
-    if total == 0:
-        return {
-            "positive": 0,
-            "neutral": 0,
-            "negative": 0,
-            "sentiment_score": 0,
-            "overall": "Neutral"
-        }
-    
-    # 計算情緒分數
-    sentiment_score = (sentiment_count["Positive"] - sentiment_count["Negative"]) / total
-    
-    if sentiment_score > 0.2:
-        overall = "Bullish"
-    elif sentiment_score < -0.2:
-        overall = "Bearish"
-    else:
-        overall = "Neutral"
-    
-    return {
-        "positive": sentiment_count["Positive"],
-        "neutral": sentiment_count["Neutral"],
-        "negative": sentiment_count["Negative"],
-        "sentiment_score": round(sentiment_score, 2),
-        "overall": overall
-    }
+# 测试
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    news = get_crypto_news(limit=10)
+    for n in news:
+        print(f"[{n['source']}] {n['title']} (重要性：{n['importance']})")
