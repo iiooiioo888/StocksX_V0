@@ -102,7 +102,7 @@ def on_task_prerun(task_id, task, *args, **kwargs):
 
 
 @task_postrun.connect
-def on_task_postrun(task_id, task, *args, **kwargs, retval=None):
+def on_task_postrun(task_id, task, retval=None, *args, **kwargs):
     """任務完成後記錄"""
     duration = time.time() - getattr(task, 'start_time', time.time())
     logger.info(

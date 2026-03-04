@@ -7,9 +7,9 @@ from typing import Any, Dict, List, Optional
 from celery import Task
 
 from src.backtest.engine import BacktestResult, run_backtest as sync_run_backtest
-from src.backtest.optimizer import optimize_params
+from src.backtest.optimizer import find_optimal
 from src.data.crypto import CryptoDataFetcher
-from src.data.traditional import TradDataFetcher
+from src.data.traditional.fetcher import TraditionalDataFetcher
 
 
 class BacktestTask(Task):
@@ -218,26 +218,54 @@ def run_param_optimizer(
     )
     
     start_time = time.time()
-    
+
     try:
+        # 將日期字串轉換為時間戳
+        from datetime import datetime
+        since_ms = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+        until_ms = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp() * 1000)
+        
+        # 將 metric 映射到 objective
+        metric_to_objective = {
+            'sharpe': 'sharpe_ratio',
+            'total_return': 'total_return_pct',
+            'annual_return': 'annual_return_pct',
+            'calmar': 'calmar_ratio',
+            'sortino': 'sortino_ratio',
+            'max_drawdown': 'max_drawdown_pct',
+        }
+        objective = metric_to_objective.get(metric, 'sharpe_ratio')
+        
         # 執行參數優化
-        results = optimize_params(
+        best_result, results_list = find_optimal(
+            exchange_id=exchange,
             symbol=symbol,
-            exchange=exchange,
             timeframe=timeframe,
+            since_ms=since_ms,
+            until_ms=until_ms,
             strategy=strategy,
             param_grid=param_grid,
-            start_date=start_date,
-            end_date=end_date,
+            objective=objective,
             initial_equity=initial_equity,
             leverage=leverage,
-            fee_rate=fee_rate,
-            metric=metric,
-            n_best=n_best,
+            max_combos=999,  # 不限制組合數量
         )
-        
+
         duration_ms = (time.time() - start_time) * 1000
         
+        # 轉換結果格式
+        results = []
+        for item in results_list:
+            if 'result' in item and item['result']:
+                results.append({
+                    'params': item.get('params', {}),
+                    'metrics': item.get('metrics', {}),
+                    'score': item.get('score', 0),
+                })
+        
+        # 按分數排序
+        results.sort(key=lambda x: x.get('score', 0), reverse=True)
+
         log_backtest(
             logger,
             symbol=symbol,
@@ -248,11 +276,12 @@ def run_param_optimizer(
             status='completed',
             total_runs=len(results)
         )
-        
+
         return {
             'success': True,
-            'results': results,
-            'best_params': results[0] if results else None,
+            'results': results[:n_best],  # 回傳前 N 個最佳結果
+            'best_params': results[0].get('params') if results else None,
+            'best_result': best_result,
             'total_runs': len(results),
             'duration_ms': duration_ms,
             'config': {
@@ -262,7 +291,7 @@ def run_param_optimizer(
                 'metric': metric,
             }
         }
-        
+
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         log_backtest(

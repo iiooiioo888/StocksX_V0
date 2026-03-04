@@ -431,9 +431,19 @@ class UserDB:
 
     @staticmethod
     def validate_session(user: dict | None) -> bool:
+        """验证 session 是否有效（检查登录时间是否过期）"""
+        import streamlit as st
         if not user:
             return False
-        login_time = user.get("last_login", 0)
+        # 优先检查 session 中存储的登录时间
+        login_time = st.session_state.get("_login_time")
+        
+        # 如果没有 _login_time，但有 user，说明是页面刷新，session 仍然有效
+        # Streamlit 会自动管理 session 生命周期
+        if login_time is None:
+            return True
+        
+        # 如果有登录时间，检查是否过期（1 小时）
         if login_time and time.time() - login_time > _SESSION_TIMEOUT:
             return False
         return True

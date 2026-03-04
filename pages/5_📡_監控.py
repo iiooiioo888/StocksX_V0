@@ -211,10 +211,17 @@ with tabs[0]:
             position = w["position"]
             entry_price = w["entry_price"]
             _equity = w["initial_equity"]
-            
+
             # 確保價格是數值類型
             current_price = float(current_price or 0)
             entry_price = float(entry_price or 0)
+
+            # 調試信息
+            st.caption(f"🔍 調試：position={position}, entry_price=${entry_price:,.2f}, current_price=${current_price:,.2f}")
+            
+            # 調試信息（僅在價格異常時顯示）
+            if entry_price > 0 and current_price == 0:
+                st.warning(f"⚠️ {symbol}: 無法取得當前價格（進場價=${entry_price:,.2f}）")
             
             if position > 0 and entry_price > 0 and current_price > 0:
                 _pnl = (current_price - entry_price) / entry_price * 100
@@ -283,9 +290,34 @@ with tabs[0]:
                 
                 # 帳戶價值
                 v1, v2, v3, v4 = st.columns(4)
-                _val_color = "normal" if _profit >= 0 else "inverse"
-                v1.metric("🏦 帳戶價值", f"${_equity * (1 + _pnl/100):,.2f}" if position != 0 else f"${_equity:,.2f}", delta=f"{_profit:+,.2f}", delta_color=_val_color)
-                v2.metric("💹 未實現 P&L", f"{_pnl:+.2f}%", delta=f"${_profit:+,.2f}", delta_color=_val_color)
+                
+                # 計算帳戶價值：
+                # 1. 有多頭持倉：帳戶價值 = 初始資金 * (1 + 漲跌幅)
+                # 2. 有空頭持倉：帳戶價值 = 初始資金 * (1 + 漲跌幅)
+                # 3. 無持倉（position=0）：帳戶價值 = 初始資金
+                if position > 0 and entry_price > 0 and current_price > 0:
+                    # 多頭：價格上漲賺錢
+                    account_value = _equity * (1 + (current_price - entry_price) / entry_price)
+                    _pnl_display = (current_price - entry_price) / entry_price * 100
+                    _profit_display = (current_price - entry_price) * (_equity / entry_price)
+                elif position < 0 and entry_price > 0 and current_price > 0:
+                    # 空頭：價格下跌賺錢
+                    account_value = _equity * (1 + (entry_price - current_price) / entry_price)
+                    _pnl_display = (entry_price - current_price) / entry_price * 100
+                    _profit_display = (entry_price - current_price) * (_equity / entry_price)
+                else:
+                    # 無持倉或價格數據不完整
+                    account_value = _equity
+                    _pnl_display = 0
+                    _profit_display = 0
+                    
+                    # 如果有進場價但 position=0，顯示警告
+                    if entry_price > 0 and position == 0:
+                        st.warning(f"⚠️ {symbol}: 持倉狀態異常（position={position}, entry_price=${entry_price:,.2f}）")
+                
+                _val_color = "normal" if _profit_display >= 0 else "inverse"
+                v1.metric("🏦 帳戶價值", f"${account_value:,.2f}", delta=f"{_profit_display:+,.2f}" if _profit_display != 0 else None, delta_color=_val_color)
+                v2.metric("💹 未實現 P&L", f"{_pnl_display:+.2f}%" if _pnl_display != 0 else "0.00%", delta=f"${_profit_display:+,.2f}" if _profit_display != 0 else "$0.00", delta_color=_val_color)
                 entry = w.get("entry_price", 0)
                 v3.metric("📍 進場價", format_price(entry) if entry else "—")
                 v4.metric("💵 初始資金", f"${_equity:,.2f}")
@@ -412,8 +444,9 @@ with tabs[0]:
                         st.info("暫無交易記錄")
 
 # 自動重新整理
-if auto_refresh and watchlist:
-    _time.sleep(10)
+# 始終自動刷新（只要有訂閱），避免帳戶價值不更新
+if auto_refresh:
+    _time.sleep(5)  # 縮短為 5 秒，更即時
     st.rerun()
 
 # ════════════════════════════════════════════════════════════

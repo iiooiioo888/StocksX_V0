@@ -36,31 +36,43 @@ class DataManager:
         self.kline_cache: Dict[str, pd.DataFrame] = {}
         self.depth_cache: Dict[str, Dict] = {}
         self.last_update: Dict[str, float] = {}
-        self.cache_ttl = 1.0  # 緩存 TTL（秒）
+        self.cache_ttl = 3.0  # 緩存 TTL（秒）- 避免過於頻繁請求 API
+        self.fallback_ttl = 10.0  #  fallback 緩存 TTL（秒）- API 失敗時使用舊數據
     
     def get_price(self, symbol: str) -> Optional[Dict]:
         """取得價格（從 WebSocket 或真實 API）"""
         now = time.time()
-        
+
         # 優先從 WebSocket 取得
         if symbol in st.session_state.ws_prices:
             ws_data = st.session_state.ws_prices[symbol]
             ws_age = now - ws_data.get('timestamp', 0) / 1000
             if ws_age < 5:  # 5 秒內的數據
                 return ws_data
-        
+
         # 從真實 API 取得
         if symbol in self.price_cache:
-            if now - self.last_update.get(symbol, 0) < self.cache_ttl:
+            cache_age = now - self.last_update.get(symbol, 0)
+            if cache_age < self.cache_ttl:
                 return self.price_cache[symbol]
-        
+            # API 失敗時，使用舊數據（10 秒內仍有效）
+            elif cache_age < self.fallback_ttl:
+                logger = st.session_state.get("logger", None)
+                if logger:
+                    logger.warning(f"使用緩存數據（API 請求失敗）{symbol}")
+                return self.price_cache[symbol]
+
         # 使用真實數據服務
         data = data_service.get_ticker(symbol)
         if data:
             self.price_cache[symbol] = data
             self.last_update[symbol] = now
             return data
-        
+
+        # 完全沒有數據時，返回舊數據（即使已過期）
+        if symbol in self.price_cache:
+            return self.price_cache[symbol]
+
         return None
     
     def get_kline(self, symbol: str, timeframe: str = '1h', periods: int = 100) -> Optional[pd.DataFrame]:
@@ -1133,8 +1145,11 @@ with tabs[7]:
 # 自動刷新（智能停留）
 # ════════════════════════════════════════════════════════════
 
-# 只在連接時自動刷新，避免無限刷新
-if st.session_state.ws_connected:
-    # 使用 st.autorun 或手動控制刷新頻率
-    time.sleep(1)
+# 自動刷新機制 - 不依賴 WebSocket，始終保持數據更新
+# 使用 Streamlit 的原生自動刷新
+auto_refresh = st.toggle("🔄 自動刷新", value=True, key="auto_refresh_toggle")
+
+if auto_refresh:
+    # 每 3 秒自動刷新一次（避免過於頻繁）
+    time.sleep(3)
     st.rerun()
