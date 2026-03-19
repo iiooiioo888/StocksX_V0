@@ -110,6 +110,15 @@ StocksX_V0/
 │   ├── 10_📊_策略回测对比.py      # 多策略對比
 │   └── 11_🤖_自動交易.py         # 自動交易控制
 ├── src/
+│   ├── core/                       # 🏗️ 新架構核心 (v4.2)
+│   │   ├── config.py               # Typed Settings (dataclass)
+│   │   ├── provider.py             # MarketProvider Protocol
+│   │   ├── adapters.py             # CCXT / Yahoo / Composite
+│   │   ├── signals.py              # SignalBus (Pub/Sub)
+│   │   ├── pipeline.py             # 函數式數據管道
+│   │   ├── backtest.py             # BacktestEngine
+│   │   ├── registry.py             # 策略裝飾器註冊
+│   │   └── orchestrator.py         # 統一編排入口
 │   ├── auth/                     # 用戶認證 (bcrypt + JWT)
 │   ├── backtest/                 # 回測引擎 & 策略庫
 │   │   ├── engine.py             # 核心回測邏輯
@@ -194,17 +203,44 @@ StocksX_V0/
 
 ## 🔧 技術架構
 
-| 層級 | 技術 |
-|------|------|
-| **UI** | Streamlit 1.32+ |
-| **圖表** | Plotly 5.18+ |
-| **數據** | CCXT (加密)、yfinance (傳統)、CoinGecko |
-| **即時** | FastAPI + WebSocket |
-| **任務** | Celery + Redis |
-| **儲存** | SQLite / PostgreSQL |
-| **認證** | bcrypt + JWT |
-| **監控** | Prometheus + Grafana |
-| **部署** | Docker + Docker Compose |
+### 新架構（v4.2 — Provider → Pipeline → Signal）
+
+```
+UI (Streamlit)
+  │
+  ▼
+Orchestrator (統一編排入口)
+  │
+  ├── Registry (策略裝飾器自動註冊)
+  ├── SignalBus (Publish/Subscribe 事件)
+  ├── Pipeline (函數式數據處理)
+  ├── BacktestEngine (信號驅動回測)
+  │
+  └── CompositeProvider (自動路由)
+       ├── CCXTProvider → 11 加密交易所
+       ├── YahooProvider → 美股/台股/ETF
+       └── CacheBackend → Redis / Dict
+```
+
+詳見 [ARCHITECTURE.md](ARCHITECTURE.md)
+
+| 層級 | 技術 | 說明 |
+|------|------|------|
+| **UI** | Streamlit 1.32+ | 多頁應用 |
+| **編排** | `src.core.Orchestrator` | 統一業務入口 |
+| **Provider** | Protocol + Adapter | CCXT / Yahoo 自動路由 |
+| **策略** | 裝飾器 Registry | 15+ 策略自動註冊 |
+| **信號** | Pub/Sub SignalBus | 事件驅動解耦 |
+| **管道** | Pipeline (函數式) | 可組合的數據處理 |
+| **回測** | BacktestEngine | Pipeline + Signal 驅動 |
+| **快取** | Redis / Dict (Protocol) | 可替換後端 |
+| **圖表** | Plotly 5.18+ | 互動式圖表 |
+| **即時** | FastAPI + WebSocket | 1 秒推送 |
+| **任務** | Celery + Redis | 異步任務 |
+| **儲存** | SQLite / PostgreSQL | WAL 模式 |
+| **認證** | bcrypt + JWT | 安全登入 |
+| **監控** | Prometheus + Grafana | 可選 profile |
+| **部署** | Docker + Compose | 多階段構建 |
 
 ---
 
