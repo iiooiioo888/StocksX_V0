@@ -4,7 +4,7 @@
 # ════════════════════════════════════════════════════════════
 
 # ── 構建階段 ──
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 # ── 運行階段 ──
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 LABEL maintainer="StocksX Team"
 LABEL description="StocksX - 機構級回測與交易監控平台 v5.3"
