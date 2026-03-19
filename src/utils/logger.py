@@ -9,6 +9,9 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
+from contextlib import contextmanager
+from typing import Any
 
 
 def setup_logging(
@@ -27,7 +30,6 @@ def setup_logging(
     Returns:
         根日誌器
     """
-    # 從環境變數讀取，fallback 到參數，最後 fallback 到 INFO
     env_level = os.getenv("LOG_LEVEL", "")
     if env_level:
         level = env_level.upper()
@@ -36,7 +38,7 @@ def setup_logging(
 
     root_logger = logging.getLogger()
     if root_logger.handlers:
-        return root_logger  # 已初始化過
+        return root_logger
 
     root_logger.setLevel(level)
 
@@ -45,19 +47,18 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # ── Console Handler ──
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(fmt)
     root_logger.addHandler(console)
 
-    # ── File Handler（輪轉，保留 7 天）──
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"{app_name}.log")
-    file_handler = logging.handlers.TimedRotatingFileHandler(log_file, when="midnight", backupCount=7, encoding="utf-8")
+    file_handler = logging.handlers.TimedRotatingFileHandler(
+        log_file, when="midnight", backupCount=7, encoding="utf-8"
+    )
     file_handler.setFormatter(fmt)
     root_logger.addHandler(file_handler)
 
-    # 降低第三方庫的噪音
     for noisy in ("urllib3", "ccxt", "httpx", "httpcore", "plotly"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
@@ -65,6 +66,77 @@ def setup_logging(
     return root_logger
 
 
+# ── Aliases ──
+setup_logger = setup_logging
+init_default_logger = setup_logging
+
+
 def get_logger(name: str) -> logging.Logger:
     """取得指定名稱的日誌器（快捷方式）。"""
     return logging.getLogger(name)
+
+
+# ── 結構化日誌輔助 ──
+
+
+def log_api_call(
+    logger: logging.Logger,
+    provider: str,
+    endpoint: str,
+    status: int | str = "ok",
+    duration_ms: float | None = None,
+    **extra: Any,
+) -> None:
+    """記錄一次 API 呼叫。"""
+    parts = [f"provider={provider}", f"endpoint={endpoint}", f"status={status}"]
+    if duration_ms is not None:
+        parts.append(f"duration={duration_ms:.1f}ms")
+    for k, v in extra.items():
+        parts.append(f"{k}={v}")
+    logger.info("API call: %s", " | ".join(parts))
+
+
+def log_backtest(
+    logger: logging.Logger,
+    symbol: str,
+    strategy: str,
+    status: str = "started",
+    **extra: Any,
+) -> None:
+    """記錄回測事件。"""
+    parts = [f"symbol={symbol}", f"strategy={strategy}", f"status={status}"]
+    for k, v in extra.items():
+        parts.append(f"{k}={v}")
+    logger.info("Backtest: %s", " | ".join(parts))
+
+
+def log_user_action(
+    logger: logging.Logger,
+    user_id: Any,
+    action: str,
+    **extra: Any,
+) -> None:
+    """記錄用戶操作。"""
+    parts = [f"user={user_id}", f"action={action}"]
+    for k, v in extra.items():
+        parts.append(f"{k}={v}")
+    logger.info("User action: %s", " | ".join(parts))
+
+
+@contextmanager
+def LogContext(logger: logging.Logger, operation: str, **extra: Any):
+    """日誌上下文管理器 — 自動記錄操作的開始、結束與耗時。"""
+    start = time.monotonic()
+    parts = [f"op={operation}"]
+    for k, v in extra.items():
+        parts.append(f"{k}={v}")
+    logger.info("▶ Start: %s", " | ".join(parts))
+    try:
+        yield
+    except Exception:
+        elapsed = (time.monotonic() - start) * 1000
+        logger.exception("✖ Failed: %s (%.1fms)", operation, elapsed)
+        raise
+    else:
+        elapsed = (time.monotonic() - start) * 1000
+        logger.info("✔ Done: %s (%.1fms)", operation, elapsed)
