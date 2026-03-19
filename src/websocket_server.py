@@ -5,15 +5,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
+import secrets
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.security import HTTPBearer
-import os
-import secrets
-import logging
 import jwt
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class ConnectionManager:
         if user_id not in self.active_connections:
             self.active_connections[user_id] = {}
         self.active_connections[user_id][symbol] = websocket
-        print(f"WebSocket 連接：user_id={user_id}, symbol={symbol}")
+        logger.info(f"WebSocket 連接：user_id={user_id}, symbol={symbol}")
     
     def disconnect(self, user_id: int, symbol: str):
         if user_id in self.active_connections:
@@ -47,7 +47,7 @@ class ConnectionManager:
                 del self.active_connections[user_id][symbol]
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
-        print(f"WebSocket 斷開：user_id={user_id}, symbol={symbol}")
+        logger.info(f"WebSocket 斷開：user_id={user_id}, symbol={symbol}")
     
     async def send_personal_message(self, message: dict, user_id: int, symbol: Optional[str] = None):
         if user_id not in self.active_connections:
@@ -59,7 +59,7 @@ class ConnectionManager:
                 try:
                     await websocket.send_json(message)
                 except Exception as e:
-                    print(f"發送失敗：{e}")
+                    logger.warning(f"發送失敗：{e}")
         else:
             # 發送給用戶的所有連接
             for ws in self.active_connections[user_id].values():
@@ -111,7 +111,7 @@ def get_binance_exchange(market_type: str = "spot"):
                 })
             return _binance_future
     except Exception as e:
-        print(f"建立交易所實例失敗：{e}")
+        logger.error(f"建立交易所實例失敗：{e}")
         return None
 
 
@@ -171,17 +171,17 @@ async def fetch_price(symbol: str) -> Optional[Dict[str, Any]]:
                 "market_type": market_type
             }
         else:
-            print(f"無效的價格數據：{symbol}")
+            logger.warning(f"無效的價格數據：{symbol}")
             return None
             
     except ccxt.NetworkError as e:
-        print(f"網路錯誤 {symbol}: {e}")
+        logger.warning(f"網路錯誤 {symbol}: {e}")
         return None
     except ccxt.ExchangeError as e:
-        print(f"交易所錯誤 {symbol}: {e}")
+        logger.warning(f"交易所錯誤 {symbol}: {e}")
         return None
     except Exception as e:
-        print(f"取得價格失敗 {symbol}: {type(e).__name__}: {e}")
+        logger.error(f"取得價格失敗 {symbol}: {type(e).__name__}: {e}")
         return None
 
 
@@ -236,7 +236,7 @@ async def price_push_task():
                             except Exception:
                                 pass
         except Exception as e:
-            print(f"價格推送任務錯誤：{e}")
+            logger.error(f"價格推送任務錯誤：{e}")
 
         await asyncio.sleep(1)  # 每秒推送一次
 
@@ -265,7 +265,7 @@ async def signal_push_task():
                                     symbol=symbol
                                 )
             except Exception as e:
-                print(f"信號推送錯誤 {symbol}: {e}")
+                logger.error(f"信號推送錯誤 {symbol}: {e}")
         
         await asyncio.sleep(5)  # 每 5 秒檢查一次
 
@@ -275,7 +275,7 @@ async def startup_event():
     """啟動時開始推送任務"""
     asyncio.create_task(price_push_task())
     asyncio.create_task(signal_push_task())
-    print("WebSocket 服務已啟動")
+    logger.info("WebSocket 服務已啟動")
 
 
 def verify_token(token: str) -> Optional[dict]:
@@ -311,7 +311,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
 
     # 接受連接
     await websocket.accept()
-    print(f"WebSocket 連接：user_id={user_id}")
+    logger.info("WebSocket 連接：user_id=%s", user_id)
 
     # 發送歡迎訊息
     await websocket.send_json({
@@ -345,7 +345,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                     "type": "subscribed",
                     "symbols": list(subscribed_symbols)
                 })
-                print(f"用戶 {user_id} 訂閱：{subscribed_symbols}")
+                logger.info(f"用戶 %s 訂閱：{subscribed_symbols}")
 
             elif action == "unsubscribe":
                 symbols = message.get("symbols", [])
@@ -364,12 +364,12 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                 await websocket.send_json({"type": "pong"})
 
     except WebSocketDisconnect:
-        print(f"WebSocket 斷開連接：user_id={user_id}")
+        logger.info("WebSocket 斷開連接：user_id=%s", user_id)
         # 清理連接
         if user_id in manager.active_connections:
             del manager.active_connections[user_id]
     except Exception as e:
-        print(f"WebSocket 錯誤：{e}")
+        logger.error(f"WebSocket 錯誤：{e}")
         # 清理連接
         if user_id in manager.active_connections:
             del manager.active_connections[user_id]

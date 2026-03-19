@@ -1,5 +1,8 @@
 # 數據服務層 - 整合真實數據源
 from __future__ import annotations
+import logging
+
+logger = logging.getLogger(__name__)
 
 import time
 from typing import Dict, List, Optional, Any
@@ -79,7 +82,7 @@ class DataService:
             
             return None
         except Exception as e:
-            print(f"取得 Ticker 失敗 {symbol}: {e}")
+            logger.warning(f"取得 Ticker 失敗 {symbol}: {e}")
             return None
     
     def get_tickers_batch(self, symbols: List[str]) -> Dict[str, Dict]:
@@ -123,7 +126,7 @@ class DataService:
             
             return None
         except Exception as e:
-            print(f"取得 K 線失敗 {symbol}: {e}")
+            logger.warning(f"取得 K 線失敗 {symbol}: {e}")
             return None
     
     # ════════════════════════════════════════════════════════════
@@ -159,7 +162,7 @@ class DataService:
             
             return None
         except Exception as e:
-            print(f"取得訂單簿失敗 {symbol}: {e}")
+            logger.warning(f"取得訂單簿失敗 {symbol}: {e}")
             return None
     
     # ════════════════════════════════════════════════════════════
@@ -190,7 +193,7 @@ class DataService:
             
             return None
         except Exception as e:
-            print(f"取得鏈上數據失敗 {symbol}: {e}")
+            logger.warning(f"取得鏈上數據失敗 {symbol}: {e}")
             return None
     
     def get_whale_transactions(self, symbol: str, limit: int = 24) -> Optional[pd.DataFrame]:
@@ -222,7 +225,7 @@ class DataService:
             
             return df
         except Exception as e:
-            print(f"取得巨鯨數據失敗 {symbol}: {e}")
+            logger.warning(f"取得巨鯨數據失敗 {symbol}: {e}")
             return None
     
     # ════════════════════════════════════════════════════════════
@@ -252,7 +255,7 @@ class DataService:
             
             return None
         except Exception as e:
-            print(f"取得恐懼貪婪指數失敗：{e}")
+            logger.warning(f"取得恐懼貪婪指數失敗：{e}")
             return None
     
     def get_social_sentiment(self, symbol: str) -> Optional[Dict]:
@@ -270,7 +273,7 @@ class DataService:
                 "timestamp": int(time.time() * 1000)
             }
         except Exception as e:
-            print(f"取得社群情緒失敗 {symbol}: {e}")
+            logger.warning(f"取得社群情緒失敗 {symbol}: {e}")
             return None
     
     # ════════════════════════════════════════════════════════════
@@ -350,7 +353,7 @@ class DataService:
             
             return None
         except Exception as e:
-            print(f"計算信號失敗 {symbol}: {e}")
+            logger.error(f"計算信號失敗 {symbol}: {e}")
             return None
 
 

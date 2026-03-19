@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import websockets as ws_client  # 用於連接幣安
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="StocksX Binance WebSocket Service")
 
@@ -56,7 +59,7 @@ class ConnectionManager:
             self.subscriptions[user_id] = set()
         self.active_connections[user_id][symbol] = websocket
         self.subscriptions[user_id].add(symbol)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 連接：{symbol}")
+        logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 連接：{symbol}")
     
     def disconnect(self, user_id: int, symbol: str = None):
         """斷開用戶連接"""
@@ -72,7 +75,7 @@ class ConnectionManager:
             else:
                 del self.active_connections[user_id]
                 del self.subscriptions[user_id]
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 斷開：{symbol or '所有'}")
+        logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 斷開：{symbol or '所有'}")
     
     async def broadcast_to_subscribers(self, symbol: str, message: dict):
         """廣播數據給所有訂閱該交易對的用戶"""
@@ -84,7 +87,7 @@ class ConnectionManager:
                             try:
                                 await ws.send_json(message)
                             except Exception as e:
-                                print(f"發送失敗 {symbol} -> 用戶{user_id}: {e}")
+                                logger.warning(f"發送失敗 {symbol} -> 用戶{user_id}: {e}")
 
 
 manager = ConnectionManager()
@@ -179,7 +182,7 @@ def parse_binance_message(stream_type: str, data: dict) -> Optional[Dict[str, An
             }
         
     except Exception as e:
-        print(f"解析錯誤 {stream_type}: {e}")
+        logger.warning(f"解析錯誤 {stream_type}: {e}")
     
     return None
 
@@ -199,7 +202,7 @@ async def binance_data_stream(stream_url: str, stream_type: str):
     ping_interval = 20  # 幣安每 20 秒發送 Ping
     
     async with ws_client.connect(stream_url, ping_interval=ping_interval) as ws:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 幣安連接成功：{stream_url}")
+        logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 幣安連接成功：{stream_url}")
         
         async for message in ws:
             try:
@@ -218,7 +221,7 @@ async def binance_data_stream(stream_url: str, stream_type: str):
                     })
                     
             except Exception as e:
-                print(f"幣安數據處理錯誤 {stream_url}: {e}")
+                logger.error(f"幣安數據處理錯誤 {stream_url}: {e}")
 
 
 async def manage_binance_connections():
@@ -238,7 +241,7 @@ async def manage_binance_connections():
                 if symbol in manager.binance_connections:
                     await manager.binance_connections[symbol].close()
                     del manager.binance_connections[symbol]
-                    print(f"[-] 移除幣安連接：{symbol}")
+                    logger.info(f"[-] 移除幣安連接：{symbol}")
             
             # 添加新的連接
             to_add = current_subscriptions - last_subscriptions
@@ -250,12 +253,12 @@ async def manage_binance_connections():
                     
                     # 啟動異步任務
                     asyncio.create_task(binance_data_stream(stream_url, "miniTicker"))
-                    print(f"[+] 新增幣安連接：{symbol} -> {stream_name}")
+                    logger.info(f"[+] 新增幣安連接：{symbol} -> {stream_name}")
             
             last_subscriptions = current_subscriptions
             
         except Exception as e:
-            print(f"管理幣安連接錯誤：{e}")
+            logger.error(f"管理幣安連接錯誤：{e}")
         
         await asyncio.sleep(1)  # 每秒檢查一次
 
@@ -276,7 +279,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
     
     # 接受連接
     await websocket.accept()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 連接 WebSocket")
+    logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 連接 WebSocket")
     
     # 發送歡迎訊息
     await websocket.send_json({
@@ -308,7 +311,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                     "type": "subscribed",
                     "symbols": list(subscribed_symbols)
                 })
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 訂閱：{subscribed_symbols}")
+                logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 訂閱：{subscribed_symbols}")
             
             elif action == "unsubscribe":
                 symbols = message.get("symbols", [])
@@ -326,11 +329,11 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                 await websocket.send_json({"type": "pong"})
     
     except WebSocketDisconnect:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 斷開 WebSocket")
+        logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 用戶 {user_id} 斷開 WebSocket")
         manager.disconnect(user_id)
     
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] WebSocket 錯誤：{e}")
+        logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] WebSocket 錯誤：{e}")
         manager.disconnect(user_id)
 
 
@@ -342,11 +345,11 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
 async def startup_event():
     """啟動時開始管理幣安連接"""
     asyncio.create_task(manage_binance_connections())
-    print("=" * 60)
-    print("StocksX Binance WebSocket Service 已啟動")
-    print(f"幣安 WebSocket: {BINANCE_WS}")
-    print("數據流類型：miniTicker (1 秒更新)")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("StocksX Binance WebSocket Service 已啟動")
+    logger.info(f"幣安 WebSocket: {BINANCE_WS}")
+    logger.info("數據流類型：miniTicker (1 秒更新)")
+    logger.info("=" * 60)
 
 
 @app.get("/health")

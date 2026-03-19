@@ -2,6 +2,9 @@
 # 整合多個指數數據源
 
 from __future__ import annotations
+import logging
+
+logger = logging.getLogger(__name__)
 
 import requests
 from typing import Any, Dict, List, Optional
@@ -128,7 +131,7 @@ def get_index_quote(symbol: str) -> Optional[Dict[str, Any]]:
         
         return data
     except Exception as e:
-        print(f"取得指數報價失敗 {symbol}: {e}")
+        logger.error(f"取得指數報價失敗 {symbol}: {e}")
         return None
 
 

@@ -300,12 +300,14 @@ class UserDB:
     def _ensure_admin(self) -> None:
         cur = self._conn.execute("SELECT id FROM users WHERE username='admin'")
         if not cur.fetchone():
+            import logging
+            logger = logging.getLogger(__name__)
             admin_pw = os.getenv("ADMIN_PASSWORD", "")
             if not admin_pw:
                 import secrets
                 admin_pw = secrets.token_urlsafe(16)
-                print(f"[StockX] ⚠️ 首次建立管理員帳號，臨時密碼: {admin_pw}")
-                print(f"[StockX] 請盡快透過 UI 修改管理員密碼，或在 .env 中設定 ADMIN_PASSWORD")
+                logger.warning("首次建立管理員帳號，臨時密碼: %s", admin_pw)
+                logger.warning("請盡快透過 UI 修改管理員密碼，或在 .env 中設定 ADMIN_PASSWORD")
             self.register("admin", admin_pw, display_name="管理員", role="admin")
 
     def _init_system_products(self) -> None:

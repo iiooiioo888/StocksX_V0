@@ -1,5 +1,8 @@
 # 即時監控數據服務
 from __future__ import annotations
+import logging
+
+logger = logging.getLogger(__name__)
 
 import time
 from typing import Dict, List, Any, Optional
@@ -45,7 +48,7 @@ def batch_get_live_prices(symbols: List[str]) -> Dict[str, Dict]:
             if price_data:
                 result[symbol] = price_data
         except Exception as e:
-            print(f"取得價格失敗 {symbol}: {e}")
+            logger.error(f"取得價格失敗 {symbol}: {e}")
     return result
 
 
@@ -250,7 +253,7 @@ def calculate_signal_for_symbol(
             }
     
     except Exception as e:
-        print(f"計算信號失敗 {symbol}: {e}")
+        logger.error(f"計算信號失敗 {symbol}: {e}")
         return None
 
 

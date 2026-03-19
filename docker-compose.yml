@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   # ════════════════════════════════════════════════════════════
-  # 主应用 - Streamlit
+  # 主應用 - Streamlit
   # ════════════════════════════════════════════════════════════
   app:
     build:
@@ -11,16 +9,20 @@ services:
     container_name: stocksx-app
     restart: unless-stopped
     ports:
-      - "8501:8501"
+      - "${APP_PORT:-8501}:8501"
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///app/data/stocksx.db
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - app_data:/app/data
+      - app_logs:/app/logs
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - stocksx-network
     healthcheck:
@@ -28,9 +30,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
   # ════════════════════════════════════════════════════════════
-  # WebSocket 服务
+  # WebSocket 服務
   # ════════════════════════════════════════════════════════════
   websocket:
     build:
@@ -38,19 +41,27 @@ services:
       dockerfile: Dockerfile
     container_name: stocksx-websocket
     restart: unless-stopped
-    command: python -m src.websocket_binance
+    command: python -m src.websocket_server
     ports:
-      - "8001:8001"
+      - "${WS_PORT:-8001}:8001"
     environment:
-      - REDIS_URL=redis://redis:6379
-      - TZ=Asia/Shanghai
+      - REDIS_URL=redis://redis:6379/0
+      - TZ=${TZ:-Asia/Shanghai}
+    env_file:
+      - .env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - stocksx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ════════════════════════════════════════════════════════════
-  # Redis 缓存
+  # Redis 緩存
   # ════════════════════════════════════════════════════════════
   redis:
     image: redis:7-alpine
@@ -60,7 +71,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     networks:
       - stocksx-network
     healthcheck:
@@ -70,7 +85,7 @@ services:
       retries: 3
 
   # ════════════════════════════════════════════════════════════
-  # Celery Worker (可选)
+  # Celery Worker（可選）
   # ════════════════════════════════════════════════════════════
   celery-worker:
     build:
@@ -78,50 +93,59 @@ services:
       dockerfile: Dockerfile
     container_name: stocksx-celery
     restart: unless-stopped
-    command: celery -A src.tasks worker --loglevel=info
+    command: celery -A src.tasks worker --loglevel=info --concurrency=2
     environment:
-      - REDIS_URL=redis://redis:6379
-      - TZ=Asia/Shanghai
+      - REDIS_URL=redis://redis:6379/0
+      - TZ=${TZ:-Asia/Shanghai}
+    env_file:
+      - .env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - stocksx-network
     volumes:
-      - ./logs:/app/logs
+      - app_logs:/app/logs
 
   # ════════════════════════════════════════════════════════════
-  # 监控 - Prometheus (可选)
+  # 監控 - Prometheus（可選）
   # ════════════════════════════════════════════════════════════
   prometheus:
     image: prom/prometheus:latest
     container_name: stocksx-prometheus
     restart: unless-stopped
+    profiles:
+      - monitoring
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
     networks:
       - stocksx-network
 
   # ════════════════════════════════════════════════════════════
-  # 监控 - Grafana (可选)
+  # 監控 - Grafana（可選）
   # ════════════════════════════════════════════════════════════
   grafana:
     image: grafana/grafana:latest
     container_name: stocksx-grafana
     restart: unless-stopped
+    profiles:
+      - monitoring
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
     depends_on:
       - prometheus
     networks:
@@ -132,6 +156,8 @@ networks:
     driver: bridge
 
 volumes:
+  app_data:
+  app_logs:
   redis_data:
   prometheus_data:
   grafana_data:
