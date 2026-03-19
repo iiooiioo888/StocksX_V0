@@ -37,8 +37,7 @@ jobs:
           restore-keys: pip-lint-
 
       - name: Install tools
-        run: |
-          pip install ruff mypy
+        run: pip install ruff mypy
 
       - name: Ruff lint check
         run: ruff check src/ pages/ app.py tests/
@@ -168,6 +167,9 @@ jobs:
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
   # ════════════════════════════════════════════════════════════
   # Deploy

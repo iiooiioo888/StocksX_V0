@@ -23,10 +23,11 @@ FROM python:3.11-slim
 
 LABEL maintainer="StocksX Team"
 LABEL description="StocksX - 機構級回測與交易監控平台"
+LABEL org.opencontainers.image.source="https://github.com/iiooiioo888/StocksX_V0"
 
 WORKDIR /app
 
-# 安裝運行時依賴 + 建立非 root 使用者
+# 安裝運行時依賴
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tini \
@@ -40,7 +41,7 @@ ENV PATH=/root/.local/bin:$PATH
 # 複製應用程式碼
 COPY . .
 
-# 建立日誌和資料目錄（以 root 身份建立目錄）
+# 建立必要目錄
 RUN mkdir -p /app/logs /app/data /app/cache \
     && chown -R appuser:appuser /app
 
@@ -49,12 +50,12 @@ USER appuser
 
 # 健康檢查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8501/health || exit 1
+    CMD curl -f http://localhost:8501/healthz || exit 1
 
 # 暴露端口
 EXPOSE 8501 8001
 
-# 使用 tini 作為 init 系統（正確處理信號）
+# 使用 tini 作為 init 系統
 ENTRYPOINT ["tini", "--"]
 
 # 默認啟動命令
