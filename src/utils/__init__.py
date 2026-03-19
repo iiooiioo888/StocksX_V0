@@ -1,7 +1,7 @@
 """
 Utils — 工具模組
 
-日誌、限流、健康檢查、裝飾器、風險分析、配置驗證
+日誌、限流、健康檢查、裝飾器、風險分析、配置驗證、投資組合、報告匯出
 """
 
 from .cache import LRUCache, TTLCache
@@ -36,6 +36,16 @@ try:
 except ImportError:
     pass
 
+try:
+    from .portfolio import PortfolioAnalyzer, PortfolioWeights, PortfolioMetrics
+except ImportError:
+    pass
+
+try:
+    from .report import BacktestReportGenerator, StrategyComparisonGenerator
+except ImportError:
+    pass
+
 __all__ = [
     "LRUCache",
     "TTLCache",
@@ -62,4 +72,11 @@ __all__ = [
     "validate_config",
     "ConfigReport",
     "ConfigIssue",
+    # Portfolio
+    "PortfolioAnalyzer",
+    "PortfolioWeights",
+    "PortfolioMetrics",
+    # Report
+    "BacktestReportGenerator",
+    "StrategyComparisonGenerator",
 ]

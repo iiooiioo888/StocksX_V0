@@ -1,11 +1,12 @@
 """StocksX 版本資訊"""
 
-__version__ = "5.2.1"
+__version__ = "5.2.2"
 __version_info__ = tuple(int(x) for x in __version__.split("."))
 
 # 版本歷史摘要
 CHANGELOG = {
-    "5.2.1": "修復 DataService 現貨/永續路由 · 新增風險分析 · 配置驗證 · Walk-Forward · 常用裝飾器",
+    "5.2.2": "投資組合分析（風險平價/最小方差/有效前沿）· HTML/JSON 報告匯出",
+    "5.2.1": "修復 DataService 現貨/永續路由 · 風險分析 · 配置驗證 · Walk-Forward",
     "5.2.0": "架構優化 · README 現代化 · 結構化日誌 · WebSocket 心跳",
     "5.1.0": "配置統一 · CI/CD 增強 · 測試強化",
     "5.0.0": "核心架構重構 · Orchestrator · Middleware · Cache",
