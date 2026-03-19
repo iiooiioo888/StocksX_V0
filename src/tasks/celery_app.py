@@ -13,6 +13,9 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 app = Celery("stocksx", broker=REDIS_URL, backend=REDIS_URL, include=["src.tasks.backtest_tasks"])
 
 # Celery 優化配置
+# Alias for backwards compatibility
+celery_app = app
+
 app.conf.update(
     # 任務序列化
     task_serializer="json",
