@@ -6,6 +6,16 @@ import streamlit as st
 
 from src.auth import UserDB
 from src.config import format_price
+from src.data.market_overview import (
+    fetch_market_data,
+    fetch_yahoo_reference_futures,
+    fetch_yahoo_reference_trending,
+)
+from src.ui_enhanced import (
+    render_auto_refresh_market_data,
+    render_global_search,
+    render_quick_actions,
+)
 from src.ui_modern import (
     apply_modern_theme,
     render_feature_grid,
@@ -37,14 +47,8 @@ _live_page = "pages/8_⚡_即時監控.py"
 user = st.session_state.get("user")
 
 # ════════════════════════════════════════════════════════════
-# 載入市場數據（快取優化）
+# 載入市場數據（快取 + session 狀態保護）
 # ════════════════════════════════════════════════════════════
-from src.data.market_overview import (
-    fetch_market_data,
-    fetch_yahoo_reference_futures,
-    fetch_yahoo_reference_trending,
-)
-
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_data():
@@ -61,10 +65,15 @@ def get_yahoo_trending():
     return fetch_yahoo_reference_trending()
 
 
-# 載入數據
-market_data = get_market_data()
-yahoo_futures = get_yahoo_futures()
-yahoo_trending = get_yahoo_trending()
+if "market_data_loaded" not in st.session_state:
+    st.session_state["market_data_loaded"] = True
+    market_data = get_market_data()
+    yahoo_futures = get_yahoo_futures()
+    yahoo_trending = get_yahoo_trending()
+else:
+    market_data = get_market_data()
+    yahoo_futures = get_yahoo_futures()
+    yahoo_trending = get_yahoo_trending()
 
 # 已登入用戶才載入績效數據
 if user:
@@ -92,8 +101,6 @@ with nav_col1:
     )
 
 with nav_col2:
-    from src.ui_enhanced import render_global_search
-
     render_global_search()
 
 with nav_col3:
@@ -125,10 +132,10 @@ if not user:
         ],
     )
 else:
-    db = UserDB()
-    stats = db.get_stats()
-    history_count = len(db.get_history(user["id"], limit=999))
-    favorites_count = len(db.get_favorites(user["id"]))
+    _db = UserDB()
+    stats = _db.get_stats()
+    history_count = len(_db.get_history(user["id"], limit=999))
+    favorites_count = len(_db.get_favorites(user["id"]))
 
     render_hero_banner(
         title=f"歡迎回來，{user['display_name']}！",
@@ -176,8 +183,6 @@ if user and history:
 # ════════════════════════════════════════════════════════════
 # 快捷操作
 # ════════════════════════════════════════════════════════════
-from src.ui_enhanced import render_quick_actions
-
 render_quick_actions()
 
 render_gradient_divider()
@@ -244,8 +249,6 @@ render_gradient_divider()
 # 市場行情
 # ════════════════════════════════════════════════════════════
 st.markdown("#### 📈 市場行情")
-
-from src.ui_enhanced import render_auto_refresh_market_data
 
 render_auto_refresh_market_data()
 
@@ -429,7 +432,7 @@ st.markdown(
 <div style="text-align:center;color:#64748b;font-size:0.85rem;padding:20px 0;">
     <p>⚠️ <strong>免責聲明</strong>：本平台僅供學習與研究，不構成投資建議。</p>
     <p>數據與參考來源：Yahoo Finance | 回測結果基於歷史數據，不代表未來表現。</p>
-    <p style="margin-top:10px;">© 2024 StocksX. All rights reserved.</p>
+    <p style="margin-top:10px;">© 2024–2026 StocksX. All rights reserved.</p>
 </div>
 """,
     unsafe_allow_html=True,
