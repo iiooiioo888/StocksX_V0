@@ -247,7 +247,7 @@ class ConditionalOrder:
                 symbol=self.symbol,
                 side=self.side,
                 type=self.order_type,
-                self.amount,
+                amount=self.amount,
                 price=self.limit_price
             )
             
