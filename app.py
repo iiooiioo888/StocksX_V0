@@ -44,6 +44,8 @@ _admin_page = "pages/4_🛠️_管理.py"
 _news_page = "pages/6_📰_新聞.py"
 _health_page = "pages/7_🏥_健康檢查.py"
 _live_page = "pages/8_⚡_即時監控.py"
+_ai_strat_page = "pages/9_🧠_AI 策略.py"
+_backtest_compare_page = "pages/10_📊_策略回测对比.py"
 
 user = st.session_state.get("user")
 
@@ -215,11 +217,25 @@ features = [
         "link": _live_page,
     },
     {
+        "icon": "🧠",
+        "title": "🧠 AI 策略中心",
+        "desc": "LSTM 預測、NLP 情緒、配對交易、強化學習等前沿 AI 策略",
+        "tags": '<span class="status-badge status-success">機器學習</span> <span class="status-badge status-success">深度學習</span>',
+        "link": _ai_strat_page,
+    },
+    {
         "icon": "📊",
         "title": "15 種專業策略",
         "desc": "雙均線、MACD、RSI、布林帶、一目均衡表等經典策略即開即用",
         "tags": '<span class="status-badge status-warning">趨勢</span> <span class="status-badge status-warning">擺盪</span>',
         "link": _crypto_page,
+    },
+    {
+        "icon": "📈",
+        "title": "策略回測對比",
+        "desc": "對比不同策略歷史表現，Sharpe、回撤、勝率全方位分析",
+        "tags": '<span class="status-badge status-info">對比</span> <span class="status-badge status-info">分析</span>',
+        "link": _backtest_compare_page,
     },
     {
         "icon": "📜",
