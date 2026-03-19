@@ -54,6 +54,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "pages/*" = ["E402"]  # Streamlit pages 需要先 set_page_config
 "app.py" = ["E402"]
+"tests/*" = ["F401"]  # Test imports are for availability checks
 
 [tool.ruff.format]
 quote-style = "double"

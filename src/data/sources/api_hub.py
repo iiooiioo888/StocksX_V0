@@ -13,7 +13,8 @@ from __future__ import annotations
 - 券商交易：Alpaca
 - 情緒數據：Fear & Greed Index、CBOE VIX
 
-v2.0 更新：
+v3.0 更新：
+- 加入記憶體快取（TTL 支援）
 - 加入 API 限流器（令牌桶演算法）
 - 加入結構化日誌
 - 加入請求計時與統計
@@ -37,6 +38,7 @@ from src.config_secrets import (
     TRADING_ECONOMICS_API_KEY,
     require,
 )
+from src.utils.cache import cached
 
 from .crypto_ccxt import CcxtOhlcvSource
 from .yfinance_source import YfinanceOhlcvSource
@@ -94,6 +96,7 @@ def fetch_crypto_ohlcv(
 POLY_BASE_URL = "https://gamma-api.polymarket.com"
 
 
+@cached(ttl=120)
 def fetch_polymarket_markets(
     query: str = "",
     limit: int = 10,
@@ -181,6 +184,7 @@ def fetch_polymarket_markets(
 FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 
 
+@cached(ttl=3600)
 def fetch_fred_series(
     series_id: str,
     *,
@@ -257,6 +261,7 @@ def fetch_fred_series(
 ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query"
 
 
+@cached(ttl=300)
 def fetch_alpha_vantage(
     function: str,
     *,
@@ -325,6 +330,7 @@ def fetch_alpha_vantage(
 POLYGON_BASE_URL = "https://api.polygon.io"
 
 
+@cached(ttl=60)
 def fetch_polygon(
     path: str,
     *,
@@ -350,6 +356,7 @@ def fetch_polygon(
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 
 
+@cached(ttl=120)
 def fetch_coingecko(
     path: str,
     *,
@@ -427,6 +434,7 @@ def fetch_glassnode(
 TRADING_ECONOMICS_BASE_URL = "https://api.tradingeconomics.com"
 
 
+@cached(ttl=3600)
 def fetch_trading_economics(
     path: str,
     *,
@@ -452,6 +460,7 @@ def fetch_trading_economics(
 FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
 
 
+@cached(ttl=120)
 def fetch_fmp(
     path: str,
     *,
@@ -473,11 +482,13 @@ def fetch_fmp(
     return resp.json()
 
 
+@cached(ttl=3600)
 def fetch_fmp_profile(symbol: str) -> dict[str, Any]:
     """取得公司股票概況（公司名稱、產業、描述等）。"""
     return fetch_fmp(f"/profile/{symbol}")
 
 
+@cached(ttl=30)
 def fetch_fmp_quote(symbol: str) -> dict[str, Any]:
     """取得即時股價報價。"""
     data = fetch_fmp(f"/quote/{symbol}")
@@ -565,6 +576,7 @@ def fetch_alpaca_orders(status: str = "open") -> dict[str, Any]:
 ALTERNATIVE_ME_BASE_URL = "https://api.alternative.me/fng"
 
 
+@cached(ttl=300)
 def fetch_fear_greed_index(
     limit: int = 30,
 ) -> dict[str, Any]:
