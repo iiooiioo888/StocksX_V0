@@ -2,13 +2,13 @@
 StocksX 統一日誌配置
 取代散落各處的 print()，提供結構化日誌輸出。
 """
+
 from __future__ import annotations
 
 import logging
 import logging.handlers
 import os
 import sys
-from datetime import datetime
 
 
 def setup_logging(
@@ -53,9 +53,7 @@ def setup_logging(
     # ── File Handler（輪轉，保留 7 天）──
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"{app_name}.log")
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file, when="midnight", backupCount=7, encoding="utf-8"
-    )
+    file_handler = logging.handlers.TimedRotatingFileHandler(log_file, when="midnight", backupCount=7, encoding="utf-8")
     file_handler.setFormatter(fmt)
     root_logger.addHandler(file_handler)
 

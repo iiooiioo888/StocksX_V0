@@ -2,27 +2,24 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from celery import Task
 
-from src.backtest.engine import BacktestResult, run_backtest as sync_run_backtest
+from src.backtest.engine import run_backtest as sync_run_backtest
 from src.backtest.optimizer import find_optimal
-from src.data.crypto import CryptoDataFetcher
-from src.data.traditional.fetcher import TraditionalDataFetcher
 
 
 class BacktestTask(Task):
     """回測任務基類"""
-    
+
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """任務失敗時的回調"""
         from src.utils.logger import get_logger
-        logger = get_logger('stocksx.celery')
+
+        logger = get_logger("stocksx.celery")
         logger.error(
-            f"Backtest task {task_id} failed",
-            exc_info=True,
-            extra={'task_id': task_id, 'args': args, 'kwargs': kwargs}
+            f"Backtest task {task_id} failed", exc_info=True, extra={"task_id": task_id, "args": args, "kwargs": kwargs}
         )
 
 
@@ -31,17 +28,17 @@ def run_backtest(
     exchange: str,
     timeframe: str,
     strategy: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     start_date: str,
     end_date: str,
     initial_equity: float = 10000,
     leverage: float = 1.0,
     fee_rate: float = 0.001,
-    user_id: Optional[int] = None,
-) -> Dict[str, Any]:
+    user_id: int | None = None,
+) -> dict[str, Any]:
     """
     執行回測任務（非同步）
-    
+
     Args:
         symbol: 交易對（如 BTC/USDT:USDT 或 AAPL）
         exchange: 交易所（如 binance, yfinance）
@@ -54,10 +51,10 @@ def run_backtest(
         leverage: 槓桿
         fee_rate: 手續費率
         user_id: 用戶 ID（可選）
-    
+
     Returns:
         回測結果字典
-    
+
     Example:
         ```python
         result = run_backtest.delay(
@@ -72,9 +69,10 @@ def run_backtest(
         )
         ```
     """
-    from src.utils.logger import log_backtest, get_logger
-    logger = get_logger('stocksx.celery')
-    
+    from src.utils.logger import get_logger, log_backtest
+
+    logger = get_logger("stocksx.celery")
+
     # 記錄任務開始
     log_backtest(
         logger,
@@ -82,13 +80,13 @@ def run_backtest(
         strategy=strategy,
         timeframe=timeframe,
         user_id=user_id,
-        status='started',
+        status="started",
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
     )
-    
+
     start_time = time.time()
-    
+
     try:
         # 執行回測
         result = sync_run_backtest(
@@ -103,9 +101,9 @@ def run_backtest(
             leverage=leverage,
             fee_rate=fee_rate,
         )
-        
+
         duration_ms = (time.time() - start_time) * 1000
-        
+
         # 記錄任務完成
         log_backtest(
             logger,
@@ -115,28 +113,28 @@ def run_backtest(
             metrics=result.metrics if not result.error else None,
             duration_ms=duration_ms,
             user_id=user_id,
-            status='completed' if not result.error else 'failed'
+            status="completed" if not result.error else "failed",
         )
-        
+
         # 轉換為可序列化的字典
         return {
-            'success': result.error is None,
-            'error': result.error,
-            'metrics': result.metrics,
-            'trades': result.trades,
-            'equity_curve': result.equity_curve,
-            'duration_ms': duration_ms,
-            'config': {
-                'symbol': symbol,
-                'exchange': exchange,
-                'timeframe': timeframe,
-                'strategy': strategy,
-                'params': params,
-                'initial_equity': initial_equity,
-                'leverage': leverage,
-            }
+            "success": result.error is None,
+            "error": result.error,
+            "metrics": result.metrics,
+            "trades": result.trades,
+            "equity_curve": result.equity_curve,
+            "duration_ms": duration_ms,
+            "config": {
+                "symbol": symbol,
+                "exchange": exchange,
+                "timeframe": timeframe,
+                "strategy": strategy,
+                "params": params,
+                "initial_equity": initial_equity,
+                "leverage": leverage,
+            },
         }
-        
+
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         log_backtest(
@@ -146,8 +144,8 @@ def run_backtest(
             timeframe=timeframe,
             duration_ms=duration_ms,
             user_id=user_id,
-            status='failed',
-            error=str(e)
+            status="failed",
+            error=str(e),
         )
         raise
 
@@ -157,19 +155,19 @@ def run_param_optimizer(
     exchange: str,
     timeframe: str,
     strategy: str,
-    param_grid: Dict[str, List[Any]],
+    param_grid: dict[str, list[Any]],
     start_date: str,
     end_date: str,
     initial_equity: float = 10000,
     leverage: float = 1.0,
     fee_rate: float = 0.001,
-    metric: str = 'total_return_pct',
+    metric: str = "total_return_pct",
     n_best: int = 10,
-    user_id: Optional[int] = None,
-) -> Dict[str, Any]:
+    user_id: int | None = None,
+) -> dict[str, Any]:
     """
     執行參數優化任務（非同步）
-    
+
     Args:
         symbol: 交易對
         exchange: 交易所
@@ -184,10 +182,10 @@ def run_param_optimizer(
         metric: 優化指標
         n_best: 回傳前 N 個最佳結果
         user_id: 用戶 ID
-    
+
     Returns:
         優化結果字典
-    
+
     Example:
         ```python
         result = run_param_optimizer.delay(
@@ -204,38 +202,40 @@ def run_param_optimizer(
         ```
     """
     from src.utils.logger import get_logger, log_backtest
-    logger = get_logger('stocksx.celery')
-    
+
+    logger = get_logger("stocksx.celery")
+
     log_backtest(
         logger,
         symbol=symbol,
         strategy=f"{strategy}_optimizer",
         timeframe=timeframe,
         user_id=user_id,
-        status='started',
+        status="started",
         param_grid=param_grid,
-        metric=metric
+        metric=metric,
     )
-    
+
     start_time = time.time()
 
     try:
         # 將日期字串轉換為時間戳
         from datetime import datetime
+
         since_ms = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
         until_ms = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp() * 1000)
-        
+
         # 將 metric 映射到 objective
         metric_to_objective = {
-            'sharpe': 'sharpe_ratio',
-            'total_return': 'total_return_pct',
-            'annual_return': 'annual_return_pct',
-            'calmar': 'calmar_ratio',
-            'sortino': 'sortino_ratio',
-            'max_drawdown': 'max_drawdown_pct',
+            "sharpe": "sharpe_ratio",
+            "total_return": "total_return_pct",
+            "annual_return": "annual_return_pct",
+            "calmar": "calmar_ratio",
+            "sortino": "sortino_ratio",
+            "max_drawdown": "max_drawdown_pct",
         }
-        objective = metric_to_objective.get(metric, 'sharpe_ratio')
-        
+        objective = metric_to_objective.get(metric, "sharpe_ratio")
+
         # 執行參數優化
         best_result, results_list = find_optimal(
             exchange_id=exchange,
@@ -252,19 +252,21 @@ def run_param_optimizer(
         )
 
         duration_ms = (time.time() - start_time) * 1000
-        
+
         # 轉換結果格式
         results = []
         for item in results_list:
-            if 'result' in item and item['result']:
-                results.append({
-                    'params': item.get('params', {}),
-                    'metrics': item.get('metrics', {}),
-                    'score': item.get('score', 0),
-                })
-        
+            if item.get("result"):
+                results.append(
+                    {
+                        "params": item.get("params", {}),
+                        "metrics": item.get("metrics", {}),
+                        "score": item.get("score", 0),
+                    }
+                )
+
         # 按分數排序
-        results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
         log_backtest(
             logger,
@@ -273,23 +275,23 @@ def run_param_optimizer(
             timeframe=timeframe,
             duration_ms=duration_ms,
             user_id=user_id,
-            status='completed',
-            total_runs=len(results)
+            status="completed",
+            total_runs=len(results),
         )
 
         return {
-            'success': True,
-            'results': results[:n_best],  # 回傳前 N 個最佳結果
-            'best_params': results[0].get('params') if results else None,
-            'best_result': best_result,
-            'total_runs': len(results),
-            'duration_ms': duration_ms,
-            'config': {
-                'symbol': symbol,
-                'strategy': strategy,
-                'param_grid': param_grid,
-                'metric': metric,
-            }
+            "success": True,
+            "results": results[:n_best],  # 回傳前 N 個最佳結果
+            "best_params": results[0].get("params") if results else None,
+            "best_result": best_result,
+            "total_runs": len(results),
+            "duration_ms": duration_ms,
+            "config": {
+                "symbol": symbol,
+                "strategy": strategy,
+                "param_grid": param_grid,
+                "metric": metric,
+            },
         }
 
     except Exception as e:
@@ -301,8 +303,8 @@ def run_param_optimizer(
             timeframe=timeframe,
             duration_ms=duration_ms,
             user_id=user_id,
-            status='failed',
-            error=str(e)
+            status="failed",
+            error=str(e),
         )
         raise
 
@@ -312,17 +314,17 @@ def run_walk_forward_analysis(
     exchange: str,
     timeframe: str,
     strategy: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     train_periods: int = 3,
     test_ratio: float = 0.3,
     start_date: str = None,
     end_date: str = None,
     initial_equity: float = 10000,
-    user_id: Optional[int] = None,
-) -> Dict[str, Any]:
+    user_id: int | None = None,
+) -> dict[str, Any]:
     """
     執行向前分析（Walk-Forward Analysis）
-    
+
     Args:
         symbol: 交易對
         exchange: 交易所
@@ -335,27 +337,28 @@ def run_walk_forward_analysis(
         end_date: 結束日期
         initial_equity: 初始資金
         user_id: 用戶 ID
-    
+
     Returns:
         向前分析結果
     """
-    from src.utils.logger import get_logger, log_backtest
     from src.backtest.walk_forward import walk_forward_analysis
-    logger = get_logger('stocksx.celery')
-    
+    from src.utils.logger import get_logger, log_backtest
+
+    logger = get_logger("stocksx.celery")
+
     log_backtest(
         logger,
         symbol=symbol,
         strategy=f"{strategy}_walk_forward",
         timeframe=timeframe,
         user_id=user_id,
-        status='started',
+        status="started",
         train_periods=train_periods,
-        test_ratio=test_ratio
+        test_ratio=test_ratio,
     )
-    
+
     start_time = time.time()
-    
+
     try:
         results = walk_forward_analysis(
             symbol=symbol,
@@ -369,9 +372,9 @@ def run_walk_forward_analysis(
             end_date=end_date,
             initial_equity=initial_equity,
         )
-        
+
         duration_ms = (time.time() - start_time) * 1000
-        
+
         log_backtest(
             logger,
             symbol=symbol,
@@ -379,16 +382,16 @@ def run_walk_forward_analysis(
             timeframe=timeframe,
             duration_ms=duration_ms,
             user_id=user_id,
-            status='completed',
-            periods=len(results)
+            status="completed",
+            periods=len(results),
         )
-        
+
         return {
-            'success': True,
-            'results': results,
-            'duration_ms': duration_ms,
+            "success": True,
+            "results": results,
+            "duration_ms": duration_ms,
         }
-        
+
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         log_backtest(
@@ -398,7 +401,7 @@ def run_walk_forward_analysis(
             timeframe=timeframe,
             duration_ms=duration_ms,
             user_id=user_id,
-            status='failed',
-            error=str(e)
+            status="failed",
+            error=str(e),
         )
         raise

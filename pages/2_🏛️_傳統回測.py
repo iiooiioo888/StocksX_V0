@@ -1,15 +1,23 @@
 # 傳統市場回測 — 股票 / ETF / 債券 / 期貨 / 指數
-import streamlit as st
 import time as _time_mod
 from datetime import datetime, timezone
-from src.backtest.fees import get_fee_rate, get_slippage
-from src.data.traditional import TraditionalDataFetcher
-from src.data.integrity import validate_ohlcv
+
+import streamlit as st
+
 from src.auth import UserDB
-from src.config import STRATEGY_LABELS, TRADITIONAL_CATEGORIES
+from src.backtest.fees import get_fee_rate, get_slippage
+from src.data.integrity import validate_ohlcv
+from src.data.traditional import TraditionalDataFetcher
+from src.ui_backtest import (
+    ALL_STRATEGIES,
+    render_equity_curves,
+    render_kline_chart,
+    render_performance_table,
+    render_summary_line,
+    render_trade_details,
+    run_all_strategies,
+)
 from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
-from src.ui_backtest import ALL_STRATEGIES, run_all_strategies, render_summary_line, \
-    render_kline_chart, render_equity_curves, render_performance_table, render_trade_details
 
 st.set_page_config(page_title="StocksX — 傳統回測", page_icon="🏛️", layout="wide")
 apply_theme()
@@ -21,10 +29,38 @@ _db = UserDB()
 # 市場細分配置
 MARKET_TABS = {
     "📈 股票": {
-        "美股": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "INTC", "NFLX",
-                 "CRM", "ORCL", "ADBE", "PYPL", "COIN", "MSTR", "PLTR", "UBER"],
-        "台股": ["2330.TW", "2317.TW", "2454.TW", "2308.TW", "2881.TW", "2882.TW",
-                 "2303.TW", "3711.TW", "2412.TW", "1301.TW"],
+        "美股": [
+            "AAPL",
+            "MSFT",
+            "GOOGL",
+            "AMZN",
+            "NVDA",
+            "META",
+            "TSLA",
+            "AMD",
+            "INTC",
+            "NFLX",
+            "CRM",
+            "ORCL",
+            "ADBE",
+            "PYPL",
+            "COIN",
+            "MSTR",
+            "PLTR",
+            "UBER",
+        ],
+        "台股": [
+            "2330.TW",
+            "2317.TW",
+            "2454.TW",
+            "2308.TW",
+            "2881.TW",
+            "2882.TW",
+            "2303.TW",
+            "3711.TW",
+            "2412.TW",
+            "1301.TW",
+        ],
         "港股": ["0700.HK", "9988.HK", "1810.HK", "3690.HK", "9618.HK"],
     },
     "🏦 ETF": {
@@ -84,8 +120,9 @@ with st.sidebar:
 
     with st.expander("💰 資金", expanded=False):
         _settings = _db.get_settings(_user["id"]) if _user else {}
-        initial_equity = st.number_input("初始資金", min_value=100.0,
-                                         value=float(_settings.get("default_equity", 10000)), step=500.0)
+        initial_equity = st.number_input(
+            "初始資金", min_value=100.0, value=float(_settings.get("default_equity", 10000)), step=500.0
+        )
         user_fee = st.number_input("手續費%", min_value=0.0, value=_fee, step=0.01)
         user_slip = st.number_input("滑點%", min_value=0.0, value=_slip, step=0.01)
 
@@ -95,8 +132,10 @@ with st.sidebar:
 _type_icon = market_type.split(" ")[0]
 st.markdown(f"## {_type_icon} {market_type.split(' ')[-1]}回測 — {symbol or '未選擇'}")
 
+
 def _to_ms(d):
     return int(datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc).timestamp() * 1000)
+
 
 since_ms = _to_ms(start)
 until_ms = int(datetime.combine(end, datetime.max.time(), tzinfo=timezone.utc).timestamp() * 1000)
@@ -116,14 +155,16 @@ if run_btn and since_ms < until_ms:
         rows = None
     if rows:
         _bar.progress(40, text=f"回測 {len(ALL_STRATEGIES)} 策略…")
-        results = run_all_strategies(rows, "yfinance", symbol, timeframe, since_ms, until_ms,
-                                     initial_equity, 1, None, None, user_fee, user_slip)
+        results = run_all_strategies(
+            rows, "yfinance", symbol, timeframe, since_ms, until_ms, initial_equity, 1, None, None, user_fee, user_slip
+        )
         _bar.progress(100, text="✅ 完成")
         _elapsed = _time_mod.time() - _t0
         st.session_state["trad_results"] = results
         st.session_state["trad_rows"] = rows
-        st.markdown(f'<div class="success-banner">🎉 完成！{_elapsed:.1f}s　|　{len(rows)} K線</div>',
-                    unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="success-banner">🎉 完成！{_elapsed:.1f}s　|　{len(rows)} K線</div>', unsafe_allow_html=True
+        )
         if _user:
             for s, r in results.items():
                 if not r.error:

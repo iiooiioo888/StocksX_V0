@@ -8,8 +8,8 @@ StocksX 自動交易模組
 - 異步任務處理
 """
 
+from .auto_trader import AutoTrader
 from .executor import TradeExecutor
 from .risk_manager import RiskManager
-from .auto_trader import AutoTrader
 
-__all__ = ["TradeExecutor", "RiskManager", "AutoTrader"]
+__all__ = ["AutoTrader", "RiskManager", "TradeExecutor"]

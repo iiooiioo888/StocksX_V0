@@ -8,7 +8,6 @@ IOS Bark 推播工具。
     （可選）BARK_SERVER=https://api.day.app 或自架伺服器位址
 """
 
-from typing import Optional
 import os
 
 import requests
@@ -17,9 +16,9 @@ import requests
 def send_bark(
     title: str,
     body: str,
-    group: Optional[str] = None,
-    url: Optional[str] = None,
-    level: Optional[str] = None,  # active / timeSensitive / critical
+    group: str | None = None,
+    url: str | None = None,
+    level: str | None = None,  # active / timeSensitive / critical
 ) -> None:
     """
     發送一則 Bark 通知。若未設定 BARK_KEY，則安靜略過不做任何事。
@@ -43,4 +42,3 @@ def send_bark(
     except Exception:
         # 通知失敗不影響主流程，可視需要加上 logging
         pass
-

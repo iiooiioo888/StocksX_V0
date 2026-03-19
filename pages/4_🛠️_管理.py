@@ -1,7 +1,9 @@
 # 管理員後台
-import streamlit as st
-import pandas as pd
 from datetime import datetime, timezone
+
+import pandas as pd
+import streamlit as st
+
 from src.auth import UserDB
 from src.ui_common import apply_theme, breadcrumb, require_admin, sidebar_user_nav
 
@@ -16,7 +18,9 @@ sidebar_user_nav(user)
 st.markdown("## 🛠️ 管理後台")
 st.caption(f"管理員：{user['display_name']}")
 
-tab_stats, tab_users, tab_products_admin, tab_security, tab_data = st.tabs(["📊 系統統計", "👥 用戶管理", "📦 產品庫", "🔒 安全日誌", "🗄️ 數據管理"])
+tab_stats, tab_users, tab_products_admin, tab_security, tab_data = st.tabs(
+    ["📊 系統統計", "👥 用戶管理", "📦 產品庫", "🔒 安全日誌", "🗄️ 數據管理"]
+)
 
 # ─── 系統統計 ───
 with tab_stats:
@@ -44,15 +48,19 @@ with tab_users:
     users = db.list_users()
     rows = []
     for u in users:
-        rows.append({
-            "ID": u["id"],
-            "帳號": u["username"],
-            "暱稱": u["display_name"],
-            "角色": "👑 管理員" if u["role"] == "admin" else "👤 用戶",
-            "狀態": "✅ 啟用" if u["is_active"] else "⛔ 停用",
-            "註冊時間": datetime.fromtimestamp(u["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
-            "最後登入": datetime.fromtimestamp(u["last_login"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M") if u["last_login"] else "從未",
-        })
+        rows.append(
+            {
+                "ID": u["id"],
+                "帳號": u["username"],
+                "暱稱": u["display_name"],
+                "角色": "👑 管理員" if u["role"] == "admin" else "👤 用戶",
+                "狀態": "✅ 啟用" if u["is_active"] else "⛔ 停用",
+                "註冊時間": datetime.fromtimestamp(u["created_at"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                "最後登入": datetime.fromtimestamp(u["last_login"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+                if u["last_login"]
+                else "從未",
+            }
+        )
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     st.divider()
@@ -132,7 +140,9 @@ with tab_products_admin:
             _admin_cat = st.text_input("分類", key="admin_p_cat")
         if st.form_submit_button("➕ 新增系統產品", type="primary"):
             if _admin_sym:
-                result = db.add_product(_admin_sym, _admin_name, _admin_ex, _admin_market, _admin_cat, user_id=0, is_system=True)
+                result = db.add_product(
+                    _admin_sym, _admin_name, _admin_ex, _admin_market, _admin_cat, user_id=0, is_system=True
+                )
                 if isinstance(result, int):
                     st.success(f"✅ 已新增 {_admin_sym}")
                     st.rerun()
@@ -143,12 +153,18 @@ with tab_products_admin:
     st.markdown("**所有產品：**")
     prod_rows = []
     for p in all_prods:
-        prod_rows.append({
-            "ID": p["id"], "代碼": p["symbol"], "名稱": p["name"],
-            "類型": "🔧 系統" if p["is_system"] else f"👤 用戶#{p['user_id']}",
-            "市場": p["market_type"], "分類": p["category"], "交易所": p["exchange"],
-            "狀態": "✅" if p["is_active"] else "⛔",
-        })
+        prod_rows.append(
+            {
+                "ID": p["id"],
+                "代碼": p["symbol"],
+                "名稱": p["name"],
+                "類型": "🔧 系統" if p["is_system"] else f"👤 用戶#{p['user_id']}",
+                "市場": p["market_type"],
+                "分類": p["category"],
+                "交易所": p["exchange"],
+                "狀態": "✅" if p["is_active"] else "⛔",
+            }
+        )
     st.dataframe(pd.DataFrame(prod_rows), use_container_width=True, hide_index=True)
 
     del_prod_id = st.number_input("刪除產品 ID", min_value=1, step=1, key="admin_del_prod")
@@ -163,13 +179,15 @@ with tab_security:
     if login_logs:
         log_rows = []
         for lg in login_logs:
-            log_rows.append({
-                "時間": datetime.fromtimestamp(lg["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M:%S"),
-                "帳號": lg["username"],
-                "結果": "✅ 成功" if lg["success"] else "❌ 失敗",
-                "原因": lg.get("reason", ""),
-                "IP": lg.get("ip", ""),
-            })
+            log_rows.append(
+                {
+                    "時間": datetime.fromtimestamp(lg["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M:%S"),
+                    "帳號": lg["username"],
+                    "結果": "✅ 成功" if lg["success"] else "❌ 失敗",
+                    "原因": lg.get("reason", ""),
+                    "IP": lg.get("ip", ""),
+                }
+            )
         st.dataframe(pd.DataFrame(log_rows), use_container_width=True, hide_index=True)
         fail_count = sum(1 for lg in login_logs if not lg["success"])
         st.metric("最近 100 筆中失敗次數", fail_count)
@@ -178,8 +196,8 @@ with tab_security:
 
 with tab_data:
     st.subheader("🗄️ 數據快取管理")
-    import os
     import glob
+    import os
 
     cache_dir = "cache"
     if os.path.exists(cache_dir):
@@ -190,11 +208,15 @@ with tab_data:
             for f in files:
                 size = os.path.getsize(f)
                 total_size += size
-                file_rows.append({
-                    "檔案": os.path.basename(f),
-                    "大小": f"{size / 1024:.1f} KB" if size < 1048576 else f"{size / 1048576:.1f} MB",
-                    "修改時間": datetime.fromtimestamp(os.path.getmtime(f), tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
-                })
+                file_rows.append(
+                    {
+                        "檔案": os.path.basename(f),
+                        "大小": f"{size / 1024:.1f} KB" if size < 1048576 else f"{size / 1048576:.1f} MB",
+                        "修改時間": datetime.fromtimestamp(os.path.getmtime(f), tz=timezone.utc).strftime(
+                            "%Y-%m-%d %H:%M"
+                        ),
+                    }
+                )
             st.dataframe(pd.DataFrame(file_rows), use_container_width=True, hide_index=True)
             st.metric("總快取大小", f"{total_size / 1048576:.2f} MB")
 
@@ -219,13 +241,15 @@ with tab_data:
     if all_history:
         ah_rows = []
         for h in all_history:
-            ah_rows.append({
-                "用戶": h["username"],
-                "標的": h["symbol"],
-                "策略": h["strategy"],
-                "週期": h["timeframe"],
-                "時間": datetime.fromtimestamp(h["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M"),
-            })
+            ah_rows.append(
+                {
+                    "用戶": h["username"],
+                    "標的": h["symbol"],
+                    "策略": h["strategy"],
+                    "週期": h["timeframe"],
+                    "時間": datetime.fromtimestamp(h["created_at"], tz=timezone.utc).strftime("%m/%d %H:%M"),
+                }
+            )
         st.dataframe(pd.DataFrame(ah_rows), use_container_width=True, hide_index=True)
     else:
         st.info("尚無回測記錄")

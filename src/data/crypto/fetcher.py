@@ -45,7 +45,10 @@ class CryptoDataFetcher:
         exclude_outliers: bool = False,
     ) -> list[dict[str, Any]]:
         return self._service.get_ohlcv(
-            symbol, timeframe, since, until,
+            symbol,
+            timeframe,
+            since,
+            until,
             fill_gaps=fill_gaps,
             exclude_outliers=exclude_outliers,
         )
@@ -59,5 +62,9 @@ class CryptoDataFetcher:
         fill_gaps: bool = True,
     ) -> list[dict[str, Any]]:
         return self._service.get_cached_ohlcv(
-            symbol, timeframe, since, until, fill_gaps=fill_gaps,
+            symbol,
+            timeframe,
+            since,
+            until,
+            fill_gaps=fill_gaps,
         )

@@ -20,38 +20,37 @@ v2.0 更新：
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from src.config_secrets import (
-    ALPHA_VANTAGE_API_KEY,
-    FRED_API_KEY,
-    POLYGON_API_KEY,
-    COINGECKO_API_KEY,
-    COINMARKETCAP_API_KEY,
-    GLASSNODE_API_KEY,
-    TRADING_ECONOMICS_API_KEY,
-    FMP_API_KEY,
     ALPACA_API_KEY,
     ALPACA_API_SECRET,
-    CBOE_API_KEY,
+    ALPHA_VANTAGE_API_KEY,
+    COINGECKO_API_KEY,
+    COINMARKETCAP_API_KEY,
+    FMP_API_KEY,
+    FRED_API_KEY,
+    GLASSNODE_API_KEY,
+    POLYGON_API_KEY,
+    TRADING_ECONOMICS_API_KEY,
     require,
 )
-from .yfinance_source import YfinanceOhlcvSource
+
 from .crypto_ccxt import CcxtOhlcvSource
+from .yfinance_source import YfinanceOhlcvSource
 
 # 引入限流器與日誌
 try:
+    from src.utils.logger import get_logger
     from src.utils.rate_limiter import (
-        RateLimiter,
         RateLimitExceeded,
         get_api_limiter,
         log_api_call,
     )
-    from src.utils.logger import get_logger
-    
-    logger = get_logger('stocksx.api_hub')
+
+    logger = get_logger("stocksx.api_hub")
     USE_RATE_LIMITER = True
 except ImportError:
     USE_RATE_LIMITER = False
@@ -63,7 +62,7 @@ def fetch_traditional_ohlcv(
     timeframe: str,
     since: int,
     until: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     透過 yfinance 取得傳統市場 K 線。
 
@@ -81,7 +80,7 @@ def fetch_crypto_ohlcv(
     since: int,
     until: int,
     batch_limit: int = 500,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     透過 CCXT 取得加密貨幣 K 線，內建地區限制/頻率限制回退機制。
 
@@ -98,14 +97,14 @@ POLY_BASE_URL = "https://gamma-api.polymarket.com"
 def fetch_polymarket_markets(
     query: str = "",
     limit: int = 10,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     從 Polymarket Gamma API 抓取市場列表。
 
     注意：Gamma API 無正式文件，結構可能變動，本函式僅作為示意與輕量封裝。
     """
     url = f"{POLY_BASE_URL}/markets"
-    params: Dict[str, Any] = {"limit": limit}
+    params: dict[str, Any] = {"limit": limit}
     if query:
         params["search"] = query
 
@@ -114,20 +113,14 @@ def fetch_polymarket_markets(
         limiter, config = get_api_limiter("polymarket")
         try:
             allowed, wait_time = limiter.allow_request(
-                key="polymarket",
-                capacity=config["capacity"],
-                refill_rate=config["refill_rate"],
-                wait=False
+                key="polymarket", capacity=config["capacity"], refill_rate=config["refill_rate"], wait=False
             )
             if not allowed:
                 log_api_call(
-                    logger, "polymarket", "/markets",
-                    params=params, status="rate_limited",
-                    retry_after=wait_time
+                    logger, "polymarket", "/markets", params=params, status="rate_limited", retry_after=wait_time
                 )
                 raise RateLimitExceeded(
-                    f"Polymarket rate limit exceeded. Retry after {wait_time:.1f}s",
-                    retry_after=wait_time
+                    f"Polymarket rate limit exceeded. Retry after {wait_time:.1f}s", retry_after=wait_time
                 )
         except Exception as e:
             if "rate limit" in str(e).lower():
@@ -142,7 +135,7 @@ def fetch_polymarket_markets(
         resp.raise_for_status()
         data = resp.json()
 
-        markets: List[Dict[str, Any]] = []
+        markets: list[dict[str, Any]] = []
         if isinstance(data, list):
             iterable = data
         else:
@@ -164,9 +157,13 @@ def fetch_polymarket_markets(
 
         response_time = (time.time() - start_time) * 1000
         log_api_call(
-            logger, "polymarket", "/markets",
-            params=params, response_time_ms=response_time,
-            status=status, result_count=len(markets)
+            logger,
+            "polymarket",
+            "/markets",
+            params=params,
+            response_time_ms=response_time,
+            status=status,
+            result_count=len(markets),
         )
         return markets
 
@@ -174,9 +171,7 @@ def fetch_polymarket_markets(
         status = "failed"
         response_time = (time.time() - start_time) * 1000
         log_api_call(
-            logger, "polymarket", "/markets",
-            params=params, response_time_ms=response_time,
-            status=status, error=str(e)
+            logger, "polymarket", "/markets", params=params, response_time_ms=response_time, status=status, error=str(e)
         )
         raise
 
@@ -192,7 +187,7 @@ def fetch_fred_series(
     observation_start: str | None = None,
     observation_end: str | None = None,
     units: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     從 FRED 取得單一時間序列資料（僅示意常用參數）。
 
@@ -200,7 +195,7 @@ def fetch_fred_series(
     """
     api_key = require(FRED_API_KEY, "FRED_API_KEY")
     url = f"{FRED_BASE_URL}/series/observations"
-    params: Dict[str, Any] = {
+    params: dict[str, Any] = {
         "api_key": api_key,
         "series_id": series_id,
         "file_type": "json",
@@ -216,21 +211,13 @@ def fetch_fred_series(
     if USE_RATE_LIMITER:
         limiter, config = get_api_limiter("fred")
         allowed, wait_time = limiter.allow_request(
-            key="fred",
-            capacity=config["capacity"],
-            refill_rate=config["refill_rate"],
-            wait=False
+            key="fred", capacity=config["capacity"], refill_rate=config["refill_rate"], wait=False
         )
         if not allowed:
             log_api_call(
-                logger, "fred", "/series/observations",
-                params=params, status="rate_limited",
-                retry_after=wait_time
+                logger, "fred", "/series/observations", params=params, status="rate_limited", retry_after=wait_time
             )
-            raise RateLimitExceeded(
-                f"FRED rate limit exceeded. Retry after {wait_time:.1f}s",
-                retry_after=wait_time
-            )
+            raise RateLimitExceeded(f"FRED rate limit exceeded. Retry after {wait_time:.1f}s", retry_after=wait_time)
 
     # 發送請求
     start_time = time.time()
@@ -240,9 +227,13 @@ def fetch_fred_series(
         resp.raise_for_status()
         response_time = (time.time() - start_time) * 1000
         log_api_call(
-            logger, "fred", "/series/observations",
-            params=params, response_time_ms=response_time,
-            status=status, series_id=series_id
+            logger,
+            "fred",
+            "/series/observations",
+            params=params,
+            response_time_ms=response_time,
+            status=status,
+            series_id=series_id,
         )
         return resp.json()
 
@@ -250,9 +241,13 @@ def fetch_fred_series(
         status = "failed"
         response_time = (time.time() - start_time) * 1000
         log_api_call(
-            logger, "fred", "/series/observations",
-            params=params, response_time_ms=response_time,
-            status=status, error=str(e)
+            logger,
+            "fred",
+            "/series/observations",
+            params=params,
+            response_time_ms=response_time,
+            status=status,
+            error=str(e),
         )
         raise
 
@@ -267,7 +262,7 @@ def fetch_alpha_vantage(
     *,
     symbol: str | None = None,
     **extra: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Alpha Vantage 通用呼叫封裝。
 
@@ -275,7 +270,7 @@ def fetch_alpha_vantage(
     官方文件：https://www.alphavantage.co/documentation/
     """
     api_key = require(ALPHA_VANTAGE_API_KEY, "ALPHA_VANTAGE_API_KEY")
-    params: Dict[str, Any] = {"function": function, "apikey": api_key}
+    params: dict[str, Any] = {"function": function, "apikey": api_key}
     if symbol:
         params["symbol"] = symbol
     params.update(extra)
@@ -284,20 +279,12 @@ def fetch_alpha_vantage(
     if USE_RATE_LIMITER:
         limiter, config = get_api_limiter("alpha_vantage")
         allowed, wait_time = limiter.allow_request(
-            key="alpha_vantage",
-            capacity=config["capacity"],
-            refill_rate=config["refill_rate"],
-            wait=False
+            key="alpha_vantage", capacity=config["capacity"], refill_rate=config["refill_rate"], wait=False
         )
         if not allowed:
-            log_api_call(
-                logger, "alpha_vantage", function,
-                params=params, status="rate_limited",
-                retry_after=wait_time
-            )
+            log_api_call(logger, "alpha_vantage", function, params=params, status="rate_limited", retry_after=wait_time)
             raise RateLimitExceeded(
-                f"Alpha Vantage rate limit exceeded. Retry after {wait_time:.1f}s",
-                retry_after=wait_time
+                f"Alpha Vantage rate limit exceeded. Retry after {wait_time:.1f}s", retry_after=wait_time
             )
 
     # 發送請求
@@ -308,9 +295,13 @@ def fetch_alpha_vantage(
         resp.raise_for_status()
         response_time = (time.time() - start_time) * 1000
         log_api_call(
-            logger, "alpha_vantage", function,
-            params=params, response_time_ms=response_time,
-            status=status, symbol=symbol
+            logger,
+            "alpha_vantage",
+            function,
+            params=params,
+            response_time_ms=response_time,
+            status=status,
+            symbol=symbol,
         )
         return resp.json()
 
@@ -318,9 +309,13 @@ def fetch_alpha_vantage(
         status = "failed"
         response_time = (time.time() - start_time) * 1000
         log_api_call(
-            logger, "alpha_vantage", function,
-            params=params, response_time_ms=response_time,
-            status=status, error=str(e)
+            logger,
+            "alpha_vantage",
+            function,
+            params=params,
+            response_time_ms=response_time,
+            status=status,
+            error=str(e),
         )
         raise
 
@@ -333,8 +328,8 @@ POLYGON_BASE_URL = "https://api.polygon.io"
 def fetch_polygon(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Polygon.io 通用 GET 封裝。
     path 例如：/v2/aggs/ticker/AAPL/range/1/day/2024-01-01/2024-01-31
@@ -358,7 +353,7 @@ COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 def fetch_coingecko(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> Any:
     """
     CoinGecko 通用 GET 封裝。
@@ -385,8 +380,8 @@ COINMARKETCAP_BASE_URL = "https://pro-api.coinmarketcap.com/v1"
 def fetch_coinmarketcap(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     CoinMarketCap 通用 GET 封裝。
     path 例如：/cryptocurrency/listings/latest
@@ -410,7 +405,7 @@ GLASSNODE_BASE_URL = "https://api.glassnode.com/v1"
 def fetch_glassnode(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> Any:
     """
     Glassnode 通用 GET 封裝。
@@ -435,7 +430,7 @@ TRADING_ECONOMICS_BASE_URL = "https://api.tradingeconomics.com"
 def fetch_trading_economics(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> Any:
     """
     TradingEconomics 通用 GET 封裝。
@@ -460,8 +455,8 @@ FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
 def fetch_fmp(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     FMP 通用 GET 封裝。
     path 例如：/profile/AAPL, /quote/AAPL, /financial-statements/income-statement/AAPL
@@ -478,18 +473,18 @@ def fetch_fmp(
     return resp.json()
 
 
-def fetch_fmp_profile(symbol: str) -> Dict[str, Any]:
+def fetch_fmp_profile(symbol: str) -> dict[str, Any]:
     """取得公司股票概況（公司名稱、產業、描述等）。"""
     return fetch_fmp(f"/profile/{symbol}")
 
 
-def fetch_fmp_quote(symbol: str) -> Dict[str, Any]:
+def fetch_fmp_quote(symbol: str) -> dict[str, Any]:
     """取得即時股價報價。"""
     data = fetch_fmp(f"/quote/{symbol}")
     return data[0] if isinstance(data, list) and data else data
 
 
-def fetch_fmp_financials(symbol: str, statement: str = "income-statement") -> Dict[str, Any]:
+def fetch_fmp_financials(symbol: str, statement: str = "income-statement") -> dict[str, Any]:
     """
     取得財報數據。
     statement: "income-statement", "balance-sheet", "cash-flow-statement"
@@ -506,9 +501,9 @@ ALPACA_DATA_URL = "https://data.alpaca.markets"
 def fetch_alpaca(
     path: str,
     *,
-    params: Dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
     use_data_url: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Alpaca 通用 GET 封裝（需 API Key）。
     path 例如：/v2/stocks/AAPL/bars, /v2/orders
@@ -535,12 +530,12 @@ def fetch_alpaca_bars(
     start: str | None = None,
     end: str | None = None,
     limit: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     取得美股 K 線數據（透過 Alpaca）。
     timeframe: "1Min", "5Min", "15Min", "1Hour", "1Day"
     """
-    params: Dict[str, Any] = {"timeframe": timeframe}
+    params: dict[str, Any] = {"timeframe": timeframe}
     if start:
         params["start"] = start
     if end:
@@ -550,17 +545,17 @@ def fetch_alpaca_bars(
     return fetch_alpaca(f"/v2/stocks/{symbol}/bars", params=params, use_data_url=True)
 
 
-def fetch_alpaca_account() -> Dict[str, Any]:
+def fetch_alpaca_account() -> dict[str, Any]:
     """取得 Alpaca 帳戶資訊。"""
     return fetch_alpaca("/v2/account")
 
 
-def fetch_alpaca_positions() -> Dict[str, Any]:
+def fetch_alpaca_positions() -> dict[str, Any]:
     """取得當前持倉。"""
     return fetch_alpaca("/v2/positions")
 
 
-def fetch_alpaca_orders(status: str = "open") -> Dict[str, Any]:
+def fetch_alpaca_orders(status: str = "open") -> dict[str, Any]:
     """取得訂單列表。"""
     return fetch_alpaca("/v2/orders", params={"status": status})
 
@@ -572,7 +567,7 @@ ALTERNATIVE_ME_BASE_URL = "https://api.alternative.me/fng"
 
 def fetch_fear_greed_index(
     limit: int = 30,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     從 Alternative.me 取得加密貨幣恐懼與貪婪指數。
     無需 API Key，直接存取公開 URL。
@@ -594,7 +589,7 @@ def fetch_fear_greed_index(
     return resp.json()
 
 
-def get_current_fear_greed() -> Optional[Dict[str, Any]]:
+def get_current_fear_greed() -> dict[str, Any] | None:
     """取得當前恐懼與貪婪指數（單一最新值）。"""
     data = fetch_fear_greed_index(limit=1)
     if data.get("data"):
@@ -612,7 +607,7 @@ def get_current_fear_greed() -> Optional[Dict[str, Any]]:
 CBOE_BASE_URL = "https://markets.cboe.com/us/options/market_statistics"
 
 
-def fetch_cboe_vix() -> Optional[Dict[str, Any]]:
+def fetch_cboe_vix() -> dict[str, Any] | None:
     """
     從 CBOE 取得 VIX 波動率指數。
     注意：CBOE API 無正式公開文件，此處使用公開網頁數據或 Alpha Vantage 替代方案。
@@ -638,7 +633,7 @@ def fetch_cboe_vix() -> Optional[Dict[str, Any]]:
     return None
 
 
-def fetch_vix_history(days: int = 30) -> List[Dict[str, Any]]:
+def fetch_vix_history(days: int = 30) -> list[dict[str, Any]]:
     """
     取得 VIX 歷史數據（透過 Alpha Vantage）。
     """
@@ -653,13 +648,15 @@ def fetch_vix_history(days: int = 30) -> List[Dict[str, Any]]:
         for i, (date, v) in enumerate(ts.items()):
             if i >= days:
                 break
-            result.append({
-                "date": date,
-                "open": float(v.get("1. open", 0)),
-                "high": float(v.get("2. high", 0)),
-                "low": float(v.get("3. low", 0)),
-                "close": float(v.get("4. close", 0)),
-            })
+            result.append(
+                {
+                    "date": date,
+                    "open": float(v.get("1. open", 0)),
+                    "high": float(v.get("2. high", 0)),
+                    "low": float(v.get("3. low", 0)),
+                    "close": float(v.get("4. close", 0)),
+                }
+            )
         return result
     except Exception:
         return []
@@ -667,11 +664,12 @@ def fetch_vix_history(days: int = 30) -> List[Dict[str, Any]]:
 
 # ────────────────────────────── 便捷整合函式 ──────────────────────────────
 
-def fetch_market_sentiment() -> Dict[str, Any]:
+
+def fetch_market_sentiment() -> dict[str, Any]:
     """
     取得綜合市場情緒指標（Fear & Greed + VIX）。
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     # 加密貨幣情緒
     fg = get_current_fear_greed()
@@ -684,4 +682,3 @@ def fetch_market_sentiment() -> Dict[str, Any]:
         result["vix"] = vix
 
     return result
-

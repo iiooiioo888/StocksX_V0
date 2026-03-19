@@ -9,12 +9,11 @@ import logging
 import os
 import secrets
 import time
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
-from fastapi.security import HTTPBearer
+import ccxt
 import jwt
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
@@ -28,19 +27,20 @@ ALGORITHM = "HS256"
 
 app = FastAPI(title="StocksX WebSocket Service")
 
+
 # 連接管理器
 class ConnectionManager:
     def __init__(self):
         # {user_id: {symbol: websocket}}
-        self.active_connections: Dict[int, Dict[str, WebSocket]] = {}
-    
+        self.active_connections: dict[int, dict[str, WebSocket]] = {}
+
     async def connect(self, websocket: WebSocket, user_id: int, symbol: str):
         await websocket.accept()
         if user_id not in self.active_connections:
             self.active_connections[user_id] = {}
         self.active_connections[user_id][symbol] = websocket
         logger.info(f"WebSocket 連接：user_id={user_id}, symbol={symbol}")
-    
+
     def disconnect(self, user_id: int, symbol: str):
         if user_id in self.active_connections:
             if symbol in self.active_connections[user_id]:
@@ -48,11 +48,11 @@ class ConnectionManager:
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
         logger.info(f"WebSocket 斷開：user_id={user_id}, symbol={symbol}")
-    
-    async def send_personal_message(self, message: dict, user_id: int, symbol: Optional[str] = None):
+
+    async def send_personal_message(self, message: dict, user_id: int, symbol: str | None = None):
         if user_id not in self.active_connections:
             return
-        
+
         if symbol:
             websocket = self.active_connections[user_id].get(symbol)
             if websocket:
@@ -67,7 +67,7 @@ class ConnectionManager:
                     await ws.send_json(message)
                 except Exception:
                     pass
-    
+
     async def broadcast(self, message: dict):
         """廣播給所有連接"""
         for user_connections in self.active_connections.values():
@@ -89,39 +89,44 @@ manager = ConnectionManager()
 _binance_spot = None
 _binance_future = None
 
+
 def get_binance_exchange(market_type: str = "spot"):
     """取得幣安交易所實例"""
     global _binance_spot, _binance_future
-    
+
     try:
         import ccxt
-        
+
         if market_type == "spot":
             if _binance_spot is None:
-                _binance_spot = ccxt.binance({
-                    'options': {'defaultType': 'spot'},
-                    'timeout': 10000,
-                })
+                _binance_spot = ccxt.binance(
+                    {
+                        "options": {"defaultType": "spot"},
+                        "timeout": 10000,
+                    }
+                )
             return _binance_spot
         else:  # future
             if _binance_future is None:
-                _binance_future = ccxt.binance({
-                    'options': {'defaultType': 'future'},
-                    'timeout': 10000,
-                })
+                _binance_future = ccxt.binance(
+                    {
+                        "options": {"defaultType": "future"},
+                        "timeout": 10000,
+                    }
+                )
             return _binance_future
     except Exception as e:
         logger.error(f"建立交易所實例失敗：{e}")
         return None
 
 
-async def fetch_price(symbol: str) -> Optional[Dict[str, Any]]:
+async def fetch_price(symbol: str) -> dict[str, Any] | None:
     """
     取得即時價格（使用幣安 API）
-    
+
     Args:
         symbol: 交易對（如 BTC/USDT, BTC/USDT:USDT）
-    
+
     Returns:
         {
             "symbol": str,
@@ -138,27 +143,27 @@ async def fetch_price(symbol: str) -> Optional[Dict[str, Any]]:
         if ":" in symbol:
             # 永續合約 BTC/USDT:USDT
             market_type = "future"
-            binance_symbol = symbol.replace("/", "")
+            _binance_symbol = symbol.replace("/", "")
         else:
             # 現貨 BTC/USDT
             market_type = "spot"
             binance_symbol = symbol.replace("/", "")
-        
+
         # 取得交易所實例
         exchange = get_binance_exchange(market_type)
         if not exchange:
             return None
-        
+
         # 取得行情數據
         ticker = exchange.fetch_ticker(symbol)
-        
+
         # 提取數據
-        last_price = ticker.get('last', 0)
-        change_pct = ticker.get('percentage', 0)
-        high_24h = ticker.get('high', 0)
-        low_24h = ticker.get('low', 0)
-        volume_24h = ticker.get('baseVolume', 0)
-        
+        last_price = ticker.get("last", 0)
+        change_pct = ticker.get("percentage", 0)
+        high_24h = ticker.get("high", 0)
+        low_24h = ticker.get("low", 0)
+        volume_24h = ticker.get("baseVolume", 0)
+
         if last_price and last_price > 0:
             return {
                 "symbol": symbol,
@@ -168,12 +173,12 @@ async def fetch_price(symbol: str) -> Optional[Dict[str, Any]]:
                 "low_24h": round(low_24h, 2) if low_24h else 0,
                 "volume_24h": round(volume_24h, 2) if volume_24h else 0,
                 "timestamp": int(time.time() * 1000),
-                "market_type": market_type
+                "market_type": market_type,
             }
         else:
             logger.warning(f"無效的價格數據：{symbol}")
             return None
-            
+
     except ccxt.NetworkError as e:
         logger.warning(f"網路錯誤 {symbol}: {e}")
         return None
@@ -186,10 +191,10 @@ async def fetch_price(symbol: str) -> Optional[Dict[str, Any]]:
 
 
 # 模擬信號生成
-async def generate_signal(symbol: str, price: float) -> Optional[Dict[str, Any]]:
+async def generate_signal(symbol: str, price: float) -> dict[str, Any] | None:
     """模擬生成交易信號（實際應從策略引擎取得）"""
     import random
-    
+
     # 隨機生成信號
     if random.random() < 0.1:  # 10% 機率生成信號
         signal_type = random.choice(["BUY", "SELL"])
@@ -199,7 +204,7 @@ async def generate_signal(symbol: str, price: float) -> Optional[Dict[str, Any]]
             "price": price,
             "strategy": "sma_cross",
             "confidence": round(random.uniform(0.6, 0.95), 2),
-            "timestamp": int(time.time() * 1000)
+            "timestamp": int(time.time() * 1000),
         }
     return None
 
@@ -216,10 +221,10 @@ async def price_push_task():
             all_subscribed = set()
             for user_connections in manager.active_connections.values():
                 all_subscribed.update(user_connections.keys())
-            
+
             # 如果沒有訂閱，使用預設列表
             symbols_to_fetch = all_subscribed if all_subscribed else set(monitor_symbols)
-            
+
             for symbol in symbols_to_fetch:
                 price_data = await fetch_price(symbol)
                 if price_data:
@@ -229,10 +234,7 @@ async def price_push_task():
                             # 直接通過 WebSocket 發送
                             websocket = connections[symbol]
                             try:
-                                await websocket.send_json({
-                                    "type": "price_update",
-                                    "data": price_data
-                                })
+                                await websocket.send_json({"type": "price_update", "data": price_data})
                             except Exception:
                                 pass
         except Exception as e:
@@ -245,7 +247,7 @@ async def price_push_task():
 async def signal_push_task():
     """監聽並推送交易信號"""
     symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
-    
+
     while True:
         for symbol in symbols:
             try:
@@ -257,16 +259,11 @@ async def signal_push_task():
                         for user_id, connections in list(manager.active_connections.items()):
                             if symbol in connections:
                                 await manager.send_personal_message(
-                                    message={
-                                        "type": "signal",
-                                        "data": signal
-                                    },
-                                    user_id=user_id,
-                                    symbol=symbol
+                                    message={"type": "signal", "data": signal}, user_id=user_id, symbol=symbol
                                 )
             except Exception as e:
                 logger.error(f"信號推送錯誤 {symbol}: {e}")
-        
+
         await asyncio.sleep(5)  # 每 5 秒檢查一次
 
 
@@ -278,7 +275,7 @@ async def startup_event():
     logger.info("WebSocket 服務已啟動")
 
 
-def verify_token(token: str) -> Optional[dict]:
+def verify_token(token: str) -> dict | None:
     """驗證 JWT 令牌"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -290,7 +287,7 @@ def verify_token(token: str) -> Optional[dict]:
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
+async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
     """
     WebSocket 端點 - 訂閱即時價格/信號
 
@@ -314,12 +311,14 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
     logger.info("WebSocket 連接：user_id=%s", user_id)
 
     # 發送歡迎訊息
-    await websocket.send_json({
-        "type": "connected",
-        "symbol": "*",
-        "message": "已連接 WebSocket 服務，請發送訂閱訊息",
-        "timestamp": int(time.time() * 1000)
-    })
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "symbol": "*",
+            "message": "已連接 WebSocket 服務，請發送訂閱訊息",
+            "timestamp": int(time.time() * 1000),
+        }
+    )
 
     # 等待客戶端發送訂閱
     subscribed_symbols = set()
@@ -341,10 +340,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                     if user_id not in manager.active_connections:
                         manager.active_connections[user_id] = {}
                     manager.active_connections[user_id][symbol] = websocket
-                await websocket.send_json({
-                    "type": "subscribed",
-                    "symbols": list(subscribed_symbols)
-                })
+                await websocket.send_json({"type": "subscribed", "symbols": list(subscribed_symbols)})
                 logger.info(f"用戶 %s 訂閱：{subscribed_symbols}")
 
             elif action == "unsubscribe":
@@ -355,10 +351,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                         if user_id in manager.active_connections:
                             if symbol in manager.active_connections[user_id]:
                                 del manager.active_connections[user_id][symbol]
-                await websocket.send_json({
-                    "type": "unsubscribed",
-                    "symbols": list(subscribed_symbols)
-                })
+                await websocket.send_json({"type": "unsubscribed", "symbols": list(subscribed_symbols)})
 
             elif action == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -379,11 +372,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
 async def get_subscriptions(user_id: int):
     """取得用戶的訂閱列表"""
     subscriptions = list(manager.active_connections.get(user_id, {}).keys())
-    return {
-        "user_id": user_id,
-        "subscriptions": subscriptions,
-        "count": len(subscriptions)
-    }
+    return {"user_id": user_id, "subscriptions": subscriptions, "count": len(subscriptions)}
 
 
 @app.get("/health")
@@ -392,10 +381,11 @@ async def health_check():
     return {
         "status": "healthy",
         "active_connections": sum(len(conns) for conns in manager.active_connections.values()),
-        "users": len(manager.active_connections)
+        "users": len(manager.active_connections),
     }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8001)

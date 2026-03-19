@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from typing import Any
 
 
@@ -28,7 +27,7 @@ def validate_ohlcv(rows: list[dict[str, Any]]) -> list[str]:
 
     for i in range(1, len(rows)):
         if rows[i]["timestamp"] <= rows[i - 1]["timestamp"]:
-            issues.append(f"時間戳亂序：第 {i} 根 ({rows[i]['timestamp']}) <= 第 {i-1} 根")
+            issues.append(f"時間戳亂序：第 {i} 根 ({rows[i]['timestamp']}) <= 第 {i - 1} 根")
             break
 
     for i, r in enumerate(rows):

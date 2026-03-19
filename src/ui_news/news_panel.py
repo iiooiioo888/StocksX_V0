@@ -1,17 +1,15 @@
 # 新闻面板 UI 组件（World Monitor 风格）
 # 功能：紧凑新闻列表、分类显示、重要性标记
 
-import streamlit as st
 import time
-from typing import Dict, List, Optional
-from datetime import datetime
+
+import streamlit as st
 
 from src.data.news_aggregator import (
+    get_all_news,
     get_crypto_news,
     get_finance_news,
-    get_all_news,
 )
-
 
 # ════════════════════════════════════════════════════════════
 # CSS 样式（紧凑新闻卡片）
@@ -233,9 +231,7 @@ def render_news_panel(
         news_lang = st.selectbox(
             "语言",
             ["全部", "英文", "中文"],
-            index=["全部", "英文", "中文"].index(
-                "全部" if lang == "all" else ("英文" if lang == "en" else "中文")
-            ),
+            index=["全部", "英文", "中文"].index("全部" if lang == "all" else ("英文" if lang == "en" else "中文")),
             key="news_lang_select",
         )
     with filter_col3:
@@ -266,46 +262,54 @@ def render_news_panel(
 
     # 显示新闻
     if news_list:
-        st.markdown(f'<div class="news-container">', unsafe_allow_html=True)
+        st.markdown('<div class="news-container">', unsafe_allow_html=True)
 
         for idx, news in enumerate(news_list):
             importance = news.get("importance", 1)
             importance_class = "important" if importance >= 4 else ("medium" if importance >= 3 else "normal")
             importance_text = "高" if importance >= 4 else ("中" if importance >= 3 else "低")
-            importance_badge_class = "importance-high" if importance >= 4 else ("importance-medium" if importance >= 3 else "importance-low")
+            importance_badge_class = (
+                "importance-high" if importance >= 4 else ("importance-medium" if importance >= 3 else "importance-low")
+            )
 
             # 格式化时间
             timestamp = news.get("timestamp", 0)
             time_ago = _format_time_ago(timestamp)
 
             # 新闻卡片
-            st.markdown(f"""
-            <div class="news-card {importance_class}" onclick="window.open('{news.get('link', '')}', '_blank')">
+            st.markdown(
+                f"""
+            <div class="news-card {importance_class}" onclick="window.open('{news.get("link", "")}', '_blank')">
                 <div class="news-title">
-                    <a href="{news.get('link', '')}" target="_blank">{news.get('title', '')}</a>
+                    <a href="{news.get("link", "")}" target="_blank">{news.get("title", "")}</a>
                 </div>
                 <div class="news-meta">
-                    <span class="news-source">{news.get('source', '')}</span>
+                    <span class="news-source">{news.get("source", "")}</span>
                     <span>•</span>
                     <span class="news-time">{time_ago}</span>
                     <span>•</span>
-                    <span class="news-category">{news.get('category', 'general')}</span>
+                    <span class="news-category">{news.get("category", "general")}</span>
                     <span class="importance-badge {importance_badge_class}">
                         ⚡ {importance_text}
                     </span>
                 </div>
-                {f'<div class="news-summary">{news.get("summary", "")}</div>' if show_summary else ''}
+                {f'<div class="news-summary">{news.get("summary", "")}</div>' if show_summary else ""}
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     else:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="no-news">
             📭 暂无新闻，请稍后再试
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # 自动刷新
     if auto_refresh:
@@ -330,7 +334,7 @@ def _format_time_ago(timestamp: float) -> str:
         return f"{int(diff / 86400)}天前"
 
 
-def render_news_ticker(symbols: List[str] = None, limit: int = 10):
+def render_news_ticker(symbols: list[str] = None, limit: int = 10):
     """
     渲染新闻滚动条（顶部）
 
@@ -405,20 +409,23 @@ def render_news_ticker(symbols: List[str] = None, limit: int = 10):
         importance_icon = "🔴" if importance >= 4 else ("🟡" if importance >= 3 else "⚪")
         items_html += f"""
         <div class="news-ticker-item">
-            {importance_icon} <a href="{news.get('link', '')}" target="_blank">{news.get('title', '')}</a>
+            {importance_icon} <a href="{news.get("link", "")}" target="_blank">{news.get("title", "")}</a>
         </div>
         """
 
     # 重复一次以实现无缝滚动
     items_html += items_html
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="news-ticker">
         <div class="news-ticker-content">
             {items_html}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_breaking_news_alert(limit: int = 3):
@@ -436,7 +443,8 @@ def render_breaking_news_alert(limit: int = 3):
     if not breaking_news:
         return
 
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     .breaking-news {
         background: rgba(218,54,51,0.1);
@@ -471,19 +479,24 @@ def render_breaking_news_alert(limit: int = 3):
         text-decoration: none;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown('<div class="breaking-news">', unsafe_allow_html=True)
     st.markdown('<div class="breaking-news-title">🚨 突发新闻</div>', unsafe_allow_html=True)
 
     for news in breaking_news:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div class="breaking-news-item">
-            🔴 <a href="{news.get('link', '')}" target="_blank">{news.get('title', '')}</a>
+            🔴 <a href="{news.get("link", "")}" target="_blank">{news.get("title", "")}</a>
             <span style="color:#8b949e;font-size:0.75rem;margin-left:8px;">
-                {news.get('source', '')} • {_format_time_ago(news.get('timestamp', 0))}
+                {news.get("source", "")} • {_format_time_ago(news.get("timestamp", 0))}
             </span>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)

@@ -10,7 +10,6 @@ Qwen AI 客戶端封裝。
 """
 
 from http import HTTPStatus
-from typing import Dict, List, Optional
 
 from src.config_secrets import DASHSCOPE_API_KEY, require
 
@@ -30,7 +29,7 @@ def _ensure_ready() -> None:
 
 
 def qwen_chat(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     model: str = "qwen-turbo",
     temperature: float = 0.7,
     max_tokens: int = 512,
@@ -61,15 +60,14 @@ def qwen_chat(
 
 def qwen_simple(
     prompt: str,
-    system_prompt: Optional[str] = "你是量化交易與程式開發助手，請使用繁體中文、給出精簡扼要的重點分析。",
+    system_prompt: str | None = "你是量化交易與程式開發助手，請使用繁體中文、給出精簡扼要的重點分析。",
     model: str = "qwen-turbo",
     temperature: float = 0.7,
     max_tokens: int = 512,
 ) -> str:
     """單句封裝：給一段 prompt，選擇性附 system 提示。"""
-    messages: List[Dict[str, str]] = []
+    messages: list[dict[str, str]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
     return qwen_chat(messages, model=model, temperature=temperature, max_tokens=max_tokens)
-
