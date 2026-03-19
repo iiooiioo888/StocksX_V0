@@ -1,11 +1,9 @@
-# StocksX V0 - 1Panel 生产环境部署配置
-# 使用方法：docker compose -f docker-compose.1panel.yml up -d
-
-version: '3.8'
+# StocksX V0 - 1Panel 生產環境部署配置
+# 使用方式：docker compose -f docker-compose.1panel.yml up -d
 
 services:
   # ════════════════════════════════════════════════════════════
-  # 主应用服务
+  # 主應用服務
   # ════════════════════════════════════════════════════════════
   app:
     build:
@@ -20,17 +18,18 @@ services:
       - APP_DEBUG=false
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://${POSTGRES_USER:-stocksx_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stocksx}
-      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
-      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY:-}
+      - TZ=${TZ:-Asia/Shanghai}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
     volumes:
-      - ./logs:/app/logs
-      - ./models:/app/models
-      - ./data:/app/data
+      - app_logs:/app/logs
+      - app_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - stocksx-network
     healthcheck:
@@ -47,20 +46,19 @@ services:
           memory: 1G
 
   # ════════════════════════════════════════════════════════════
-  # PostgreSQL 数据库
+  # PostgreSQL 資料庫
   # ════════════════════════════════════════════════════════════
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: stocksx-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-stocksx}
       POSTGRES_USER: ${POSTGRES_USER:-stocksx_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backups/db:/backups
     networks:
       - stocksx-network
     healthcheck:
@@ -74,13 +72,17 @@ services:
           memory: 1G
 
   # ════════════════════════════════════════════════════════════
-  # Redis 缓存
+  # Redis 緩存
   # ════════════════════════════════════════════════════════════
   redis:
     image: redis:7-alpine
     container_name: stocksx-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
@@ -96,7 +98,7 @@ services:
           memory: 512M
 
   # ════════════════════════════════════════════════════════════
-  # WebSocket 服务（可选）
+  # WebSocket 服務（可選）
   # ════════════════════════════════════════════════════════════
   websocket:
     build:
@@ -104,39 +106,24 @@ services:
       dockerfile: Dockerfile
     container_name: stocksx-websocket
     restart: unless-stopped
-    command: python -m src.websocket_binance
+    command: python -m src.websocket_server
+    ports:
+      - "${WS_PORT:-8001}:8001"
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
-      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY:-}
+      - TZ=${TZ:-Asia/Shanghai}
+    env_file:
+      - .env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - stocksx-network
     profiles:
       - websocket
 
   # ════════════════════════════════════════════════════════════
-  # 数据库迁移（一次性）
-  # ════════════════════════════════════════════════════════════
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: stocksx-migrate
-    command: python -m src.database.migrate
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-stocksx_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-stocksx}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - stocksx-network
-    profiles:
-      - init
-
-  # ════════════════════════════════════════════════════════════
-  # Prometheus 监控（可选）
+  # Prometheus 監控（可選）
   # ════════════════════════════════════════════════════════════
   prometheus:
     image: prom/prometheus:latest
@@ -150,15 +137,14 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
     networks:
       - stocksx-network
     profiles:
       - monitoring
 
   # ════════════════════════════════════════════════════════════
-  # Grafana 可视化（可选）
+  # Grafana 視覺化（可選）
   # ════════════════════════════════════════════════════════════
   grafana:
     image: grafana/grafana:latest
@@ -168,12 +154,11 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
     depends_on:
       - prometheus
     networks:
@@ -186,6 +171,8 @@ networks:
     driver: bridge
 
 volumes:
+  app_data:
+  app_logs:
   postgres_data:
   redis_data:
   prometheus_data:

@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import streamlit as st
-from typing import Any, Dict, List, Optional
-
 
 # ════════════════════════════════════════════════════════════
 # 現代化 CSS 主題 - Glassmorphism + Neumorphism
@@ -18,9 +16,9 @@ MODERN_CSS = """
 
 /* 全局背景 - 漸變星空 */
 .stApp {
-    background: linear-gradient(135deg, 
-        #0f0c29 0%, 
-        #302b63 50%, 
+    background: linear-gradient(135deg,
+        #0f0c29 0%,
+        #302b63 50%,
         #24243e 100%);
     font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
 }
@@ -102,9 +100,9 @@ MODERN_CSS = """
 /* 漸變分隔線 */
 .gradient-divider {
     height: 2px;
-    background: linear-gradient(90deg, 
-        transparent 0%, 
-        rgba(102, 126, 234, 0.5) 50%, 
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(102, 126, 234, 0.5) 50%,
         transparent 100%);
     margin: 20px 0;
     border: none;
@@ -419,6 +417,7 @@ a:hover {
 # UI 元件函數
 # ════════════════════════════════════════════════════════════
 
+
 def apply_modern_theme():
     """應用現代化主題"""
     st.markdown(f"<style>{MODERN_CSS}</style>", unsafe_allow_html=True)
@@ -429,25 +428,23 @@ def render_glass_card(content: str, hover: bool = True):
     st.markdown(f'<div class="glass-card">{content}</div>', unsafe_allow_html=True)
 
 
-def render_glow_metric(
-    label: str,
-    value: str,
-    delta: Optional[str] = None,
-    delta_color: str = "normal"
-):
+def render_glow_metric(label: str, value: str, delta: str | None = None, delta_color: str = "normal"):
     """渲染發光指標"""
     delta_html = ""
     if delta:
         delta_color_class = "status-success" if delta_color == "normal" and "+" in delta else "status-error"
         delta_html = f'<div class="status-badge {delta_color_class}" style="margin-top:8px;">{delta}</div>'
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="glow-metric">
         <div class="glow-metric-label">{label}</div>
         <div class="glow-metric-value">{value}</div>
         {delta_html}
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_status_badge(status: str, type: str = "info"):
@@ -456,7 +453,7 @@ def render_status_badge(status: str, type: str = "info"):
         "success": "status-success",
         "warning": "status-warning",
         "error": "status-error",
-        "info": "status-info"
+        "info": "status-info",
     }
     badge_class = type_map.get(type, "status-info")
     st.markdown(f'<span class="status-badge {badge_class}">{status}</span>', unsafe_allow_html=True)
@@ -470,11 +467,14 @@ def render_gradient_divider():
 def render_modern_progress(progress: float):
     """渲染現代化進度條"""
     progress = max(0, min(100, progress))
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="modern-progress">
         <div class="modern-progress-bar" style="width: {progress}%;"></div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_animated_text(text: str, animation: str = "fade-in"):
@@ -492,24 +492,24 @@ def render_neon_button(label: str):
 # 頁面佈局元件
 # ════════════════════════════════════════════════════════════
 
-def render_hero_banner(
-    title: str,
-    subtitle: str,
-    stats: Optional[List[Dict[str, str]]] = None
-):
+
+def render_hero_banner(title: str, subtitle: str, stats: list[dict[str, str]] | None = None):
     """渲染 Hero Banner"""
     stats_html = ""
     if stats:
-        stats_items = "".join([
-            f'<div class="glow-metric" style="min-width:120px;">'
-            f'<div class="glow-metric-value">{s["value"]}</div>'
-            f'<div class="glow-metric-label">{s["label"]}</div>'
-            f'</div>'
-            for s in stats
-        ])
+        stats_items = "".join(
+            [
+                f'<div class="glow-metric" style="min-width:120px;">'
+                f'<div class="glow-metric-value">{s["value"]}</div>'
+                f'<div class="glow-metric-label">{s["label"]}</div>'
+                f"</div>"
+                for s in stats
+            ]
+        )
         stats_html = f'<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:25px;">{stats_items}</div>'
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="glass-card" style="padding:40px;margin:20px 0 30px 0;">
         <h1 style="font-size:2.5rem;margin-bottom:10px;
             background:linear-gradient(135deg, #667eea, #764ba2);
@@ -519,42 +519,38 @@ def render_hero_banner(
         <p style="font-size:1.1rem;color:#94a3b8;margin-bottom:20px;">{subtitle}</p>
         {stats_html}
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
-def render_feature_grid(features: List[Dict[str, str]], columns: int = 3):
+def render_feature_grid(features: list[dict[str, str]], columns: int = 3):
     """渲染功能網格"""
     cols = st.columns(columns)
-    
+
     for idx, feature in enumerate(features):
         col = cols[idx % columns]
         with col:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="glass-card" style="padding:20px;height:100%;">
-                <div style="font-size:2.5rem;margin-bottom:10px;">{feature.get('icon', '📊')}</div>
-                <h3 style="font-size:1.1rem;margin-bottom:8px;color:#f0f0ff;">{feature.get('title', '')}</h3>
-                <p style="font-size:0.9rem;color:#94a3b8;line-height:1.6;">{feature.get('desc', '')}</p>
-                {f'<div style="margin-top:10px;">{feature.get("tags", "")}</div>' if feature.get('tags') else ''}
+                <div style="font-size:2.5rem;margin-bottom:10px;">{feature.get("icon", "📊")}</div>
+                <h3 style="font-size:1.1rem;margin-bottom:8px;color:#f0f0ff;">{feature.get("title", "")}</h3>
+                <p style="font-size:0.9rem;color:#94a3b8;line-height:1.6;">{feature.get("desc", "")}</p>
+                {f'<div style="margin-top:10px;">{feature.get("tags", "")}</div>' if feature.get("tags") else ""}
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
 
-def render_info_card(
-    title: str,
-    content: str,
-    icon: str = "ℹ️",
-    type: str = "info"
-):
+def render_info_card(title: str, content: str, icon: str = "ℹ️", type: str = "info"):
     """渲染資訊卡片"""
-    type_colors = {
-        "info": "#6ea8fe",
-        "success": "#00cc96",
-        "warning": "#ffa15a",
-        "error": "#ef553b"
-    }
+    type_colors = {"info": "#6ea8fe", "success": "#00cc96", "warning": "#ffa15a", "error": "#ef553b"}
     color = type_colors.get(type, "#6ea8fe")
-    
-    st.markdown(f"""
+
+    st.markdown(
+        f"""
     <div class="glass-card" style="border-left:4px solid {color};padding:20px;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
             <span style="font-size:1.5rem;">{icon}</span>
@@ -562,4 +558,6 @@ def render_info_card(
         </div>
         <p style="color:#94a3b8;line-height:1.6;">{content}</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )

@@ -1,5 +1,6 @@
 # 登入 / 註冊頁面（安全強化版）
 import streamlit as st
+
 from src.auth import UserDB
 from src.ui_common import apply_theme
 
@@ -46,24 +47,23 @@ with tab_login:
                     st.error(f"🔒 {result}")
     st.caption("🔒 連續登入失敗 5 次將鎖定帳號 5 分鐘")
 
-with tab_register:
-    with st.form("register_form"):
-        new_user = st.text_input("帳號（3-50 字元，字母數字底線）", max_chars=50, key="reg_user")
-        new_name = st.text_input("暱稱", max_chars=100, key="reg_name")
-        new_pw = st.text_input("密碼（至少 6 字元，需含字母和數字）", type="password", max_chars=100, key="reg_pw")
-        new_pw2 = st.text_input("確認密碼", type="password", max_chars=100, key="reg_pw2")
-        reg_submitted = st.form_submit_button("註冊", type="primary", use_container_width=True)
-        if reg_submitted:
-            if new_pw != new_pw2:
-                st.error("兩次密碼不一致")
-            elif not db.check_rate_limit("register", max_calls=5, period=300):
-                st.error("🚫 註冊嘗試過於頻繁，請 5 分鐘後再試")
+with tab_register, st.form("register_form"):
+    new_user = st.text_input("帳號（3-50 字元，字母數字底線）", max_chars=50, key="reg_user")
+    new_name = st.text_input("暱稱", max_chars=100, key="reg_name")
+    new_pw = st.text_input("密碼（至少 6 字元，需含字母和數字）", type="password", max_chars=100, key="reg_pw")
+    new_pw2 = st.text_input("確認密碼", type="password", max_chars=100, key="reg_pw2")
+    reg_submitted = st.form_submit_button("註冊", type="primary", use_container_width=True)
+    if reg_submitted:
+        if new_pw != new_pw2:
+            st.error("兩次密碼不一致")
+        elif not db.check_rate_limit("register", max_calls=5, period=300):
+            st.error("🚫 註冊嘗試過於頻繁，請 5 分鐘後再試")
+        else:
+            result = db.register(new_user, new_pw, display_name=new_name)
+            if isinstance(result, dict):
+                st.success("✅ 註冊成功！請切換到「登入」分頁")
             else:
-                result = db.register(new_user, new_pw, display_name=new_name)
-                if isinstance(result, dict):
-                    st.success("✅ 註冊成功！請切換到「登入」分頁")
-                else:
-                    st.error(f"❌ {result}")
+                st.error(f"❌ {result}")
 
 st.divider()
 st.caption("🔒 安全措施：PBKDF2 密碼雜湊 | 帳號鎖定保護 | 輸入消毒 | Session 過期")

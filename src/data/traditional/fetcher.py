@@ -10,8 +10,13 @@ from src.data.storage.sqlite_storage import SQLiteMarketDataStorage
 logger = logging.getLogger(__name__)
 
 _TF_MS = {
-    "1m": 60_000, "5m": 300_000, "15m": 900_000, "30m": 1_800_000,
-    "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000,
+    "1m": 60_000,
+    "5m": 300_000,
+    "15m": 900_000,
+    "30m": 1_800_000,
+    "1h": 3_600_000,
+    "4h": 14_400_000,
+    "1d": 86_400_000,
 }
 
 _DB_PATH = "cache/traditional_cache.sqlite"

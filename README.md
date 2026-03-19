@@ -1,8 +1,10 @@
 # StocksX — 機構級專業回測與交易監控平台
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Streamlit](https://img.shields.io/badge/streamlit-1.28.0-red.svg)](https://streamlit.io)
+[![Streamlit](https://img.shields.io/badge/streamlit-1.32+-red.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/iiooiioo888/StocksX_V0/actions/workflows/ci.yml/badge.svg)](https://github.com/iiooiioo888/StocksX_V0/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://github.com/iiooiioo888/StocksX_V0/pkgs/container)
 
 ## 📊 平台概覽
 
@@ -368,7 +370,23 @@ signals = batch_get_signals(symbols, strategies)
 
 ## 🚀 部署指南
 
-### Docker 部署
+### Docker 部署（推薦）
+
+```bash
+# 1. 複製環境變數
+cp .env.example .env
+# 編輯 .env 填入 SECRET_KEY 和 ADMIN_PASSWORD
+
+# 2. 啟動服務
+docker compose up -d
+
+# 3. 訪問：http://localhost:8501
+
+# 啟動含監控的完整服務（Prometheus + Grafana）
+docker compose --profile monitoring up -d
+```
+
+### Docker 部署（傳統）
 
 ```bash
 # 建立 Docker 映像
@@ -461,6 +479,16 @@ stats = db.get_trade_stats(watch_id)
 ---
 
 ## 📝 更新日誌
+
+### v4.1 (2026-03-19) — 優化版
+
+- ✅ **安全性加強**：完善 `.gitignore`，防止 `.env` 和日誌洩漏
+- ✅ **結構化日誌**：統一使用 `logging` 模組，取代散落的 `print()`
+- ✅ **CI/CD**：新增 GitHub Actions 自動化 lint + test + Docker 構建
+- ✅ **Docker 優化**：更新 Compose 配置，移除 deprecated `version`，加入 `tini` init
+- ✅ **程式碼品質**：引入 Ruff linter + formatter，pre-commit hooks
+- ✅ **開發體驗**：新增 `requirements-dev.txt`、`CONTRIBUTING.md`、`SECURITY.md`
+- ✅ **環境配置**：完善 `.env.example`，新增所有可配置項
 
 ### v4.0 (2024-03-03)
 

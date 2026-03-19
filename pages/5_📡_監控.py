@@ -1,21 +1,18 @@
 # 策略訂閱 & 即時監控（優化版 v3.0 - 即時信號）
 # 優化：批量數據加載、智能快取、異步更新、即時信號計算
 
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import time as _time
-import sqlite3
 import json
+import sqlite3
+import time as _time
 from datetime import datetime, timezone
+
+import pandas as pd
+import streamlit as st
+
 from src.auth import UserDB
-from src.config import format_price, STRATEGY_LABELS
+from src.config import STRATEGY_LABELS, format_price
+from src.data.live_monitor import batch_calculate_signals, batch_get_live_prices
 from src.ui_common import require_login
-from src.data.live_monitor import (
-    batch_get_live_prices,
-    batch_calculate_signals,
-    get_live_price
-)
 
 st.set_page_config(page_title="StocksX — 策略監控", page_icon="📡", layout="wide")
 
@@ -43,11 +40,13 @@ st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
 # 快取優化
 # ════════════════════════════════════════════════════════════
 
+
 @st.cache_data(ttl=5, show_spinner=False)
 def get_watchlist_cached(user_id: int):
     """快取.watchlist 數據（5 秒）"""
     db = UserDB()
     return db.get_watchlist(user_id)
+
 
 @st.cache_data(ttl=30, show_spinner=False)
 def get_products_cached(user_id: int, market_type: str = "", category: str = ""):
@@ -55,19 +54,23 @@ def get_products_cached(user_id: int, market_type: str = "", category: str = "")
     db = UserDB()
     return db.get_products(user_id, market_type, category)
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_categories_cached(market_type: str = ""):
     """快取分類數據（60 秒）"""
     db = UserDB()
     return db.get_product_categories(market_type)
 
+
 # ════════════════════════════════════════════════════════════
 # 批量數據加載
 # ════════════════════════════════════════════════════════════
 
+
 def batch_get_live_prices(symbols: list) -> dict:
     """批量取得價格（減少 API 呼叫）"""
     from src.data.live import get_live_price
+
     prices = {}
     for symbol in symbols:
         try:
@@ -78,9 +81,11 @@ def batch_get_live_prices(symbols: list) -> dict:
             pass
     return prices
 
+
 def batch_get_signals(symbols: list, strategies: list) -> dict:
     """批量取得信號（減少 API 呼叫）"""
     from src.data.live import get_current_signal
+
     signals = {}
     for symbol in symbols:
         for strategy in strategies:
@@ -92,6 +97,7 @@ def batch_get_signals(symbols: list, strategies: list) -> dict:
                 pass
     return signals
 
+
 # ════════════════════════════════════════════════════════════
 # 頁面初始化
 # ════════════════════════════════════════════════════════════
@@ -99,7 +105,9 @@ def batch_get_signals(symbols: list, strategies: list) -> dict:
 user = require_login()
 db = UserDB()
 
-st.markdown('<div style="margin-bottom:20px;"><h1 style="margin:0;">📡 策略訂閱 & 即時監控</h1></div>', unsafe_allow_html=True)
+st.markdown(
+    '<div style="margin-bottom:20px;"><h1 style="margin:0;">📡 策略訂閱 & 即時監控</h1></div>', unsafe_allow_html=True
+)
 
 # 側邊欄 - 使用快取
 with st.sidebar:
@@ -116,18 +124,15 @@ with st.sidebar:
     # 總體統計
     if watchlist:
         # get_watchlist 已經確保數值類型正確
-        total_pnl = sum(
-            w["pnl_pct"] * w["initial_equity"] / 100 
-            for w in watchlist
-        )
+        total_pnl = sum(w["pnl_pct"] * w["initial_equity"] / 100 for w in watchlist)
         st.metric("💰 總 P&L", f"${total_pnl:+,.0f}")
 
     # 重新整理按鈕（帶計時器）
     if "last_refresh" not in st.session_state:
         st.session_state.last_refresh = _time.time()
-    
+
     time_since = _time.time() - st.session_state.last_refresh
-    
+
     if st.button(f"🔄 重新整理 ({time_since:.0f}s)", use_container_width=True):
         # 清除快取
         get_watchlist_cached.clear()
@@ -145,68 +150,68 @@ tabs = st.tabs(["📊 我的訂閱", "➕ 新增訂閱", "🤖 自動策略"])
 
 with tabs[0]:
     st.markdown("#### 📊 我的訂閱策略（即時監控）")
-    
+
     # 顯示上次更新時間
     if "last_signal_update" not in st.session_state:
         st.session_state.last_signal_update = _time.time()
-    
+
     time_since_update = _time.time() - st.session_state.last_signal_update
     st.caption(f"🕐 上次信號更新：{time_since_update:.0f}秒前")
-    
+
     # 自動重新整理選項
     auto_refresh = st.checkbox("🔄 自動重新整理（每 10 秒）", value=True)
-    
+
     if not watchlist:
         st.info("📭 尚無訂閱。點擊「➕ 新增訂閱」開始。")
     else:
         # 批量取得價格數據（一次性加載）
         symbols_to_load = [w["symbol"] for w in watchlist if w.get("is_active", True)]
-        
+
         if symbols_to_load:
             with st.spinner(f"載入 {len(symbols_to_load)} 個價格..."):
                 prices = batch_get_live_prices(symbols_to_load)
-            
+
             # 批量計算信號
             with st.spinner(f"計算 {len(symbols_to_load)} 個信號..."):
                 signals = batch_calculate_signals(watchlist)
-            
+
             # 更新 session state
             st.session_state.last_signal_update = _time.time()
         else:
             prices = {}
             signals = {}
-        
+
         # 顯示訂閱列表（優化佈局）
         for idx, w in enumerate(watchlist):
             if not w.get("is_active", True):
                 continue
-            
+
             symbol = w.get("symbol", "")
             strategy = w.get("strategy", "")
             s_label = STRATEGY_LABELS.get(strategy, strategy)
-            
+
             # 取得價格數據
             price_data = prices.get(symbol, {})
             current_price = price_data.get("price", 0)
-            
+
             # 如果沒有即時價格，使用資料庫數據
             if not current_price:
                 current_price = float(w.get("last_price", 0) or 0)
-            
+
             # 取得信號數據
             signal_data = signals.get(w["id"], {})
-            
+
             # 如果有新信號，自動更新
             if signal_data:
                 new_signal = signal_data.get("signal", 0)
                 action = signal_data.get("action", "HOLD")
                 confidence = signal_data.get("confidence", 0)
-                
+
                 # 顯示信號
                 if new_signal != 0:
                     signal_emoji = "🟢" if new_signal == 1 else "🔴"
                     st.toast(f"{signal_emoji} {symbol} {strategy}: {action} (信心度：{confidence:.0f}%)")
-            
+
             # 計算損益
             position = w["position"]
             entry_price = w["entry_price"]
@@ -217,12 +222,14 @@ with tabs[0]:
             entry_price = float(entry_price or 0)
 
             # 調試信息
-            st.caption(f"🔍 調試：position={position}, entry_price=${entry_price:,.2f}, current_price=${current_price:,.2f}")
-            
+            st.caption(
+                f"🔍 調試：position={position}, entry_price=${entry_price:,.2f}, current_price=${current_price:,.2f}"
+            )
+
             # 調試信息（僅在價格異常時顯示）
             if entry_price > 0 and current_price == 0:
                 st.warning(f"⚠️ {symbol}: 無法取得當前價格（進場價=${entry_price:,.2f}）")
-            
+
             if position > 0 and entry_price > 0 and current_price > 0:
                 _pnl = (current_price - entry_price) / entry_price * 100
                 _profit = (current_price - entry_price) * (_equity / entry_price)
@@ -232,13 +239,13 @@ with tabs[0]:
             else:
                 _pnl = float(w.get("pnl_pct", 0) or 0)
                 _profit = 0
-            
+
             _pnl_color = "normal" if _pnl >= 0 else "inverse"
             _position_text = {1: "🟢 多頭", -1: "🔴 空頭", 0: "⚪ 空倉"}.get(position, "⚪ 空倉")
-            
+
             # 使用 expander 優化顯示（包含帳戶號碼和即時信號）
             account_id = w.get("account_id", "N/A")
-            
+
             # 準備信號顯示
             if signal_data:
                 signal_action = signal_data.get("action", "HOLD")
@@ -247,11 +254,14 @@ with tabs[0]:
                 signal_display = f"{signal_icon} {signal_action} ({signal_confidence:.0f}%)"
             else:
                 signal_display = "計算中..."
-            
-            with st.expander(f"**{symbol}** × {s_label} | {_position_text} | 💰${_equity:,.0f} | {_pnl:+.2f}% | {signal_display}", expanded=False):
+
+            with st.expander(
+                f"**{symbol}** × {s_label} | {_position_text} | 💰${_equity:,.0f} | {_pnl:+.2f}% | {signal_display}",
+                expanded=False,
+            ):
                 # 顯示帳戶號碼
                 st.caption(f"📋 帳戶號碼：`{account_id}`")
-                
+
                 # 即時價格和信號
                 r1, r2, r3 = st.columns(3)
                 with r1:
@@ -259,23 +269,28 @@ with tabs[0]:
                         st.metric("💰 即時價格", format_price(current_price))
                     else:
                         st.markdown("💰 即時價格：`等待數據...`")
-                
+
                 with r2:
                     if signal_data:
                         st.metric("📡 即時信號", signal_display)
                     else:
                         st.markdown("📡 即時信號：`計算中...`")
-                
+
                 with r3:
-                    pos_class = "position-long" if position == 1 else "position-short" if position == -1 else "position-flat"
-                    st.markdown(f'<div style="font-size:1.2rem;font-weight:700;" class="{pos_class}">{_position_text}</div>', unsafe_allow_html=True)
-                
+                    pos_class = (
+                        "position-long" if position == 1 else "position-short" if position == -1 else "position-flat"
+                    )
+                    st.markdown(
+                        f'<div style="font-size:1.2rem;font-weight:700;" class="{pos_class}">{_position_text}</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 # 信號詳情
                 if signal_data:
                     st.divider()
                     st.markdown("**🔍 信號詳情**")
                     sig_col1, sig_col2, sig_col3 = st.columns(3)
-                    
+
                     with sig_col1:
                         st.markdown(f"**策略**: {s_label}")
                     with sig_col2:
@@ -286,11 +301,13 @@ with tabs[0]:
                         elif "macd" in signal_data:
                             st.markdown(f"**MACD**: {signal_data['macd']:.4f}")
                         elif "upper_band" in signal_data:
-                            st.markdown(f"**布林帶**: 上軌 {signal_data['upper_band']:.2f} / 下軌 {signal_data['lower_band']:.2f}")
-                
+                            st.markdown(
+                                f"**布林帶**: 上軌 {signal_data['upper_band']:.2f} / 下軌 {signal_data['lower_band']:.2f}"
+                            )
+
                 # 帳戶價值
                 v1, v2, v3, v4 = st.columns(4)
-                
+
                 # 計算帳戶價值：
                 # 1. 有多頭持倉：帳戶價值 = 初始資金 * (1 + 漲跌幅)
                 # 2. 有空頭持倉：帳戶價值 = 初始資金 * (1 + 漲跌幅)
@@ -310,18 +327,28 @@ with tabs[0]:
                     account_value = _equity
                     _pnl_display = 0
                     _profit_display = 0
-                    
+
                     # 如果有進場價但 position=0，顯示警告
                     if entry_price > 0 and position == 0:
                         st.warning(f"⚠️ {symbol}: 持倉狀態異常（position={position}, entry_price=${entry_price:,.2f}）")
-                
+
                 _val_color = "normal" if _profit_display >= 0 else "inverse"
-                v1.metric("🏦 帳戶價值", f"${account_value:,.2f}", delta=f"{_profit_display:+,.2f}" if _profit_display != 0 else None, delta_color=_val_color)
-                v2.metric("💹 未實現 P&L", f"{_pnl_display:+.2f}%" if _pnl_display != 0 else "0.00%", delta=f"${_profit_display:+,.2f}" if _profit_display != 0 else "$0.00", delta_color=_val_color)
+                v1.metric(
+                    "🏦 帳戶價值",
+                    f"${account_value:,.2f}",
+                    delta=f"{_profit_display:+,.2f}" if _profit_display != 0 else None,
+                    delta_color=_val_color,
+                )
+                v2.metric(
+                    "💹 未實現 P&L",
+                    f"{_pnl_display:+.2f}%" if _pnl_display != 0 else "0.00%",
+                    delta=f"${_profit_display:+,.2f}" if _profit_display != 0 else "$0.00",
+                    delta_color=_val_color,
+                )
                 entry = w.get("entry_price", 0)
                 v3.metric("📍 進場價", format_price(entry) if entry else "—")
                 v4.metric("💵 初始資金", f"${_equity:,.2f}")
-                
+
                 # 手動操作按鈕
                 st.divider()
                 st.markdown("**🎯 手動持倉操作**")
@@ -331,9 +358,21 @@ with tabs[0]:
                     if st.button("🟢 做多", key=f"long_{w['id']}_{idx}", use_container_width=True):
                         if position == -1:
                             pnl = (entry - current_price) / entry * 100 if entry > 0 else 0
-                            db.log_trade(w["id"], user["id"], symbol, "平倉", -1, current_price, _equity, _equity * (1 + pnl/100), reason="手動平倉")
+                            db.log_trade(
+                                w["id"],
+                                user["id"],
+                                symbol,
+                                "平倉",
+                                -1,
+                                current_price,
+                                _equity,
+                                _equity * (1 + pnl / 100),
+                                reason="手動平倉",
+                            )
                         db.update_watch(w["id"], position=1, entry_price=current_price, last_signal=1, pnl_pct=0)
-                        db.log_trade(w["id"], user["id"], symbol, "開倉", 1, current_price, _equity, _equity, reason="手動做多")
+                        db.log_trade(
+                            w["id"], user["id"], symbol, "開倉", 1, current_price, _equity, _equity, reason="手動做多"
+                        )
                         st.success(f"✅ {symbol} 做多 @ {format_price(current_price)}")
                         get_watchlist_cached.clear()
                         st.rerun()
@@ -342,9 +381,21 @@ with tabs[0]:
                     if st.button("🔴 做空", key=f"short_{w['id']}_{idx}", use_container_width=True):
                         if position == 1:
                             pnl = (current_price - entry) / entry * 100 if entry > 0 else 0
-                            db.log_trade(w["id"], user["id"], symbol, "平倉", 1, current_price, _equity, _equity * (1 + pnl/100), reason="手動平倉")
+                            db.log_trade(
+                                w["id"],
+                                user["id"],
+                                symbol,
+                                "平倉",
+                                1,
+                                current_price,
+                                _equity,
+                                _equity * (1 + pnl / 100),
+                                reason="手動平倉",
+                            )
                         db.update_watch(w["id"], position=-1, entry_price=current_price, last_signal=-1, pnl_pct=0)
-                        db.log_trade(w["id"], user["id"], symbol, "開倉", -1, current_price, _equity, _equity, reason="手動做空")
+                        db.log_trade(
+                            w["id"], user["id"], symbol, "開倉", -1, current_price, _equity, _equity, reason="手動做空"
+                        )
                         st.success(f"✅ {symbol} 做空 @ {format_price(current_price)}")
                         get_watchlist_cached.clear()
                         st.rerun()
@@ -356,7 +407,17 @@ with tabs[0]:
                                 pnl = (current_price - entry) / entry * 100 if entry > 0 else 0
                             else:
                                 pnl = (entry - current_price) / entry * 100 if entry > 0 else 0
-                            db.log_trade(w["id"], user["id"], symbol, "平倉", position, current_price, _equity, _equity * (1 + pnl/100), reason="手動平倉")
+                            db.log_trade(
+                                w["id"],
+                                user["id"],
+                                symbol,
+                                "平倉",
+                                position,
+                                current_price,
+                                _equity,
+                                _equity * (1 + pnl / 100),
+                                reason="手動平倉",
+                            )
                         db.update_watch(w["id"], position=0, entry_price=0, pnl_pct=0)
                         st.success(f"✅ {symbol} 平倉")
                         get_watchlist_cached.clear()
@@ -380,13 +441,13 @@ with tabs[0]:
                     _st3.metric("🎯 勝率", f"{_stats.get('win_rate', 0):.1f}%")
                     _st4.metric("💰 累計 P&L", f"${_stats.get('total_pnl', 0):+,.0f}")
                     _st5.metric("💸 累計費用", f"${_stats.get('total_fees', 0):,.0f}")
-                    
+
                     # 交易記錄列表
                     st.markdown("**📋 交易記錄**")
-                    
+
                     # 取得交易記錄
                     trade_log = db.get_trade_log(w["id"], limit=50)
-                    
+
                     if trade_log:
                         # 建立交易記錄表格
                         trade_data = []
@@ -396,49 +457,52 @@ with tabs[0]:
                             if quantity == 0 and trade.get("price", 0) > 0:
                                 # 從權益和價格估算
                                 quantity = trade.get("equity_before", _equity) / trade.get("price", 1)
-                            
-                            trade_data.append({
-                                "時間": datetime.fromtimestamp(trade.get("created_at", 0), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                                "操作": trade.get("action", ""),
-                                "方向": {"1": "🟢 多頭", "-1": "🔴 空頭"}.get(str(trade.get("side", 0)), "⚪"),
-                                "價格": f"${trade.get('price', 0):,.2f}",
-                                "數量": f"{quantity:,.4f}",
-                                "P&L": f"${trade.get('pnl_amount', 0):+.2f}" if trade.get("action") == "平倉" else "-",
-                                "P&L%": f"{trade.get('pnl_pct', 0):+.2f}%" if trade.get("action") == "平倉" else "-",
-                                "費用": f"${trade.get('fee', 0):.2f}" if trade.get("fee", 0) > 0 else "-",
-                                "原因": trade.get("reason", "")
-                            })
-                        
+
+                            trade_data.append(
+                                {
+                                    "時間": datetime.fromtimestamp(
+                                        trade.get("created_at", 0), tz=timezone.utc
+                                    ).strftime("%Y-%m-%d %H:%M:%S"),
+                                    "操作": trade.get("action", ""),
+                                    "方向": {"1": "🟢 多頭", "-1": "🔴 空頭"}.get(str(trade.get("side", 0)), "⚪"),
+                                    "價格": f"${trade.get('price', 0):,.2f}",
+                                    "數量": f"{quantity:,.4f}",
+                                    "P&L": f"${trade.get('pnl_amount', 0):+.2f}"
+                                    if trade.get("action") == "平倉"
+                                    else "-",
+                                    "P&L%": f"{trade.get('pnl_pct', 0):+.2f}%"
+                                    if trade.get("action") == "平倉"
+                                    else "-",
+                                    "費用": f"${trade.get('fee', 0):.2f}" if trade.get("fee", 0) > 0 else "-",
+                                    "原因": trade.get("reason", ""),
+                                }
+                            )
+
                         # 顯示表格
                         trade_df = pd.DataFrame(trade_data)
-                        
+
                         # 自定義樣式
                         def color_pnl(val):
                             if isinstance(val, str):
-                                if val.startswith('$+'):
-                                    return 'color: #00cc96'
-                                elif val.startswith('$-'):
-                                    return 'color: #ef553b'
-                            return ''
-                        
+                                if val.startswith("$+"):
+                                    return "color: #00cc96"
+                                elif val.startswith("$-"):
+                                    return "color: #ef553b"
+                            return ""
+
                         # 應用樣式
-                        styled_df = trade_df.style.applymap(color_pnl, subset=['P&L', 'P&L%'])
-                        
-                        st.dataframe(
-                            styled_df,
-                            use_container_width=True,
-                            hide_index=True,
-                            height=300
-                        )
-                        
+                        styled_df = trade_df.style.applymap(color_pnl, subset=["P&L", "P&L%"])
+
+                        st.dataframe(styled_df, use_container_width=True, hide_index=True, height=300)
+
                         # 匯出按鈕
-                        csv = trade_df.to_csv(index=False, encoding='utf-8-sig')
+                        csv = trade_df.to_csv(index=False, encoding="utf-8-sig")
                         st.download_button(
                             label="📥 匯出交易記錄 (CSV)",
                             data=csv,
                             file_name=f"{symbol}_trade_log_{datetime.now().strftime('%Y%m%d')}.csv",
                             mime="text/csv",
-                            use_container_width=True
+                            use_container_width=True,
                         )
                     else:
                         st.info("暫無交易記錄")
@@ -485,20 +549,22 @@ with tabs[1]:
         _prod_options = ["✏️ 自訂輸入"]
 
     _sel = st.selectbox("選擇產品", _prod_options, key="w_prod")
-    
+
     # 處理自訂輸入
     if _sel == "✏️ 自訂輸入":
         _symbol = st.text_input("自訂交易對", value="BTC/USDT", key="w_symbol_custom")
     else:
         _symbol = _sel.split(" — ")[0]
-    
+
     _exchange = "binance" if _mt == "crypto" else "yfinance"
 
     # 策略選擇
     st.markdown("#### 🧠 策略設定")
     strat_cols = st.columns(2)
     with strat_cols[0]:
-        _strat = st.selectbox("策略", list(STRATEGY_LABELS.keys()), format_func=lambda x: STRATEGY_LABELS.get(x, x), key="w_strat")
+        _strat = st.selectbox(
+            "策略", list(STRATEGY_LABELS.keys()), format_func=lambda x: STRATEGY_LABELS.get(x, x), key="w_strat"
+        )
     with strat_cols[1]:
         _tf = st.selectbox("時間框架", ["5m", "15m", "1h", "4h", "1d"], index=2, key="w_tf")
 
@@ -521,24 +587,23 @@ with tabs[1]:
                 test_conn = sqlite3.connect("cache/users.sqlite")
                 cur = test_conn.execute("PRAGMA table_info(watchlist)")
                 columns = [row[1] for row in cur.fetchall()]
-                
+
                 if "account_id" not in columns:
                     # 如果沒有 account_id 欄位，使用舊版插入
                     cur = test_conn.execute(
                         """INSERT INTO watchlist (user_id, symbol, exchange, timeframe, strategy,
                            strategy_params, initial_equity, leverage, created_at)
                            VALUES (?,?,?,?,?,?,?,?,?)""",
-                        (user["id"], _symbol, _exchange, _tf, _strat,
-                         json.dumps({}), _eq, _lev, time.time()),
+                        (user["id"], _symbol, _exchange, _tf, _strat, json.dumps({}), _eq, _lev, _time.time()),
                     )
                 else:
                     # 有 account_id 欄位，使用新版插入
                     test_conn.close()
                     wid = db.add_watch(user["id"], _symbol, _exchange, _tf, _strat, {}, _eq, _lev)
-                
+
                 test_conn.commit()
                 test_conn.close()
-                
+
                 st.success(f"✅ 已新增 {_symbol} × {STRATEGY_LABELS.get(_strat, _strat)} 到訂閱列表")
                 # 清除快取
                 get_watchlist_cached.clear()
@@ -546,6 +611,7 @@ with tabs[1]:
             except Exception as e:
                 st.error(f"❌ 新增失敗：{e}")
                 import traceback
+
                 st.code(traceback.format_exc())
         else:
             st.warning("請輸入交易對")
@@ -557,23 +623,23 @@ with tabs[1]:
 with tabs[2]:
     st.markdown("### 🤖 自動策略配置")
     st.info("🚧 開發中 - 預計下個版本推出")
-    
+
     st.markdown("""
     #### 功能預告：
-    
+
     1. **📊 策略池管理**
        - 設定多個策略自動輪動
        - 根據市場狀況自動選擇最佳策略
-    
+
     2. **📈 績效評估**
        - 定期評估各策略表現
        - 自動切換到表現最佳的策略
-    
+
     3. **🛡️ 風險管理**
        - 設定停損/停利點
        - 最大回撤控制
        - 倉位自動調整
-    
+
     4. **⚡ 即時監控**
        - 24/7 自動監控市場
        - 自動執行交易

@@ -1,0 +1,60 @@
+# ════════════════════════════════════════════════════════════
+# Ruff - Python linter & formatter 配置
+# ════════════════════════════════════════════════════════════
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long（由 formatter 處理）
+    "B008",   # function call in default argument（Streamlit 常見模式）
+    "SIM108", # ternary（有時 if/else 更清晰）
+    "N806",   # variable in function should be lowercase（plottly 常見）
+    "RUF001", # ambiguous unicode（中文專案必用中文字符）
+    "RUF002", # ambiguous unicode in docstring
+    "RUF003", # ambiguous unicode in comment
+    "E402",   # module level import not at top（Streamlit pages 必須先 set_page_config）
+    "SIM102", # nested if（有時更清晰）
+    "SIM105", # contextlib.suppress（try/except 更明確）
+    "RUF013", # implicit optional（專案大量使用）
+    "RUF059", # unused variable in __all__
+    "B905",   # zip without strict（Python 3.10+ 才有）
+    "B006",   # mutable default argument（常見模式）
+    "B007",   # unused loop control variable
+    "UP045",  # `Optional[X]` -> `X | None`（太大量）
+    "RUF005", # set rearrangement
+    "RUF006", # asyncio dangling task
+    "RUF022", # __all__ not sorted
+    "RUF015", # unnecessary iterable allocation
+    "RUF012", # mutable class attribute
+    "E741",   # ambiguous variable name
+    "N812",   # lowercase imported as non-lowercase
+    "N818",   # exception name suffix
+    "SIM222", # `expr or True`
+    "SIM118", # use `key in dict` instead of `key in dict.keys()`
+    "SIM103", # return bool directly
+    "B904",   # raise from
+    "I001",   # import sorting
+    "F811",   # shadowed built-in
+    "F841",   # unused variable（有些保留是有意的）
+]
+
+[tool.ruff.lint.per-file-ignores]
+"pages/*" = ["E402"]  # Streamlit pages 需要先 set_page_config
+"app.py" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

@@ -1,0 +1,14 @@
+# 開發依賴（不在生產環境安裝）
+# 使用方式：pip install -r requirements-dev.txt
+
+# 程式碼品質
+ruff>=0.4.0          # Linter + Formatter（取代 flake8 + black + isort）
+mypy>=1.8.0          # 型別檢查
+
+# 測試
+pytest>=8.0.0        # 測試框架
+pytest-cov>=4.0.0    # 覆蓋率報告
+pytest-asyncio>=0.23.0  # 異步測試
+
+# 預提交鉤子
+pre-commit>=3.6.0    # Git pre-commit hooks

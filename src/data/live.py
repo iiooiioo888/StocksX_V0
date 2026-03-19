@@ -16,6 +16,7 @@ def get_live_price(symbol: str, exchange: str = "okx") -> dict[str, Any] | None:
     try:
         if exchange == "yfinance":
             import yfinance as yf
+
             t = yf.Ticker(symbol)
             df = t.history(period="1d", interval="1m")
             if df.empty:
@@ -27,11 +28,13 @@ def get_live_price(symbol: str, exchange: str = "okx") -> dict[str, Any] | None:
                 "high": float(last["High"]),
                 "low": float(last["Low"]),
                 "volume": float(last["Volume"]),
-                "timestamp": int(last.name.timestamp() * 1000) if hasattr(last.name, "timestamp") else int(time.time() * 1000),
+                "timestamp": int(last.name.timestamp() * 1000)
+                if hasattr(last.name, "timestamp")
+                else int(time.time() * 1000),
             }
         else:
-            import ccxt
             from src.data.sources.crypto_ccxt import _create_exchange
+
             ex, actual_id = _create_exchange(exchange)
             ticker = ex.fetch_ticker(symbol)
             return {
@@ -48,22 +51,26 @@ def get_live_price(symbol: str, exchange: str = "okx") -> dict[str, Any] | None:
         return None
 
 
-def get_current_signal(symbol: str, exchange: str, timeframe: str,
-                       strategy: str, strategy_params: dict) -> dict[str, Any]:
+def get_current_signal(
+    symbol: str, exchange: str, timeframe: str, strategy: str, strategy_params: dict
+) -> dict[str, Any]:
     """計算當前策略信號"""
     from src.backtest import strategies as strat_mod
 
     try:
         if exchange == "yfinance":
             from src.data.traditional import TraditionalDataFetcher
+
             fetcher = TraditionalDataFetcher()
         else:
             from src.data.crypto import CryptoDataFetcher
+
             fetcher = CryptoDataFetcher(exchange)
 
         until_ms = int(time.time() * 1000)
-        tf_ms = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000,
-                 "4h": 14_400_000, "1d": 86_400_000}.get(timeframe, 3_600_000)
+        tf_ms = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}.get(
+            timeframe, 3_600_000
+        )
         since_ms = until_ms - 100 * tf_ms
 
         rows = fetcher.get_ohlcv(symbol, timeframe, since_ms, until_ms, fill_gaps=True)

@@ -1,3 +1,5 @@
+from typing import Optional
+
 """
 现代化 UI 组件 - 基础组件
 
@@ -7,8 +9,8 @@
 - 错误提示
 - 主题切换
 """
-import streamlit as st
 
+import streamlit as st
 
 # ════════════════════════════════════════════════════════════
 # CSS 样式
@@ -108,9 +110,9 @@ MODERN_CSS = """
 }
 
 .skeleton {
-    background: linear-gradient(90deg, 
-        var(--bg-secondary) 0%, 
-        var(--border-color) 50%, 
+    background: linear-gradient(90deg,
+        var(--bg-secondary) 0%,
+        var(--border-color) 50%,
         var(--bg-secondary) 100%);
     background-size: 1000px 100%;
     animation: shimmer 2s infinite;
@@ -214,15 +216,11 @@ def inject_modern_css():
 # 组件函数
 # ════════════════════════════════════════════════════════════
 
-def create_stat_card(
-    title: str,
-    value: str,
-    delta: Optional[str] = None,
-    icon: str = "📊"
-) -> None:
+
+def create_stat_card(title: str, value: str, delta: Optional[str] = None, icon: str = "📊") -> None:
     """
     创建统计卡片
-    
+
     Args:
         title: 卡片标题
         value: 显示值
@@ -235,9 +233,9 @@ def create_stat_card(
             delta_class = "delta-up"
         elif delta.startswith("-"):
             delta_class = "delta-down"
-    
+
     delta_html = f'<div class="metric-delta {delta_class}">{delta}</div>' if delta else ""
-    
+
     st.markdown(
         f"""
         <div class="metric-card">
@@ -246,7 +244,7 @@ def create_stat_card(
             {delta_html}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
@@ -259,7 +257,7 @@ def create_loading_spinner(text: str = "加载中...") -> None:
             <div style="margin-left: 15px; color: var(--text-secondary);">{text}</div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
@@ -271,38 +269,29 @@ def create_skeleton(rows: int = 3) -> None:
 
 def show_success(message: str) -> None:
     """显示成功提示"""
-    st.markdown(
-        f'<div class="success-box">✅ {message}</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="success-box">✅ {message}</div>', unsafe_allow_html=True)
 
 
 def show_warning(message: str) -> None:
     """显示警告提示"""
-    st.markdown(
-        f'<div class="warning-box">⚠️ {message}</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="warning-box">⚠️ {message}</div>', unsafe_allow_html=True)
 
 
 def show_error(message: str) -> None:
     """显示错误提示"""
-    st.markdown(
-        f'<div class="error-box">❌ {message}</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="error-box">❌ {message}</div>', unsafe_allow_html=True)
 
 
 def create_modern_card(content: str, title: Optional[str] = None) -> None:
     """
     创建现代化卡片容器
-    
+
     Args:
         content: 卡片内容（支持 Markdown/HTML）
         title: 可选标题
     """
     title_html = f'<h3 style="margin: 0 0 15px 0; color: var(--text-primary);">{title}</h3>' if title else ""
-    
+
     st.markdown(
         f"""
         <div class="modern-card">
@@ -310,25 +299,21 @@ def create_modern_card(content: str, title: Optional[str] = None) -> None:
             {content}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
-def create_page_header(
-    title: str,
-    subtitle: Optional[str] = None,
-    icon: str = "🚀"
-) -> None:
+def create_page_header(title: str, subtitle: Optional[str] = None, icon: str = "🚀") -> None:
     """
     创建页面标题
-    
+
     Args:
         title: 主标题
         subtitle: 副标题
         icon: 图标 emoji
     """
     subtitle_html = f'<p style="color: var(--text-secondary); margin: 5px 0 0 0;">{subtitle}</p>' if subtitle else ""
-    
+
     st.markdown(
         f"""
         <div style="padding: 20px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 20px;">
@@ -336,7 +321,7 @@ def create_page_header(
             {subtitle_html}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
@@ -344,16 +329,8 @@ def create_page_header(
 # 主题配置
 # ════════════════════════════════════════════════════════════
 
-def setup_page_config(
-    page_title: str = "StocksX",
-    page_icon: str = "📈",
-    layout: str = "wide"
-):
+
+def setup_page_config(page_title: str = "StocksX", page_icon: str = "📈", layout: str = "wide"):
     """设置页面配置"""
-    st.set_page_config(
-        page_title=page_title,
-        page_icon=page_icon,
-        layout=layout,
-        initial_sidebar_state="expanded"
-    )
+    st.set_page_config(page_title=page_title, page_icon=page_icon, layout=layout, initial_sidebar_state="expanded")
     inject_modern_css()

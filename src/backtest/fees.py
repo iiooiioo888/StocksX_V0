@@ -17,7 +17,6 @@ EXCHANGE_FEES = {
     "bingx": {"maker": 0.02, "taker": 0.05, "name": "BingX", "type": "CEX"},
     "woo": {"maker": 0.00, "taker": 0.03, "name": "WOO X", "type": "CEX"},
     "cryptocom": {"maker": 0.075, "taker": 0.075, "name": "Crypto.com", "type": "CEX"},
-
     # ─── 去中心化交易所（DEX）───
     "uniswap": {"maker": 0.30, "taker": 0.30, "name": "Uniswap V3", "type": "DEX", "note": "0.3% 池費率，不含 Gas"},
     "uniswap_001": {"maker": 0.01, "taker": 0.01, "name": "Uniswap 0.01%池", "type": "DEX"},
@@ -31,12 +30,23 @@ EXCHANGE_FEES = {
     "hyperliquid": {"maker": 0.01, "taker": 0.035, "name": "Hyperliquid", "type": "DEX-Perp"},
     "jupiter": {"maker": 0.20, "taker": 0.20, "name": "Jupiter (Solana)", "type": "DEX"},
     "raydium": {"maker": 0.25, "taker": 0.25, "name": "Raydium (Solana)", "type": "DEX"},
-
     # ─── 傳統市場 ───
     "yfinance": {"maker": 0.00, "taker": 0.00, "name": "Yahoo Finance (模擬)", "type": "模擬"},
-    "us_broker": {"maker": 0.00, "taker": 0.00, "name": "美股券商 (免佣)", "type": "傳統", "note": "Robinhood/Firstrade 等零佣金"},
-    "tw_broker": {"maker": 0.1425, "taker": 0.1425, "name": "台股券商", "type": "傳統", "note": "手續費 0.1425% + 賣出證交稅 0.3%",
-                  "sell_tax": 0.30},
+    "us_broker": {
+        "maker": 0.00,
+        "taker": 0.00,
+        "name": "美股券商 (免佣)",
+        "type": "傳統",
+        "note": "Robinhood/Firstrade 等零佣金",
+    },
+    "tw_broker": {
+        "maker": 0.1425,
+        "taker": 0.1425,
+        "name": "台股券商",
+        "type": "傳統",
+        "note": "手續費 0.1425% + 賣出證交稅 0.3%",
+        "sell_tax": 0.30,
+    },
     "futures_broker": {"maker": 0.01, "taker": 0.01, "name": "期貨商", "type": "傳統"},
 }
 

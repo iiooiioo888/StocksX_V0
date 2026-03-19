@@ -6,20 +6,20 @@ StocksX 自動交易配置頁面
 """
 
 import time
+
 import streamlit as st
+
 from src.auth.user_db import UserDB
 from src.trading.worker import (
-    execute_auto_trade,
-    stop_auto_trade,
-    emergency_stop,
-    daily_report,
     check_position,
+    daily_report,
+    emergency_stop,
 )
 from src.ui_auto_trade import (
     render_auto_trading_dashboard,
     render_position_monitor,
-    render_strategy_configurator,
     render_risk_manager_ui,
+    render_strategy_configurator,
     render_trade_log_viewer,
 )
 
@@ -54,7 +54,7 @@ with st.sidebar:
     st.error("### 🚨 緊急控制")
     if st.button("🛑 緊急停止所有交易", use_container_width=True, type="primary"):
         result = emergency_stop.delay(user_id=user["id"])
-        st.success(f"✅ 已發送緊急停止指令！")
+        st.success("✅ 已發送緊急停止指令！")
         time.sleep(2)
         st.rerun()
 
@@ -79,7 +79,7 @@ with st.sidebar:
             result = check_position.delay(user_id=user["id"], symbol=position_symbol)
             pos = result.get(timeout=10)
             if pos.get("found"):
-                st.success(f"✅ 找到持倉")
+                st.success("✅ 找到持倉")
                 direction = "多頭" if pos["position"] > 0 else "空頭" if pos["position"] < 0 else "空倉"
                 st.metric("持倉方向", direction)
                 st.metric("進場價", f"${pos['entry_price']:,.2f}")
@@ -92,13 +92,15 @@ with st.sidebar:
 # ════════════════════════════════════════════════════════════
 
 # 主分頁
-main_tabs = st.tabs([
-    "📊 儀表板",
-    "💼 持倉監控",
-    "🤖 策略配置",
-    "🛡️ 風險管理",
-    "📜 交易日誌",
-])
+main_tabs = st.tabs(
+    [
+        "📊 儀表板",
+        "💼 持倉監控",
+        "🤖 策略配置",
+        "🛡️ 風險管理",
+        "📜 交易日誌",
+    ]
+)
 
 # ───────────────────────────────────────────────────────────
 # Tab 1: 儀表板

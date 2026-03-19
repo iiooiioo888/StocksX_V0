@@ -1,7 +1,6 @@
 # 倉位管理模塊 — 凱利公式 + 固定比例 + 固定金額
 from __future__ import annotations
 
-import math
 from typing import Any
 
 
@@ -102,7 +101,7 @@ def analyze_position_from_history(trades: list[dict]) -> dict[str, Any]:
     elif kf < 0.15:
         rec = "✅ 建議適度倉位"
     else:
-        rec = f"🟢 凱利建議 {kf*100:.1f}%（已限制上限 25%）"
+        rec = f"🟢 凱利建議 {kf * 100:.1f}%（已限制上限 25%）"
 
     return {
         "kelly_fraction": round(kf, 4),

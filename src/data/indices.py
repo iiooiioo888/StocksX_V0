@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
-import requests
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
+import logging
 
+logger = logging.getLogger(__name__)
+
+from datetime import datetime, timezone
+from typing import Any
 
 # ════════════════════════════════════════════════════════════
 # 指數配置
@@ -41,7 +43,7 @@ GLOBAL_INDICES = {
         "^AXJO": {"name": "澳股綜合", "region": "澳洲", "type": "股票"},
         "^BSESN": {"name": "印度 Sensex", "region": "印度", "type": "股票"},
         "^BVSP": {"name": "巴西 BOVESPA", "region": "巴西", "type": "股票"},
-    }
+    },
 }
 
 # 商品指數
@@ -83,13 +85,14 @@ CURRENCY_INDICES = {
 # 指數數據獲取
 # ════════════════════════════════════════════════════════════
 
-def get_index_quote(symbol: str) -> Optional[Dict[str, Any]]:
+
+def get_index_quote(symbol: str) -> dict[str, Any] | None:
     """
     取得指數報價（使用 Yahoo Finance）
-    
+
     Args:
         symbol: 指數代碼
-    
+
     Returns:
         {
             "symbol": str,
@@ -107,10 +110,10 @@ def get_index_quote(symbol: str) -> Optional[Dict[str, Any]]:
     """
     try:
         import yfinance as yf
-        
+
         ticker = yf.Ticker(symbol)
         info = ticker.fast_info
-        
+
         # 取得即時數據
         data = {
             "symbol": symbol,
@@ -123,22 +126,22 @@ def get_index_quote(symbol: str) -> Optional[Dict[str, Any]]:
             "low": info.get("day_low", 0),
             "prev_close": info.get("previous_close", 0),
             "volume": info.get("volume", 0),
-            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
         }
-        
+
         return data
     except Exception as e:
-        print(f"取得指數報價失敗 {symbol}: {e}")
+        logger.error(f"取得指數報價失敗 {symbol}: {e}")
         return None
 
 
-def get_indices_batch(symbols: List[str]) -> Dict[str, Dict]:
+def get_indices_batch(symbols: list[str]) -> dict[str, dict]:
     """
     批量取得指數報價
-    
+
     Args:
         symbols: 指數代碼列表
-    
+
     Returns:
         {symbol: data}
     """
@@ -150,10 +153,10 @@ def get_indices_batch(symbols: List[str]) -> Dict[str, Dict]:
     return result
 
 
-def get_market_status() -> Dict[str, bool]:
+def get_market_status() -> dict[str, bool]:
     """
     取得全球市場開收盤狀態
-    
+
     Returns:
         {
             "US": bool,  # 美國市場
@@ -162,27 +165,27 @@ def get_market_status() -> Dict[str, bool]:
         }
     """
     from datetime import datetime
-    
+
     now_utc = datetime.now(timezone.utc)
-    
+
     # 簡化判斷（實際應考慮假日）
     market_hours = {
-        "ASIA": (0, 9),    # UTC 0:00-9:00
-        "EU": (7, 16),     # UTC 7:00-16:00
-        "US": (13, 22),    # UTC 13:00-22:00
+        "ASIA": (0, 9),  # UTC 0:00-9:00
+        "EU": (7, 16),  # UTC 7:00-16:00
+        "US": (13, 22),  # UTC 13:00-22:00
     }
-    
+
     status = {}
     for region, (open_hour, close_hour) in market_hours.items():
         status[region] = open_hour <= now_utc.hour < close_hour
-    
+
     return status
 
 
-def get_global_market_overview() -> Dict[str, Any]:
+def get_global_market_overview() -> dict[str, Any]:
     """
     取得全球市場概覽
-    
+
     Returns:
         {
             "market_status": Dict,
@@ -194,30 +197,30 @@ def get_global_market_overview() -> Dict[str, Any]:
     """
     # 市場狀態
     market_status = get_market_status()
-    
+
     # 主要指數
     major_indices_symbols = ["^GSPC", "^DJI", "^IXIC", "^VIX", "^N225", "^HSI", "^TWII"]
     major_indices = get_indices_batch(major_indices_symbols)
-    
+
     # 商品
     commodity_symbols = ["GC=F", "CL=F", "NG=F"]
     commodities = get_indices_batch(commodity_symbols)
-    
+
     # 匯率
     currency_symbols = ["DX-Y.NYB", "EURUSD=X", "USDJPY=X"]
     currencies = get_indices_batch(currency_symbols)
-    
+
     # 債券
     bond_symbols = ["^TNX", "^TYX"]
     bonds = get_indices_batch(bond_symbols)
-    
+
     return {
         "market_status": market_status,
         "major_indices": major_indices,
         "commodities": commodities,
         "currencies": currencies,
         "bonds": bonds,
-        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
+        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
     }
 
 
@@ -225,19 +228,16 @@ def get_global_market_overview() -> Dict[str, Any]:
 # 經濟日曆
 # ════════════════════════════════════════════════════════════
 
-def get_economic_calendar(
-    start_date: str = None,
-    end_date: str = None,
-    country: str = "US"
-) -> List[Dict[str, Any]]:
+
+def get_economic_calendar(start_date: str = None, end_date: str = None, country: str = "US") -> list[dict[str, Any]]:
     """
     取得經濟日曆（使用 TradingEconomics 或其他 API）
-    
+
     Args:
         start_date: 開始日期 YYYY-MM-DD
         end_date: 結束日期 YYYY-MM-DD
         country: 國家代碼（US, EU, JP, CN, TW 等）
-    
+
     Returns:
         [
             {
@@ -253,11 +253,11 @@ def get_economic_calendar(
         ]
     """
     # 模擬數據（實際應連接 API）
-    from datetime import datetime, timedelta
-    
+    from datetime import datetime
+
     if not start_date:
         start_date = datetime.now().strftime("%Y-%m-%d")
-    
+
     events = [
         {
             "date": start_date,
@@ -267,7 +267,7 @@ def get_economic_calendar(
             "importance": "High",
             "actual": "+250K",
             "forecast": "+200K",
-            "previous": "+180K"
+            "previous": "+180K",
         },
         {
             "date": start_date,
@@ -277,7 +277,7 @@ def get_economic_calendar(
             "importance": "High",
             "actual": "3.7%",
             "forecast": "3.8%",
-            "previous": "3.8%"
+            "previous": "3.8%",
         },
         {
             "date": start_date,
@@ -287,7 +287,7 @@ def get_economic_calendar(
             "importance": "High",
             "actual": "5.50%",
             "forecast": "5.50%",
-            "previous": "5.50%"
+            "previous": "5.50%",
         },
         {
             "date": start_date,
@@ -297,7 +297,7 @@ def get_economic_calendar(
             "importance": "Medium",
             "actual": "50.5",
             "forecast": "50.0",
-            "previous": "49.8"
+            "previous": "49.8",
         },
         {
             "date": start_date,
@@ -307,10 +307,10 @@ def get_economic_calendar(
             "importance": "High",
             "actual": "49.5",
             "forecast": "49.0",
-            "previous": "48.8"
-        }
+            "previous": "48.8",
+        },
     ]
-    
+
     return events
 
 
@@ -318,10 +318,11 @@ def get_economic_calendar(
 # 市場情緒指標
 # ════════════════════════════════════════════════════════════
 
-def get_market_sentiment() -> Dict[str, Any]:
+
+def get_market_sentiment() -> dict[str, Any]:
     """
     取得市場情緒指標
-    
+
     Returns:
         {
             "fear_greed": Dict,  # 恐懼貪婪指數
@@ -331,14 +332,14 @@ def get_market_sentiment() -> Dict[str, Any]:
             "new_highs_lows": Dict  # 新高/新低
         }
     """
-    from src.data.sources.api_hub import get_current_fear_greed, fetch_cboe_vix
-    
+    from src.data.sources.api_hub import fetch_cboe_vix, get_current_fear_greed
+
     # 恐懼貪婪指數
     fg = get_current_fear_greed()
-    
+
     # VIX
     vix = fetch_cboe_vix()
-    
+
     # 模擬其他指標
     sentiment = {
         "fear_greed": fg,
@@ -346,21 +347,21 @@ def get_market_sentiment() -> Dict[str, Any]:
         "put_call_ratio": {
             "value": 0.65,
             "interpretation": "Neutral",  # >1 Bearish, <0.7 Bullish
-            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
         },
         "advance_decline": {
             "advancing": 1850,
             "declining": 1200,
             "unchanged": 150,
             "ratio": 1.54,
-            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
         },
         "new_highs_lows": {
             "new_highs": 125,
             "new_lows": 45,
             "ratio": 2.78,
-            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
-        }
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+        },
     }
-    
+
     return sentiment

@@ -1,21 +1,13 @@
 # 系統健康檢查頁面
-import streamlit as st
 import time
+
+import streamlit as st
+
 from src.utils.health_check import (
     get_system_health,
-    check_database,
-    check_redis,
-    check_celery_broker,
-    check_yfinance,
-    check_disk_usage,
-    check_memory,
 )
 
-st.set_page_config(
-    page_title="🏥 系統健康檢查",
-    page_icon="🏥",
-    layout="wide"
-)
+st.set_page_config(page_title="🏥 系統健康檢查", page_icon="🏥", layout="wide")
 
 st.title("🏥 系統健康檢查")
 st.markdown("*即時監控系統服務狀態與資源使用量*")
@@ -68,10 +60,7 @@ for service in health.services:
     # 根據狀態決定展開與否
     expanded = service.status != "healthy"
 
-    with st.expander(
-        f"{icon} **{service.service}**: {service.status} - {service.message}",
-        expanded=expanded
-    ):
+    with st.expander(f"{icon} **{service.service}**: {service.status} - {service.message}", expanded=expanded):
         if service.latency_ms:
             st.metric("延遲", f"{service.latency_ms:.1f} ms")
 
@@ -91,37 +80,46 @@ else:
     for issue in issues:
         with st.container():
             st.markdown(f"**{issue.service}**: {issue.message}")
-            
+
             if issue.service == "redis":
-                st.code("""
+                st.code(
+                    """
 # 啟動 Redis
 docker run -d -p 6379:6379 --name stocksx_redis redis:7-alpine
 
 # 或檢查 Redis 狀態
 redis-cli ping
-                """, language="bash")
-            
+                """,
+                    language="bash",
+                )
+
             elif issue.service == "database":
-                st.code("""
+                st.code(
+                    """
 # 檢查資料庫檔案
 ls -la cache/users.sqlite
 
 # 重建資料庫（會清除用戶數據）
 rm cache/users.sqlite
-                """, language="bash")
-            
+                """,
+                    language="bash",
+                )
+
             elif issue.service == "celery_broker":
-                st.code("""
+                st.code(
+                    """
 # 啟動 Celery Worker
 celery -A src.tasks worker --loglevel=info -Q backtest,optimizer,notify
 
 # 檢查 Redis 連接
 redis-cli ping
-                """, language="bash")
-            
+                """,
+                    language="bash",
+                )
+
             elif issue.service == "disk":
                 st.warning("磁碟空間不足，建議清理日誌或擴充磁碟")
-            
+
             elif issue.service == "memory":
                 st.warning("記憶體使用量過高，建議重啟應用或增加記憶體")
 

@@ -7,8 +7,6 @@ from __future__ import annotations
 此模組只提供「讀取」與簡單檢查，不會把金鑰寫死在程式碼中。
 """
 
-from typing import Optional
-
 import os
 
 try:
@@ -21,37 +19,37 @@ except Exception:
     pass
 
 
-def _get(key: str, default: Optional[str] = None) -> Optional[str]:
+def _get(key: str, default: str | None = None) -> str | None:
     """安全讀取環境變數，統一入口。"""
     return os.getenv(key, default)
 
 
 # ─── AI / LLM ───
-DASHSCOPE_API_KEY: Optional[str] = _get("DASHSCOPE_API_KEY")
+DASHSCOPE_API_KEY: str | None = _get("DASHSCOPE_API_KEY")
 
 # ─── 宏觀經濟數據 ───
-FRED_API_KEY: Optional[str] = _get("FRED_API_KEY")
-TRADING_ECONOMICS_API_KEY: Optional[str] = _get("TRADING_ECONOMICS_API_KEY")
+FRED_API_KEY: str | None = _get("FRED_API_KEY")
+TRADING_ECONOMICS_API_KEY: str | None = _get("TRADING_ECONOMICS_API_KEY")
 
 # ─── 加密貨幣與鏈上 ───
-COINGECKO_API_KEY: Optional[str] = _get("COINGECKO_API_KEY")
-COINMARKETCAP_API_KEY: Optional[str] = _get("COINMARKETCAP_API_KEY")
-GLASSNODE_API_KEY: Optional[str] = _get("GLASSNODE_API_KEY")
+COINGECKO_API_KEY: str | None = _get("COINGECKO_API_KEY")
+COINMARKETCAP_API_KEY: str | None = _get("COINMARKETCAP_API_KEY")
+GLASSNODE_API_KEY: str | None = _get("GLASSNODE_API_KEY")
 
 # ─── 股市與綜合金融 ───
-ALPHA_VANTAGE_API_KEY: Optional[str] = _get("ALPHA_VANTAGE_API_KEY")
-FMP_API_KEY: Optional[str] = _get("FMP_API_KEY")
-POLYGON_API_KEY: Optional[str] = _get("POLYGON_API_KEY")
+ALPHA_VANTAGE_API_KEY: str | None = _get("ALPHA_VANTAGE_API_KEY")
+FMP_API_KEY: str | None = _get("FMP_API_KEY")
+POLYGON_API_KEY: str | None = _get("POLYGON_API_KEY")
 
 # ─── 券商 / 交易 ───
-ALPACA_API_KEY: Optional[str] = _get("ALPACA_API_KEY")
-ALPACA_API_SECRET: Optional[str] = _get("ALPACA_API_SECRET")
+ALPACA_API_KEY: str | None = _get("ALPACA_API_KEY")
+ALPACA_API_SECRET: str | None = _get("ALPACA_API_SECRET")
 
 # ─── 情緒與另類數據 ───
-CBOE_API_KEY: Optional[str] = _get("CBOE_API_KEY")  # VIX 波動率指數
+CBOE_API_KEY: str | None = _get("CBOE_API_KEY")  # VIX 波動率指數
 
 
-def require(key_value: Optional[str], name: str) -> str:
+def require(key_value: str | None, name: str) -> str:
     """
     方便在呼叫 API 前做檢查：
         api_key = require(FRED_API_KEY, "FRED_API_KEY")
@@ -59,4 +57,3 @@ def require(key_value: Optional[str], name: str) -> str:
     if not key_value:
         raise RuntimeError(f"請先設定環境變數 {name} 才能呼叫對應 API。")
     return key_value
-
