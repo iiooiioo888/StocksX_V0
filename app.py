@@ -1,6 +1,7 @@
 # StocksX — 通用回測平台
 # 現代化設計 v4.0 (Glassmorphism 主題)
 
+import statistics
 
 import streamlit as st
 
@@ -164,8 +165,6 @@ if user and history:
     worst_trade = min(returns) if returns else 0
 
     if len(returns) > 1:
-        import statistics
-
         std_dev = statistics.stdev(returns)
         sharpe = (avg_return / std_dev) if std_dev > 0 else 0
     else:

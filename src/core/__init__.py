@@ -3,6 +3,7 @@ StocksX Core — 現代化架構核心
 
 Provider → Pipeline → Signal → Backtest
 + Middleware + CacheManager + Repository + TaskQueue + Alerts + DI Container
++ WalkForwardAnalyzer
 
 所有組件通過 Protocol 定義介面，支持依賴注入與替換。
 """
@@ -49,6 +50,12 @@ from .alerts import (
     get_alert_manager,
 )
 from .container import Container, get_container
+
+# Walk-Forward Analysis
+try:
+    from .walk_forward import WalkForwardAnalyzer, WFResult, WFSplit
+except ImportError:
+    pass
 
 # 確保策略橋接被加載（註冊舊策略到新 Registry）
 try:
@@ -122,4 +129,8 @@ __all__ = [
     # DI Container
     "Container",
     "get_container",
+    # Walk-Forward
+    "WalkForwardAnalyzer",
+    "WFResult",
+    "WFSplit",
 ]

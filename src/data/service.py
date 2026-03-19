@@ -36,6 +36,17 @@ class DataService:
         self.depth_cache: dict[str, dict] = {}
         self.last_update: dict[str, float] = {}
 
+    def _get_exchange(self, symbol: str):
+        """根據 symbol 類型選擇正確的交易所實例（現貨/永續）."""
+        if ":" in symbol:
+            return self.binance_futures
+        return self.binance
+
+    @staticmethod
+    def _to_binance_symbol(symbol: str) -> str:
+        """將通用 symbol 轉為 Binance 格式：BTC/USDT:USDT → BTCUSDT."""
+        return symbol.replace("/", "").split(":")[0]
+
     @property
     def binance(self):
         if self._binance is None and CCXT_AVAILABLE:
@@ -71,10 +82,11 @@ class DataService:
                 if cache_age < 5:  # 5 秒內有效
                     return self.price_cache[symbol]
 
-            # 從 CCXT 取得
-            if self.binance:
-                binance_symbol = symbol.replace("/", "").replace(":USDT", "")
-                ticker = self.binance.fetch_ticker(binance_symbol)
+            # 從 CCXT 取得（自動選擇現貨/永續）
+            exchange = self._get_exchange(symbol)
+            if exchange:
+                binance_symbol = self._to_binance_symbol(symbol)
+                ticker = exchange.fetch_ticker(binance_symbol)
 
                 data = {
                     "symbol": symbol,
@@ -95,7 +107,7 @@ class DataService:
 
             return None
         except Exception as e:
-            logger.warning(f"取得 Ticker 失敗 {symbol}: {e}")
+            logger.warning("ticker_fetch_failed", extra={"symbol": symbol, "error": str(e)})
             return None
 
     def get_tickers_batch(self, symbols: list[str]) -> dict[str, dict]:
@@ -122,10 +134,11 @@ class DataService:
                 if cache_age < 300:
                     return self.kline_cache[cache_key]
 
-            # 從 CCXT 取得
-            if self.binance:
-                binance_symbol = symbol.replace("/", "").replace(":USDT", "")
-                ohlcv = self.binance.fetch_ohlcv(binance_symbol, timeframe, limit=limit)
+            # 從 CCXT 取得（自動選擇現貨/永續）
+            exchange = self._get_exchange(symbol)
+            if exchange:
+                binance_symbol = self._to_binance_symbol(symbol)
+                ohlcv = exchange.fetch_ohlcv(binance_symbol, timeframe, limit=limit)
 
                 df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
                 df["time"] = pd.to_datetime(df["timestamp"], unit="ms")
@@ -139,7 +152,7 @@ class DataService:
 
             return None
         except Exception as e:
-            logger.warning(f"取得 K 線失敗 {symbol}: {e}")
+            logger.warning("kline_fetch_failed", extra={"symbol": symbol, "error": str(e)})
             return None
 
     # ════════════════════════════════════════════════════════════
@@ -155,14 +168,15 @@ class DataService:
                 if cache_age < 1:
                     return self.depth_cache[symbol]
 
-            # 從 CCXT 取得
-            if self.binance:
-                binance_symbol = symbol.replace("/", "").replace(":USDT", "")
-                orderbook = self.binance.fetch_order_book(binance_symbol, limit=limit)
+            # 從 CCXT 取得（自動選擇現貨/永續）
+            exchange = self._get_exchange(symbol)
+            if exchange:
+                binance_symbol = self._to_binance_symbol(symbol)
+                orderbook = exchange.fetch_order_book(binance_symbol, limit=limit)
 
                 data = {
                     "symbol": symbol,
-                    "bids": orderbook.get("bids", []),  # [[price, qty], ...]
+                    "bids": orderbook.get("bids", []),
                     "asks": orderbook.get("asks", []),
                     "timestamp": int(time.time() * 1000),
                 }
@@ -175,7 +189,7 @@ class DataService:
 
             return None
         except Exception as e:
-            logger.warning(f"取得訂單簿失敗 {symbol}: {e}")
+            logger.warning("orderbook_fetch_failed", extra={"symbol": symbol, "error": str(e)})
             return None
 
     # ════════════════════════════════════════════════════════════
