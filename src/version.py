@@ -1,10 +1,11 @@
 """StocksX 版本資訊"""
 
-__version__ = "5.2.2"
+__version__ = "5.3.0"
 __version_info__ = tuple(int(x) for x in __version__.split("."))
 
 # 版本歷史摘要
 CHANGELOG = {
+    "5.3.0": "pyproject.toml 現代化打包 · Dependabot 自動更新 · Docker 多階段構建優化 · CI/CD 增強 · Unix 啟動腳本",
     "5.2.2": "投資組合分析（風險平價/最小方差/有效前沿）· HTML/JSON 報告匯出",
     "5.2.1": "修復 DataService 現貨/永續路由 · 風險分析 · 配置驗證 · Walk-Forward",
     "5.2.0": "架構優化 · README 現代化 · 結構化日誌 · WebSocket 心跳",

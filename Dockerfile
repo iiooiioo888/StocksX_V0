@@ -1,5 +1,6 @@
 # ════════════════════════════════════════════════════════════
-# 多階段構建 - 優化鏡像大小
+# StocksX — 多階段構建 Dockerfile v2
+# 優化：更好的緩存層分離、安全加固、健康檢查
 # ════════════════════════════════════════════════════════════
 
 # ── 構建階段 ──
@@ -12,9 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libffi-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 先安裝 Python 依賴（利用 Docker cache）
+# 先複製 requirements.txt 以利用 Docker cache
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
@@ -22,15 +24,21 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 FROM python:3.11-slim
 
 LABEL maintainer="StocksX Team"
-LABEL description="StocksX - 機構級回測與交易監控平台"
+LABEL description="StocksX - 機構級回測與交易監控平台 v5.3"
 LABEL org.opencontainers.image.source="https://github.com/iiooiioo888/StocksX_V0"
+LABEL org.opencontainers.image.licenses="MIT"
 
-WORKDIR /app
+# 安全：設置環境變數
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # 安裝運行時依賴
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tini \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r appuser && useradd -r -g appuser -u 1000 appuser
 
@@ -55,12 +63,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # 暴露端口
 EXPOSE 8501 8001
 
-# 使用 tini 作為 init 系統
+# 使用 tini 作為 init 系統（正確處理信號轉發）
 ENTRYPOINT ["tini", "--"]
-
-# 默認啟動命令
-CMD ["streamlit", "run", "app.py", \
-     "--server.port=8501", \
-     "--server.address=0.0.0.0", \
-     "--server.headless=true", \
-     "--browser.gatherUsageStats=false"]

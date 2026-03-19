@@ -40,7 +40,7 @@ MAX_CONNECTIONS = int(os.getenv("WS_MAX_CONNECTIONS", "100"))
 
 app = FastAPI(
     title="StocksX WebSocket Service",
-    version="5.2.0",
+    version="5.3.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )

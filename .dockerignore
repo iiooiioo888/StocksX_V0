@@ -1,36 +1,69 @@
+# ════════════════════════════════════════════════════════════
+# StocksX — .dockerignore（優化鏡像構建）
+# ════════════════════════════════════════════════════════════
+
+# 版本控制
 .git
-.github
 .gitignore
-__pycache__
-*.pyc
-*.pyo
-.env
-.env.*
-!.env.example
-.venv/
-venv/
-.pytest_cache
-.coverage
-htmlcov/
-*.db
-*.sqlite
-*.sqlite3
-logs/
-data/
-cache/
-*.h5
-*.pkl
-*.joblib
-*.onnx
-*.pt
-*.pth
+.github
+
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-README.md
-CONTRIBUTING.md
-docs/
+
+# Python 緩存
+__pycache__
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# 虛擬環境
+.venv/
+venv/
+
+# 環境變數（安全）
+.env
+.env.*
+!.env.example
+
+# 測試與文檔
 tests/
-test_*.py
+docs/
+*.md
+!README.md
+LICENSE
+
+# 開發工具
+.pre-commit-config.yaml
 pyproject.toml
+
+# 數據與日誌
+data/
+cache/
+logs/
+*.db
+*.sqlite
+
+# 備份
+backup.sh
+*.bak
+
+# 資產（大型文件）
+assets/
+
+# 示例
+examples/
+
+# 其他
+train_lstm.py
+test_strategies.py
+start_auto_trading.bat
+CONTRIBUTING.md

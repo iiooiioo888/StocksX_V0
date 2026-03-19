@@ -14,10 +14,11 @@
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Ruff](https://img.shields.io/badge/lint-ruff-261230?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/)
 [![pytest](https://img.shields.io/badge/test-pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![Dependabot](https://img.shields.io/badge/deps-Dependabot-0066D?logo=dependabot&logoColor=white)](https://docs.github.com/en/code-security/dependabot)
 
 **跨市場回測 · 15+ 專業策略 · 即時監控 · WebSocket 推送 · AI 情緒分析**
 
-[快速開始](#-快速開始) · [功能亮點](#-功能亮點) · [架構設計](#-架構設計) · [部署指南](#-部署指南)
+[快速開始](#-快速開始) · [功能亮點](#-功能亮點) · [架構設計](#️-架構設計) · [部署指南](#-部署指南)
 
 </div>
 
@@ -79,63 +80,96 @@ cp .env.example .env && docker compose up -d
 
 ## 🏗️ 架構設計
 
-### 系統架構圖
+### 技術架構（六層分離）
 
 ```mermaid
 graph TB
-    subgraph UI["📱 UI 層 (Streamlit)"]
-        A[首頁儀表板] --> B[加密回測]
-        A --> C[傳統回測]
-        A --> D[即時監控]
-        A --> E[AI 策略]
-        A --> F[歷史管理]
+    subgraph PRESENTATION["🎨 表現層 (Presentation)"]
+        direction LR
+        ST[Streamlit Dashboard<br/>Glassmorphism UI]
+        FE[FastAPI REST + WebSocket<br/>即時行情推送]
+        PLT[Plotly 互動圖表<br/>K線 / 權益曲線 / 指標]
     end
 
-    subgraph CORE["🔗 核心編排層"]
-        G[Orchestrator<br/>統一入口]
-        G --> H[Provider<br/>數據源路由]
-        G --> I[Registry<br/>策略中心]
-        G --> J[Pipeline<br/>數據清洗]
-        G --> K[Backtest<br/>回測引擎]
-        G --> L[SignalBus<br/>信號匯流]
+    subgraph APPLICATION["⚙️ 應用層 (Application)"]
+        direction LR
+        ORCH[Orchestrator<br/>統一業務編排]
+        REG[StrategyRegistry<br/>裝飾器策略註冊]
+        SIG[SignalBus<br/>信號發布訂閱]
+        AUTH[JWT Auth<br/>RBAC 權限管理]
     end
 
-    subgraph INFRA["🧩 基礎設施層"]
-        M[DI Container]
-        N[Middleware Pipeline<br/>日誌 · 重試 · 限流]
-        O[CacheManager<br/>Redis / Memory]
-        P[Repository<br/>SQLite 抽象]
-        Q[TaskQueue<br/>後台任務]
-        R[AlertManager<br/>多渠道告警]
+    subgraph DOMAIN["📐 領域層 (Domain)"]
+        direction LR
+        BT[BacktestEngine<br/>向量化回測]
+        STRAT[Strategy Logic<br/>15+ 量化策略]
+        RISK[RiskManager<br/>VaR / 倉位管理]
+        PORT[Portfolio<br/>風險平價 / 有效前沿]
     end
 
-    subgraph DATA["🌐 數據層"]
-        S[CCXT<br/>11 交易所]
-        T[Yahoo Finance<br/>美股/台股/ETF]
-        U[CoinGecko<br/>市場情緒]
-        V[WebSocket<br/>即時行情]
+    subgraph INFRASTRUCTURE["🧩 基礎設施層 (Infrastructure)"]
+        direction LR
+        DI[DI Container<br/>依賴注入]
+        MW[Middleware Pipeline<br/>日誌·重試·限流]
+        CACHE[CacheManager<br/>Redis / Memory]
+        REPO[Repository Pattern<br/>SQLAlchemy 抽象]
+        TASK[TaskQueue<br/>Celery 異步任務]
+        ALERT[AlertManager<br/>Bark / Webhook]
     end
 
-    UI --> CORE
-    CORE --> INFRA
-    CORE --> DATA
+    subgraph DATA["🌐 數據層 (Data)"]
+        direction LR
+        CCXT[CCXT Gateway<br/>11 交易所統一介面]
+        YF[Yahoo Finance<br/>美股/台股/ETF]
+        CG[CoinGecko<br/>市場情緒 & 價格]
+        WS[WebSocket Server<br/>Binance 即時推送]
+        RSS[RSS Aggregator<br/>加密新聞聚合]
+    end
 
-    style UI fill:#1a1a2e,stroke:#667eea,color:#e0e0e0
-    style CORE fill:#16213e,stroke:#009688,color:#e0e0e0
-    style INFRA fill:#0f3460,stroke:#764ba2,color:#e0e0e0
-    style DATA fill:#1a1a2e,stroke:#f39c12,color:#e0e0e0
+    subgraph PERSISTENCE["💾 持久化層 (Persistence)"]
+        direction LR
+        SQLite[SQLite<br/>本地輕量存儲]
+        REDIS[(Redis 7<br/>高速緩存 & 消息)]
+        PG[(PostgreSQL<br/>生產級數據庫)]
+    end
+
+    PRESENTATION --> APPLICATION
+    APPLICATION --> DOMAIN
+    APPLICATION --> INFRASTRUCTURE
+    DOMAIN --> INFRASTRUCTURE
+    INFRASTRUCTURE --> DATA
+    INFRASTRUCTURE --> PERSISTENCE
+
+    style PRESENTATION fill:#1a1a2e,stroke:#667eea,color:#e0e0e0
+    style APPLICATION fill:#16213e,stroke:#009688,color:#e0e0e0
+    style DOMAIN fill:#0f3460,stroke:#f39c12,color:#e0e0e0
+    style INFRASTRUCTURE fill:#1a1a2e,stroke:#764ba2,color:#e0e0e0
+    style DATA fill:#16213e,stroke:#e94560,color:#e0e0e0
+    style PERSISTENCE fill:#0f3460,stroke:#58a6ff,color:#e0e0e0
 ```
+
+### 核心設計模式
+
+| 模式 | 實現 | 優勢 |
+|:---:|------|------|
+| **Orchestrator** | `src/core/orchestrator.py` | 統一業務入口，屏蔽組合複雜度 |
+| **Registry** | `src/core/registry.py` | `@register_strategy` 裝飾器自動註冊 |
+| **Repository** | `src/core/repository.py` | 數據存取抽象，SQLite ↔ PostgreSQL 無縫切換 |
+| **DI Container** | `src/core/container.py` | 輕量依賴注入，便於測試替換 |
+| **Middleware Pipeline** | `src/core/middleware.py` | 橫切關注點（日誌/重試/限流）管道化 |
+| **Signal Bus** | `src/core/signals.py` | 發布訂閱模式，策略信號實時推送 |
+| **Provider Composite** | `src/core/adapters.py` | 多數據源組合，自動故障轉移 |
 
 ### 數據流
 
 ```mermaid
 sequenceDiagram
     participant U as 📱 UI
-    participant O as 🔗 Orchestrator
+    participant O as ⚙️ Orchestrator
     participant P as 📡 Provider
     participant C as 🧹 Pipeline
     participant R as 📋 Registry
-    participant B as 💹 Backtest
+    participant B as 💹 BacktestEngine
     participant S as 📊 SignalBus
 
     U->>O: run_backtest("BTC/USDT", "1h", "sma_cross")
@@ -156,15 +190,16 @@ sequenceDiagram
 | 層級 | 技術 | 用途 |
 |:---:|------|------|
 | **前端** | Streamlit · Plotly · Glassmorphism CSS | 互動式 Web UI |
-| **後端** | Python 3.10+ · FastAPI · Uvicorn | API 服務 & WebSocket |
-| **即時** | WebSocket · CCXT · Binance API | 即時行情推送 |
+| **API** | FastAPI · Uvicorn · WebSockets | REST API & 即時推送 |
+| **即時** | CCXT · Binance API · aiohttp | 多交易所行情 |
 | **數據** | Pandas · NumPy · yfinance · CoinGecko | 數據處理與來源 |
-| **AI/ML** | scikit-learn · DashScope · FinBERT | 機器學習 & 情緒分析 |
-| **存儲** | SQLite · Redis · SQLAlchemy | 數據持久化 & 快取 |
-| **任務** | Celery · ThreadPool | 後台異步任務 |
+| **AI/ML** | scikit-learn · DashScope · TensorFlow | 機器學習 & 深度學習 |
+| **存儲** | SQLite · Redis 7 · SQLAlchemy · PostgreSQL | 數據持久化 & 高速緩存 |
+| **任務** | Celery · Redis Broker | 後台異步任務 |
 | **監控** | Prometheus · Grafana · psutil | 系統監控告警 |
-| **DevOps** | Docker · Docker Compose · GitHub Actions | CI/CD & 部署 |
-| **品質** | Ruff · pytest · bandit · mypy | 代碼品質保障 |
+| **打包** | pyproject.toml · pip install -e . | PEP 621 現代打包 |
+| **DevOps** | Docker · Docker Compose · GitHub Actions · Dependabot | CI/CD & 自動化 |
+| **品質** | Ruff · pytest · bandit · mypy · pre-commit | 代碼品質全鏈路 |
 
 ---
 
@@ -197,14 +232,15 @@ docker compose up -d
 # 1. 建立虛擬環境
 python -m venv .venv && source .venv/bin/activate
 
-# 2. 安裝依賴
-pip install -r requirements.txt -r requirements-dev.txt
+# 2. 安裝依賴（使用 pyproject.toml）
+pip install -e ".[dev]"
 
 # 3. 配置環境
 cp .env.example .env
 
 # 4. 啟動
 streamlit run app.py
+# 或使用便捷腳本：./start.sh
 ```
 
 ### 方式三：含監控部署
@@ -222,6 +258,15 @@ docker compose --profile monitoring up -d
 ```
 StocksX_V0/
 ├── app.py                              # 🏠 主頁儀表板
+├── pyproject.toml                      # ⚙️ PEP 621 現代打包 & 工具配置
+├── requirements.txt                    # 📦 核心依賴
+├── requirements-dev.txt                # 🛠️ 開發依賴
+├── Dockerfile                          # 🐳 多階段構建
+├── docker-compose.yml                  # 🐳 Docker 編排（含監控 profile）
+├── .dockerignore                       # 🐳 構建優化
+├── .env.example                        # 🔐 環境變數模板
+├── Makefile                            # 🔨 開發快捷命令
+├── start.sh                            # 🚀 Unix 啟動腳本
 ├── pages/                              # 📱 Streamlit 多頁應用
 │   ├── 1_🔐_登入.py                    #   用戶認證
 │   ├── 2_₿_加密回測.py                #   加密貨幣回測
@@ -241,8 +286,6 @@ StocksX_V0/
 │   │   ├── middleware.py               #   中間件管道
 │   │   ├── cache_manager.py            #   快取管理
 │   │   ├── repository.py               #   Repository Pattern
-│   │   ├── tasks.py                    #   後台任務隊列
-│   │   ├── alerts.py                   #   告警系統
 │   │   ├── container.py                #   DI 容器
 │   │   ├── config.py                   #   配置管理
 │   │   ├── provider.py                 #   數據源抽象
@@ -250,21 +293,50 @@ StocksX_V0/
 │   │   ├── signals.py                  #   信號系統
 │   │   ├── registry.py                 #   策略註冊中心
 │   │   ├── backtest.py                 #   回測引擎
-│   │   └── adapters.py                 #   Provider 實現
-│   ├── auth/                           # 🔐 用戶認證
+│   │   ├── adapters.py                 #   Provider 實現
+│   │   ├── alerts.py                   #   告警系統
+│   │   ├── tasks.py                    #   後台任務隊列
+│   │   └── walk_forward.py             #   Walk-Forward 分析
+│   ├── auth/                           # 🔐 用戶認證（JWT + PBKDF2）
 │   ├── backtest/                       # 💹 回測引擎 & 策略庫
+│   │   ├── engine.py                   #   主回測引擎
+│   │   ├── engine_vec.py               #   向量化引擎
+│   │   ├── strategies.py               #   策略函數庫
+│   │   ├── indicators.py               #   技術指標
+│   │   ├── position_sizing.py          #   倉位管理
+│   │   └── walk_forward.py             #   Walk-Forward
 │   ├── data/                           # 📡 數據源整合
-│   ├── strategies/                     # 🧠 進階策略（ML/NLP/RL）
+│   │   ├── sources/                    #   數據來源（CCXT / Yahoo / API Hub）
+│   │   ├── crypto/                     #   加密貨幣服務
+│   │   ├── traditional/                #   傳統市場服務
+│   │   ├── storage/                    #   存儲抽象
+│   │   └── models.py                   #   數據模型
+│   ├── strategies/                     # 🧠 進階策略
+│   │   ├── ml_strategies/              #   ML 策略（LSTM / 配對交易）
+│   │   ├── nlp_strategies/             #   NLP 情緒分析
+│   │   ├── rl_strategies/              #   強化學習交易
+│   │   └── quant_strategies/           #   量化多因子 / 配對交易
 │   ├── trading/                        # 🤖 自動交易引擎
-│   ├── utils/                          # 🔧 工具
+│   │   ├── auto_trader.py              #   自動交易主邏輯
+│   │   ├── executor.py                 #   訂單執行
+│   │   ├── risk_manager.py             #   風控管理
+│   │   └── circuit_breaker.py          #   熔斷機制
+│   ├── utils/                          # 🔧 工具集
+│   │   ├── logging_config.py           #   結構化日誌
+│   │   ├── cache.py                    #   快取工具
+│   │   ├── risk.py                     #   風險計算
+│   │   ├── portfolio.py                #   投資組合分析
+│   │   └── health_check.py             #   健康檢查
+│   ├── ai/                             # 🤖 AI 整合（DashScope / Qwen）
+│   ├── notify/                         # 📬 推播通知（Bark）
 │   └── ui_*.py                         # 🎨 UI 組件
 ├── tests/                              # 🧪 pytest 測試
-│   └── test_core/                      #   核心模組測試
-├── .github/workflows/ci.yml            # 🔄 CI/CD
-├── docker-compose.yml                  # 🐳 Docker 編排
-├── Dockerfile                          # 🐳 多階段構建
-├── Makefile                            # 🔨 開發命令
-└── pyproject.toml                      # ⚙️ Ruff 配置
+│   ├── test_core/                      #   核心模組測試
+│   └── conftest.py                     #   測試配置
+├── .github/
+│   ├── workflows/ci.yml                # 🔄 CI/CD（Lint + Test + Docker）
+│   └── dependabot.yml                  # 🔄 自動依賴更新
+└── .pre-commit-config.yaml             # 🔒 Pre-commit hooks
 ```
 
 ---
@@ -314,14 +386,15 @@ StocksX_V0/
 - 📝 **審計** — 完整登入日誌
 - 🔍 **CI** — bandit 靜態安全分析 + safety 依賴漏洞掃描
 - 🐳 **Docker** — 非 root 使用者運行、tini init 系統
+- 🔄 **Dependabot** — 自動依賴安全更新
 
 ---
 
 ## 🛠️ 開發指南
 
 ```bash
-# 安裝開發依賴
-pip install -r requirements-dev.txt
+# 安裝開發依賴（使用 pyproject.toml）
+pip install -e ".[dev]"
 
 # 代碼檢查
 ruff check src/ pages/ app.py tests/
@@ -332,6 +405,9 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 
 # 安全掃描
 bandit -r src/ -ll
+
+# Pre-commit（首次）
+pre-commit install
 ```
 
 **提交規範：** `feat:` · `fix:` · `docs:` · `refactor:` · `test:` · `chore:`
@@ -363,10 +439,19 @@ docker compose pull && docker compose up -d --remove-orphans
 3. **配置 Redis 持久化**：預設已啟用 AOF
 4. **設定監控告警**：`docker compose --profile monitoring up -d`
 5. **定期備份**：備份 `volumes: app_data`
+6. **啟用 Dependabot**：已配置自動依賴更新
 
 ---
 
 ## 📝 更新日誌
+
+### v5.3.0 (2026-03-20)
+- 📦 **現代化打包** — `pyproject.toml`（PEP 621），支持 `pip install -e ".[dev]"`
+- 🔄 **Dependabot** — 自動依賴安全更新（pip / GitHub Actions / Docker）
+- 🐳 **Docker 優化** — `.dockerignore`、更好的緩存層、安全加固
+- 🚀 **CI/CD 增強** — Docker 構建推送 GHCR、Python 3.13 支援
+- 🔧 **Unix 腳本** — `start.sh` 替代 Windows-only `start_auto_trading.bat`
+- 📖 **README 重構** — 六層分離架構圖、設計模式表、更清晰的結構
 
 ### v5.2.0 (2026-03-20)
 - 🏗️ **架構優化** — 新增 `requirements-dev.txt`、完善開發工具鏈
