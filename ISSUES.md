@@ -2,7 +2,7 @@
 
 > 生成時間：2026-03-20  
 > 版本：v5.3.0  
-> 分析範圍：全量代碼（158 個 Python 文件）
+> 分析範圍：全量代碼（158 個 Python 文件，~16,000 行）
 
 ---
 
@@ -10,16 +10,16 @@
 
 | 嚴重程度 | 數量 | 說明 |
 |:---:|:---:|------|
-| 🔴 高 | 6 | 架構問題、安全隱患 |
-| 🟡 中 | 10 | 代碼重複、設計不一致 |
-| 🟢 低 | 8 | 可改進項、風格問題 |
-| **合計** | **24** | |
+| 🔴 高 | 12 | 架構問題、安全隱患、生產風險 |
+| 🟡 中 | 16 | 代碼重複、設計不一致、效能隱患 |
+| 🟢 低 | 12 | 可改進項、風格問題 |
+| **合計** | **40** | |
 
 ---
 
 ## 🔴 高優先級問題
 
-### 1. 安全：硬編碼預設管理員密碼
+### 1. 安全：硬編碼預設管理員密碼 `admin123`
 
 **文件：** `src/core/config.py:191`
 
@@ -27,282 +27,445 @@
 return _env("ADMIN_PASSWORD", "admin123") or "admin123"
 ```
 
-**問題：** 如果用戶忘記設置 `ADMIN_PASSWORD` 環境變數，系統會使用 `admin123` 作為管理員密碼，這是一個嚴重的安全隱患。
+**風險：** 如果用戶忘記設置環境變數，任何人可以用 `admin123` 登入管理員帳號。
 
-**建議：** 改為首次啟動時自動生成隨機密碼並打印到日誌，或強制要求設置環境變數。
+**修復：** 改為首次啟動時自動生成隨機密碼並打印到日誌，或強制要求設置。
 
 ---
 
-### 2. 架構：新舊回測引擎並存（未完成遷移）
+### 2. 安全：CORS 允許所有來源 `allow_origins=["*"]`
 
-**舊引擎：**
-- `src/backtest/engine.py` (13,880 bytes)
-- `src/backtest/engine_vec.py` (6,574 bytes)
+**文件：** `src/websocket_server.py:52`
+
+```python
+allow_origins=["*"],
+```
+
+**風險：** 任何網站都可以向 WebSocket 服務發起跨域請求，可能導致 CSRF 攻擊。
+
+**修復：** 改為具體的域名白名單，或從環境變數讀取。
+
+---
+
+### 3. 安全：API Key 直接作為 URL 參數傳遞
+
+**文件：** `src/data/sources/api_hub.py`（多處）
+
+```python
+params.setdefault("api_key", api_key)        # FRED, Glassnode
+params.setdefault("apikey", api_key)          # Alpha Vantage, FMP
+params.setdefault("x_cg_pro_api_key", ...)   # CoinGecko
+```
+
+**風險：** API Key 出現在 URL 中，會被記錄在服務器日誌、瀏覽器歷史、代理服務器中。
+
+**修復：** 儘量使用 HTTP Header 傳遞 API Key（如 CoinMarketCap 的做法）。
+
+---
+
+### 4. 安全：FastAPI `@app.on_event("startup")` 已棄用
+
+**文件：** `src/websocket_server.py:278`、`src/websocket_binance.py:348`
+
+```python
+@app.on_event("startup")
+async def startup() -> None:
+```
+
+**風險：** FastAPI 0.109+ 已棄用 `on_event`，未來版本會移除。應使用 `lifespan` 上下文管理器。
+
+**修復：**
+```python
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    task = asyncio.create_task(price_push_loop())
+    yield
+    # shutdown
+    task.cancel()
+```
+
+---
+
+### 5. 架構：新舊回測引擎並存（未完成遷移）
+
+**舊引擎（未棄用）：**
+- `src/backtest/engine.py` — 13,880 bytes，192 行 `_run_backtest_on_rows`
+- `src/backtest/engine_vec.py` — 6,574 bytes，169 行向量化引擎
 
 **新引擎：**
-- `src/core/backtest.py` (14,839 bytes)
+- `src/core/backtest.py` — 14,839 bytes
 
-**問題：** 專案同時存在兩套回測引擎。舊引擎仍在被 `src/ui_backtest.py`、`src/compat.py` 等文件直接使用，而新引擎通過 `Orchestrator` 調用。這導致：
-- 維護成本翻倍
-- 行為不一致風險
-- 新貢獻者困惑
-
-**建議：** 統一使用 `src/core/backtest.py`，將 `src/backtest/engine.py` 標記為 deprecated，逐步遷移 UI 層。
+**問題：** 兩套引擎同時存在，舊引擎被 `src/ui_backtest.py`、`src/compat.py` 直接使用。維護成本翻倍。
 
 ---
 
-### 3. 架構：策略實現重複
+### 6. 架構：策略實現三處重複
 
-**舊策略：**
-- `src/backtest/strategies.py` (20,314 bytes) — 包含 `sma_cross`、`rsi_signal`、`macd_cross` 等
+| 文件 | 大小 | 狀態 |
+|------|------|------|
+| `src/backtest/strategies.py` | 20,314 bytes | 被 UI 直接引用 |
+| `src/core/registry.py` | 3,513 bytes | 新註冊中心 |
+| `src/core/strategies_bridge.py` | 6,236 bytes | 橋接層 |
 
-**新策略：**
-- `src/core/registry.py` — 裝飾器註冊模式
-- `src/core/strategies_bridge.py` — 將舊策略橋接到新 Registry
-
-**問題：** 策略有兩套實現，橋接層增加了複雜度。舊策略文件直接被多個頁面引用。
-
-**建議：** 將所有策略遷移至 `@register_strategy` 裝飾器模式，移除橋接層。
+**問題：** 同一個 `sma_cross` 策略有三處定義或引用，新貢獻者容易混淆。
 
 ---
 
-### 4. 架構：Walk-Forward 分析器重複
+### 7. 架構：配置碎片化（三個配置文件）
 
-**文件：**
-- `src/backtest/walk_forward.py` (4,972 bytes)
-- `src/core/walk_forward.py` (8,028 bytes)
+| 文件 | 職責 | 衝突 |
+|------|------|------|
+| `src/config.py` | 策略標籤、顏色、市場分類、CSS | 導出 `Settings`（向後兼容） |
+| `src/config_secrets.py` | API 金鑰管理 | 與 `DataApiSettings` 重疊 |
+| `src/core/config.py` | Typed Settings dataclass | 定義 `Settings` 和 `get_settings` |
 
-**問題：** 兩個文件實現了相同功能的 Walk-Forward 分析。新版本更完整但舊版本未被標記棄用。
-
-**建議：** 刪除 `src/backtest/walk_forward.py`，統一使用 `src/core/walk_forward.py`。
-
----
-
-### 5. 架構：WebSocket 服務重複
-
-**文件：**
-- `src/websocket_server.py` — FastAPI WebSocket 服務（在用）
-- `src/websocket_binance.py` — 專業版幣安 WebSocket（**380 行，0 個引用**）
-
-**問題：** `websocket_binance.py` 是死代碼，從未被任何地方導入。
-
-**建議：** 刪除 `src/websocket_binance.py`，或將其有價值的功能合併到 `websocket_server.py`。
+**問題：** 15+ 個文件從 `src.config` 導入，3 個從 `src.config_secrets` 導入，部分從 `src.core.config` 導入。
 
 ---
 
-### 6. 架構：配置碎片化
+### 8. 架構：`api_hub.py` 缺乏統一錯誤處理
 
-**三個配置文件：**
-- `src/config.py` — 策略標籤、顏色、市場分類、CSS
-- `src/config_secrets.py` — API 金鑰管理
-- `src/core/config.py` — Typed Settings dataclass
+**文件：** `src/data/sources/api_hub.py`
 
-**問題：** 
-- `src/config.py` 和 `src/core/config.py` 都定義了 `Settings` 和 `get_settings`
-- `src/config_secrets.py` 的功能與 `src/core/config.py` 的 `DataApiSettings` 重疊
-- 15+ 個文件從 `src/config` 導入，3 個從 `src.config_secrets` 導入
+11 個 `return resp.json()` 調用中，只有 4 個在 `try/except` 塊中。其餘直接返回，如果 API 返回非 JSON 響應會導致崩潰。
 
-**建議：** 將 `STRATEGY_LABELS`、`STRATEGY_COLORS` 等配置常量移入 `src/core/config.py`，統一配置入口。
+**受影響的函數：**
+- `fetch_polygon()` — 無 try/except
+- `fetch_coingecko()` — 無 try/except
+- `fetch_coinmarketcap()` — 無 try/except
+- `fetch_glassnode()` — 無 try/except
+- `fetch_trading_economics()` — 無 try/except
+- `fetch_fmp()` — 無 try/except
+- `fetch_alpaca()` — 無 try/except
+- `fetch_fear_greed_index()` — 無 try/except
+
+---
+
+### 9. 架構：WebSocket 服務重複
+
+| 文件 | 行數 | 引用數 |
+|------|:---:|:---:|
+| `src/websocket_server.py` | 450+ | 在用 |
+| `src/websocket_binance.py` | 380 | **0**（死代碼） |
+
+---
+
+### 10. 架構：Walk-Forward 分析器重複
+
+- `src/backtest/walk_forward.py` — 4,972 bytes
+- `src/core/walk_forward.py` — 8,028 bytes
+
+---
+
+### 11. 架構：`advanced_strategies.py` 名稱衝突
+
+- `src/backtest/advanced_strategies.py` — 24,527 bytes（ichimoku、hull_ma、vwap 等）
+- `src/strategies/advanced_strategies.py` — 10,471 bytes（LSTM、情緒、組合策略）
+
+同名不同內容，容易導入錯誤。
+
+---
+
+### 12. 安全：`unsafe_allow_html=True` 大量使用
+
+**74 處** `unsafe_allow_html=True` 調用分散在 `src/` 和 `pages/` 中。
+
+**風險：** 如果任何用戶輸入被嵌入 HTML，可能導致 XSS 攻擊。
 
 ---
 
 ## 🟡 中優先級問題
 
-### 7. 代碼：66 個文件使用 f-string 日誌而非結構化日誌
+### 13. 代碼：66 個文件使用 f-string 日誌
 
 ```python
-# ❌ 錯誤方式
+# ❌ 錯誤：無法被日誌聚合工具解析
 logger.warning(f"取得價格失敗 {symbol}: {e}")
 
-# ✅ 正確方式
+# ✅ 正確：結構化日誌
 logger.warning("price_fetch_failed", extra={"symbol": symbol, "error": str(e)})
 ```
 
-**影響：** 結構化日誌無法被日誌聚合工具（如 ELK、Datadog）正確解析。
-
-**建議：** 統一使用 `extra={}` 參數的結構化日誌風格。
+**影響：** 日誌無法被 ELK/Datadog/Splunk 正確索引和搜索。
 
 ---
 
-### 8. 代碼：`datetime.now()` 缺少時區
+### 14. 代碼：`datetime.now()` 缺少時區（10+ 文件）
 
-**涉及 10+ 個文件：**
-- `src/data/service.py`
-- `src/data/indices.py`
-- `src/strategies/quant_strategies/multi_factor.py`
-- `src/strategies/advanced_strategies.py`
-- 等
-
-**問題：** 使用 `datetime.now()` 而非 `datetime.now(timezone.utc)`，導致時間戳在不同時區的機器上不一致。
-
-**建議：** 全局改用 `datetime.now(timezone.utc)` 或 `datetime.utcnow()`。
-
----
-
-### 9. 設計：`start_auto_trading.bat` 只支援 Windows
-
-**文件：** `start_auto_trading.bat`
-
-**問題：** Windows 批處理腳本無法在 Linux/macOS 上運行。v5.3.0 已新增 `start.sh`，但舊的 `.bat` 文件未被刪除。
-
-**建議：** 刪除 `start_auto_trading.bat`，或保留但更新文檔說明跨平台使用 `start.sh`。
-
----
-
-### 10. 設計：`test_strategies.py` 放在根目錄
-
-**文件：** `test_strategies.py`（根目錄）
-
-**問題：** 測試腳本應該放在 `tests/` 目錄下，而不是根目錄。且它不是 pytest 格式，而是獨立運行腳本。
-
-**建議：** 移動到 `tests/` 目錄，或轉換為 pytest 格式。
-
----
-
-### 11. 設計：`train_lstm.py` 放在根目錄
-
-**文件：** `train_lstm.py`（根目錄）
-
-**問題：** 訓練腳本應該放在 `scripts/` 或 `examples/` 目錄，而非根目錄。且它沒有被任何地方引用。
-
-**建議：** 移動到 `scripts/train_lstm.py`。
-
----
-
-### 12. 設計：多處硬編碼 Redis URL
-
-**涉及 8 個文件：**
 ```python
+# ❌ 不同時區的機器結果不同
+now = datetime.now()
+
+# ✅ 應該使用 UTC
+now = datetime.now(timezone.utc)
+```
+
+**涉及文件：** `src/data/service.py`、`src/data/indices.py`、`src/strategies/quant_strategies/multi_factor.py`、`src/strategies/advanced_strategies.py`、`src/strategies/nlp_strategies/sentiment_analyzer.py` 等。
+
+---
+
+### 15. 設計：42 個超過 80 行的函數
+
+以下是超過 150 行的函數（最嚴重）：
+
+| 文件 | 函數 | 行數 |
+|------|------|:---:|
+| `src/ui_auto_trade/strategy_config.py` | `render_strategy_configurator` | **293** |
+| `src/ui_auto_trade/strategy_config.py` | `render_strategy_params` | 152 |
+| `src/ui_auto_trade/dashboard.py` | `render_auto_trading_dashboard` | 220 |
+| `src/ui_auto_trade/position_monitor.py` | `render_position_monitor` | 210 |
+| `src/ui_auto_trade/trade_log.py` | `render_trade_log_viewer` | 216 |
+| `src/ui_auto_trade/risk_manager_ui.py` | `render_position_size_calculator` | 205 |
+| `src/backtest/optimizer.py` | `find_optimal_global` | 216 |
+| `src/data/live_monitor.py` | `calculate_signal_for_symbol` | 201 |
+| `src/ui_backtest_detail.py` | `render_backtest_detail` | 198 |
+| `src/backtest/engine.py` | `_run_backtest_on_rows` | 192 |
+| `src/backtest/engine_vec.py` | `_run_backtest_vectorized` | 169 |
+| `src/tasks/backtest_tasks.py` | `run_param_optimizer` | 156 |
+| `src/ui_backtest.py` | `render_kline_chart` | 153 |
+
+**問題：** 超長函數難以測試、難以理解、難以維護。
+
+---
+
+### 16. 設計：219 個公開函數缺少 docstring
+
+通過 AST 分析發現 219 個非私有函數沒有文檔字符串。
+
+---
+
+### 17. 設計：20 個模組缺少測試
+
+**完全無測試的模組：**
+- `src/core/adapters.py` — Provider 實現
+- `src/core/strategies_bridge.py` — 策略橋接
+- `src/core/walk_forward.py` — Walk-Forward 分析
+- `src/backtest/optimizer.py` — 參數優化
+- `src/backtest/position_sizing.py` — 倉位管理
+- `src/data/async_fetcher.py` — 異步數據抓取
+- `src/data/news_aggregator.py` — 新聞聚合
+- `src/ai/qwen_client.py` — AI 客戶端
+- `src/notify/bark.py` — 推播通知
+- 等共 20 個模組
+
+---
+
+### 18. 設計：多處無界緩存可能導致內存泄漏
+
+```python
+_exchange_cache: dict[str, tuple[ccxt.Exchange, str]] = {}  # 無清理
+self.price_cache: dict[str, dict] = {}                       # 無 TTL
+self.kline_cache: dict[str, pd.DataFrame] = {}               # 無大小限制
+_cache: dict[str, tuple[float, Any]] = {}                    # 只有 TTL 但無大小限制
+```
+
+**風險：** 長時間運行的服務可能因緩存增長導致 OOM。
+
+---
+
+### 19. 設計：全局單例無線程安全保護
+
+```python
+_orchestrator: Orchestrator | None = None       # 無鎖
+_settings: Settings | None = None               # 無鎖
+_data_service_instance: DataService | None = None  # 無鎖
+_binance_spot: ccxt.binance | None = None       # 無鎖
+```
+
+**風險：** 多線程/異步環境下可能導致競態條件。
+
+---
+
+### 20. 設計：`start_auto_trading.bat` 只支援 Windows
+
+v5.3.0 已新增 `start.sh`，但舊的 `.bat` 文件未被刪除。
+
+---
+
+### 21. 設計：根目錄放了測試和訓練腳本
+
+- `test_strategies.py` — 應放在 `tests/`
+- `train_lstm.py` — 應放在 `scripts/`
+
+---
+
+### 22. 設計：多處硬編碼 Redis URL
+
+```python
+# 8 個文件各自定義
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 ```
 
-**問題：** Redis URL 默認值在多處重複定義，如果需要修改默認值需要改多個文件。
-
-**建議：** 統一使用 `src/core/config.py` 的 `CacheSettings.redis_url`。
-
 ---
 
-### 13. 設計：硬編碼文件路徑
+### 23. 設計：硬編碼文件路徑
 
 ```python
-_DB_PATH = "cache/traditional_cache.sqlite"  # src/data/traditional/fetcher.py
-db_path: str = "data/stocksx.db"              # src/core/repository.py
-db_path: str = "cache/users.sqlite"           # src/utils/health_check.py
+_DB_PATH = "cache/traditional_cache.sqlite"   # src/data/traditional/fetcher.py
+db_path: str = "data/stocksx.db"               # src/core/repository.py
+db_path: str = "cache/users.sqlite"            # src/utils/health_check.py
+log_file = "logs/app.log"                      # src/utils/logging_config.py
 ```
-
-**問題：** 路徑硬編碼在多個文件中，不支援自定義數據目錄。
-
-**建議：** 使用 `Settings.db_path` 和 `Settings.cache_dir` 統一管理。
 
 ---
 
-### 14. 設計：`from __future__ import annotations` 不一致
+### 24. 設計：`from __future__ import annotations` 不一致
 
 **有：** 88 個文件  
-**無：** 31 個文件（主要是 UI 頁面和策略文件）
-
-**問題：** 不一致的類型註解風格，部分文件使用 `X | None` 語法但沒有 `from __future__`。
-
-**建議：** 在所有 `.py` 文件中統一添加 `from __future__ import annotations`。
+**無：** 31 個文件
 
 ---
 
-### 15. 設計：`src/compat.py` 過渡層長期存在
+### 25. 設計：同步 HTTP 請求阻塞 UI
 
-**文件：** `src/compat.py`
+**文件：** `src/data/service.py`、`src/utils/health_check.py`、`src/data/sources/api_hub.py`
 
-**問題：** 兼容層本應是臨時的過渡方案，但已存在多個版本。它增加了新舊架構之間的耦合。
-
-**建議：** 在完成遷移後刪除此文件。
+項目已安裝 `aiohttp`，但多處仍使用同步 `requests`。
 
 ---
 
-### 16. 性能：同步 HTTP 請求阻塞
+### 26. 設計：`src/compat.py` 過渡層長期存在
 
-**文件：** `src/data/service.py`、`src/utils/health_check.py`
+兼容層增加了新舊架構耦合，應在遷移完成後刪除。
 
-```python
-response = requests.get("https://api.alternative.me/fng/?limit=1", timeout=5)
+---
+
+### 27. 設計：Docker Compose 中 Celery Worker 缺少 healthcheck
+
+```yaml
+celery-worker:
+  # 沒有 healthcheck
 ```
 
-**問題：** 項目已安裝 `aiohttp`，但多處仍使用同步 `requests` 庫，在 Streamlit 回調中可能阻塞 UI。
+---
 
-**建議：** 統一使用 `aiohttp` 或 `httpx` 異步客戶端。
+### 28. 設計：Mixed language（中英混雜）
+
+- 1,258 行中文註釋
+- 462 行英文註釋
+
+**問題：** 錯誤信息部分中文部分英文，不一致：
+```python
+raise RuntimeError("請先設定環境變數...")     # 中文
+raise RuntimeError("請安裝 yfinance: ...")    # 中文
+raise ImportError("请安装 PyTorch: ...")      # 簡體中文
+raise ValueError("需要指定对冲比率")            # 簡體中文
+```
 
 ---
 
 ## 🟢 低優先級問題
 
-### 17. `advanced_strategies.py` 重複
+### 29. 缺少 `py.typed` 標記文件
 
-**文件：**
-- `src/backtest/advanced_strategies.py` (24,527 bytes)
-- `src/strategies/advanced_strategies.py` (10,471 bytes)
-
-兩者名稱相同但內容不同，容易混淆。
+如果要支持 `mypy` 類型檢查，需要在包根目錄添加 `py.typed`。
 
 ---
 
-### 18. `src/data/crypto/db.py` 有 11 個引用但功能不明確
+### 30. 缺少獨立 `CHANGELOG.md`
 
-需要確認是否與 `src/data/storage/sqlite_storage.py` 功能重疊。
-
----
-
-### 19. 部分 `__init__.py` 為空文件
-
-9 個 `__init__.py` 文件只有 1 行（空或僅有換行），沒有導出任何內容。
+版本歷史只在 `README.md` 和 `src/version.py` 中記錄。
 
 ---
 
-### 20. 缺少 `py.typed` 標記文件
-
-如果要支持 `mypy` 類型檢查，需要在包根目錄添加 `py.typed` 文件。
+### 31. 缺少 `FUNDING.yml`（GitHub Sponsors）
 
 ---
 
-### 21. 缺少 `CHANGELOG.md`
+### 32. LICENSE 年份可能過期
 
-版本歷史只在 `README.md` 和 `src/version.py` 中記錄，缺少獨立的 `CHANGELOG.md` 文件。
-
----
-
-### 22. `LICENSE` 文件年份
-
-需要確認 LICENSE 文件中的年份是否為最新。
+需要確認是否為最新年份。
 
 ---
 
-### 23. Docker Compose 中 Celery Worker 缺少 healthcheck
+### 33. `pre-commit` hooks 版本過舊
 
-```yaml
-celery-worker:
-  # 沒有 healthcheck 定義
-```
+已更新到 v0.11.2 / v5.0.0，但需要確認與 CI 使用的版本一致。
 
 ---
 
-### 24. 缺少 GitHub Issue 和 PR 模板
-
-缺少 `.github/ISSUE_TEMPLATE/` 和 `.github/PULL_REQUEST_TEMPLATE.md`。
+### 34. 缺少 `CODEOWNERS` 文件
 
 ---
 
-## 📋 修復優先順序建議
+### 35. 9 個空 `__init__.py` 文件
 
-| 順序 | 問題 | 預估工時 | 影響範圍 |
+沒有導出任何內容，考慮添加有意義的導出或刪除。
+
+---
+
+### 36. `dataclass` 缺少 `__repr__`
+
+42 個 dataclass 中只有 1 個定義了 `__repr__`/`__str__`。
+
+---
+
+### 37. 異步函數調用不匹配
+
+- 26 個 `async def` 函數
+- 41 個 `await` 調用
+
+需要確認所有異步函數都被正確 await。
+
+---
+
+### 38. 缺少 GitHub Issue/PR 模板分類
+
+已添加基本模板，但可以增加更多分類（如性能問題、策略建議等）。
+
+---
+
+### 39. 缺少 `.editorconfig` 驗證
+
+已添加 `.editorconfig`，但需要確認所有編輯器都遵守。
+
+---
+
+### 40. 缺少 Docker 鏡像大小優化
+
+當前 Dockerfile 使用 `python:3.11-slim`，可以考慮使用 `alpine` 或 `distroless` 進一步縮小。
+
+---
+
+## 📋 修復優先順序
+
+| 順序 | 問題 | 預估工時 | 影響 |
 |:---:|------|:---:|:---:|
-| 1 | 🔴 #1 安全密碼 | 0.5h | 全局 |
-| 2 | 🔴 #6 配置統一 | 2h | 15+ 文件 |
-| 3 | 🔴 #2 回測引擎統一 | 4h | 核心模組 |
-| 4 | 🔴 #3 策略統一 | 3h | 核心模組 |
-| 5 | 🟡 #7 結構化日誌 | 2h | 全局 |
-| 6 | 🟡 #8 時區處理 | 1h | 10+ 文件 |
-| 7 | 🟡 #9-11 文件整理 | 0.5h | 根目錄 |
-| 8 | 🟡 #12-13 硬編碼 | 1h | 8 文件 |
-| 9 | 🟢 其餘問題 | 2h | 分散 |
-| **合計** | | **~16h** | |
+| 1 | 🔴 #1 安全密碼 | 0.5h | 🔒 安全 |
+| 2 | 🔴 #2 CORS 配置 | 0.5h | 🔒 安全 |
+| 3 | 🔴 #8 API 錯誤處理 | 2h | 💥 穩定性 |
+| 4 | 🔴 #5-6 引擎/策略統一 | 6h | 🏗️ 架構 |
+| 5 | 🔴 #7 配置統一 | 2h | 🏗️ 架構 |
+| 6 | 🔴 #4 FastAPI lifespan | 0.5h | 🔄 兼容性 |
+| 7 | 🟡 #13 結構化日誌 | 2h | 📊 可觀測性 |
+| 8 | 🟡 #14 時區處理 | 1h | 🕐 正確性 |
+| 9 | 🟡 #15 長函數拆分 | 4h | 📖 可讀性 |
+| 10 | 🟡 #17 測試補充 | 4h | 🧪 品質 |
+| 11 | 🟢 其餘問題 | 3h | ✨ 體驗 |
+| **合計** | | **~25h** | |
 
 ---
 
-> ⚠️ **免責聲明：** 此報告僅基於靜態代碼分析生成，部分問題可能已有意為之或在其他上下文中合理。建議在修復前與團隊確認。
+## 📊 代碼統計
+
+| 指標 | 數值 |
+|------|------|
+| Python 文件數 | 158 |
+| 總代碼行數 | ~16,000 |
+| 測試函數數 | 288 |
+| 有測試的模組 | ~30 |
+| 無測試的模組 | 20 |
+| 公開函數無 docstring | 219 |
+| 超過 80 行的函數 | 42 |
+| unsafe_allow_html 調用 | 74 |
+| f-string 日誌調用 | 66 |
+| 結構化日誌調用 | 23 |
+| 重複策略文件 | 3 組 |
+| 死代碼文件 | 2 個 |
+
+---
+
+> ⚠️ **免責聲明：** 此報告基於靜態代碼分析生成，部分問題可能已有意為之或在其他上下文中合理。建議修復前與團隊確認。
