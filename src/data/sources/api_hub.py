@@ -45,11 +45,10 @@ from .yfinance_source import YfinanceOhlcvSource
 
 # 引入限流器與日誌
 try:
-    from src.utils.logger import get_logger
+    from src.utils.logger import get_logger, log_api_call
     from src.utils.rate_limiter import (
         RateLimitExceeded,
         get_api_limiter,
-        log_api_call,
     )
 
     logger = get_logger("stocksx.api_hub")
