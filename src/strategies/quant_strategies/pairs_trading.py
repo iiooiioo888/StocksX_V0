@@ -176,6 +176,8 @@ class PairsTrading:
             self.calculate_spread(price1, price2, self.hedge_ratio)
         
         # 计算 Z-score
+        if self.spread is None:
+            self.calculate_spread(price1, price2, self.hedge_ratio)
         self.calculate_zscore()
         
         current_zscore = self.zscore.iloc[-1]
@@ -246,7 +248,7 @@ class PairsTrading:
             return {"error": "价格序列不协整", "p_value": p_value}
         
         self.calculate_spread(price1, price2, hedge_ratio)
-        self.calculate_zscore()
+        self.calculate_zscore(self.spread)  # 传入 spread 参数
         
         # 模拟交易
         capital = initial_capital
