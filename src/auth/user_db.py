@@ -390,6 +390,26 @@ class UserDB:
                 pass
         self._conn.commit()
 
+    # ─── 查詢助手（減少重複程式碼）──
+    def _fetch_all(self, sql: str, params: tuple | list = ()) -> list[dict]:
+        """執行查詢並回傳所有結果為 dict 列表。"""
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def _fetch_one(self, sql: str, params: tuple | list = ()) -> dict | None:
+        """執行查詢並回傳第一筆結果，無結果回傳 None。"""
+        row = self._conn.execute(sql, params).fetchone()
+        return dict(row) if row else None
+
+    def _execute(self, sql: str, params: tuple | list = ()) -> int:
+        """執行寫入操作，回傳影響行數。"""
+        cur = self._conn.execute(sql, params)
+        self._conn.commit()
+        return cur.rowcount
+
+    def _count(self, sql: str, params: tuple | list = ()) -> int:
+        """執行 COUNT 查詢。"""
+        return self._conn.execute(sql, params).fetchone()[0]
+
     # ─── 產品庫 CRUD ───
     def get_products(self, user_id: int = 0, market_type: str = "", category: str = "") -> list[dict]:
         q = "SELECT * FROM products WHERE is_active=1 AND (is_system=1 OR user_id=?)"
@@ -401,7 +421,7 @@ class UserDB:
             q += " AND category=?"
             params.append(category)
         q += " ORDER BY is_system DESC, category, symbol"
-        return [dict(r) for r in self._conn.execute(q, params).fetchall()]
+        return self._fetch_all(q, params)
 
     def get_product_categories(self, market_type: str = "") -> list[str]:
         q = "SELECT DISTINCT category FROM products WHERE is_active=1"
