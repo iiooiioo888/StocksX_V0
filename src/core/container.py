@@ -17,7 +17,7 @@ DI Container — 輕量依賴注入
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, TypeVar, overload
+from typing import Any, Callable, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def get_container() -> Container:
     _container.register_factory(Settings, Settings)
 
     # ── CacheBackend ──
-    from .provider import CacheBackend, DictCache, make_cache
+    from .provider import CacheBackend, make_cache
     from .config import get_settings
 
     def _make_cache() -> CacheBackend:

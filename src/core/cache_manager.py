@@ -13,11 +13,8 @@ CacheManager — 統一快取管理
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from .provider import CacheBackend, DictCache, RedisCache
@@ -143,6 +140,13 @@ class CacheManager:
             ns = CacheNamespace(name, self._l1, default_ttl=default_ttl)
             self._namespaces[name] = ns
         return self._namespaces[name]
+
+    def stats(self, name: str | None = None) -> dict[str, Any] | CacheStats:
+        """取得快取統計。傳入 namespace 名稱返回 CacheStats，否則返回全部."""
+        if name:
+            ns = self.namespace(name)
+            return ns.stats
+        return self.all_stats()
 
     def all_stats(self) -> dict[str, dict[str, Any]]:
         """所有命名空間的統計."""

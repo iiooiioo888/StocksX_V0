@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .pipeline import Pipeline
-from .signals import Direction, Signal
 
 logger = logging.getLogger(__name__)
 
@@ -128,9 +127,14 @@ def compute_performance_metrics(
         annual_return = 0.0
     else:
         try:
-            ar = (1 + total_return) ** (1 / period_years) - 1
-            annual_return = float(ar.real) if isinstance(ar, complex) else ar
-        except (ValueError, ZeroDivisionError):
+            exponent = 1 / period_years
+            if exponent > 100:
+                # 避免極端指數溢出
+                annual_return = total_return / period_years
+            else:
+                ar = (1 + total_return) ** exponent - 1
+                annual_return = float(ar.real) if isinstance(ar, complex) else ar
+        except (ValueError, ZeroDivisionError, OverflowError):
             annual_return = 0.0
 
     # Bar Returns
@@ -229,6 +233,48 @@ class BacktestEngine:
         self.config = config or BacktestConfig()
         self.preprocess = preprocess
 
+    def _close_position(
+        self,
+        position: int,
+        entry_price: float,
+        exit_price: float,
+        equity: float,
+        entry_ts: int,
+        exit_ts: int,
+        exit_reason: str = "signal",
+    ) -> tuple[float, TradeRecord]:
+        """平倉計算：返回 (新權益, TradeRecord)."""
+        cfg = self.config
+        cost_pct = (cfg.fee_rate_pct + cfg.slippage_pct) / 100
+        direction = position
+        price_return = (exit_price - entry_price) / entry_price * direction
+        rt_cost = cost_pct * 2
+        pnl_pct = price_return * cfg.leverage - rt_cost
+        fee_amount = equity * rt_cost
+        equity_before = equity
+        equity *= 1 + pnl_pct
+        profit = equity_before * pnl_pct
+        liquidated = equity <= 0
+
+        if liquidated:
+            equity = 0.0
+            profit = -equity_before
+            pnl_pct = -1.0
+
+        trade = TradeRecord(
+            entry_ts=int(entry_ts),
+            exit_ts=int(exit_ts),
+            side=direction,
+            entry_price=entry_price,
+            exit_price=exit_price,
+            pnl_pct=pnl_pct * 100,
+            profit=profit,
+            fee=fee_amount,
+            liquidation=liquidated,
+            exit_reason=exit_reason,
+        )
+        return equity, trade
+
     def run(
         self,
         rows: list[dict[str, Any]],
@@ -249,9 +295,6 @@ class BacktestEngine:
 
         report.raw_ohlcv = rows
         cfg = self.config
-
-        cost_pct = (cfg.fee_rate_pct + cfg.slippage_pct) / 100
-        total_fees = 0.0
 
         equity = cfg.initial_equity
         position = 0
@@ -301,64 +344,25 @@ class BacktestEngine:
                     exit_reason = "tp"
 
                 if exit_price is not None:
-                    direction = position
-                    price_return = (exit_price - entry_price) / entry_price * direction
-                    rt_cost = cost_pct * 2
-                    pnl_pct = price_return * cfg.leverage - rt_cost
-                    fee_amount = equity * rt_cost
-                    total_fees += fee_amount
-                    equity_before = equity
-                    equity *= 1 + pnl_pct
-                    profit = equity_before * pnl_pct
-                    if equity <= 0:
-                        equity = 0.0
-                        profit = -equity_before
-                        pnl_pct = -1.0
-                        liquidated = True
-                    trades.append(TradeRecord(
-                        entry_ts=int(entry_ts),
-                        exit_ts=int(ts),
-                        side=direction,
-                        entry_price=entry_price,
-                        exit_price=exit_price,
-                        pnl_pct=pnl_pct * 100,
-                        profit=profit,
-                        fee=fee_amount,
-                        liquidation=liquidated,
-                        exit_reason=exit_reason,
-                    ))
+                    equity, trade = self._close_position(
+                        position, entry_price, exit_price, equity,
+                        entry_ts, ts, exit_reason,
+                    )
+                    trades.append(trade)
+                    liquidated = trade.liquidation
                     position = 0
                     entry_price = 0.0
-                    equity_curve.append({"timestamp": ts, "equity": round(equity, 2), "position": position})
+                    equity_curve.append({"timestamp": ts, "equity": round(equity, 2), "position": 0})
                     continue
 
             # ── 信號平倉 ──
             if position != 0 and target != position and entry_price:
-                direction = position
-                price_return = (close - entry_price) / entry_price * direction
-                rt_cost = cost_pct * 2
-                pnl_pct = price_return * cfg.leverage - rt_cost
-                fee_amount = equity * rt_cost
-                total_fees += fee_amount
-                equity_before = equity
-                equity *= 1 + pnl_pct
-                profit = equity_before * pnl_pct
-                if equity <= 0:
-                    equity = 0.0
-                    profit = -equity_before
-                    pnl_pct = -1.0
-                    liquidated = True
-                trades.append(TradeRecord(
-                    entry_ts=int(entry_ts),
-                    exit_ts=int(ts),
-                    side=direction,
-                    entry_price=entry_price,
-                    exit_price=close,
-                    pnl_pct=pnl_pct * 100,
-                    profit=profit,
-                    fee=fee_amount,
-                    liquidation=liquidated,
-                ))
+                equity, trade = self._close_position(
+                    position, entry_price, close, equity,
+                    entry_ts, ts, "signal",
+                )
+                trades.append(trade)
+                liquidated = trade.liquidation
                 position = 0
                 entry_price = 0.0
 
@@ -379,30 +383,11 @@ class BacktestEngine:
         # ── 強制平倉 ──
         if not liquidated and position != 0 and entry_price and rows:
             last_close = rows[-1]["close"]
-            direction = position
-            price_return = (last_close - entry_price) / entry_price * direction
-            rt_cost = cost_pct * 2
-            pnl_pct = price_return * cfg.leverage - rt_cost
-            fee_amount = equity * rt_cost
-            total_fees += fee_amount
-            equity_before = equity
-            equity *= 1 + pnl_pct
-            profit = equity_before * pnl_pct
-            if equity <= 0:
-                equity = 0.0
-                profit = -equity_before
-                pnl_pct = -1.0
-            trades.append(TradeRecord(
-                entry_ts=int(entry_ts),
-                exit_ts=int(rows[-1]["timestamp"]),
-                side=direction,
-                entry_price=entry_price,
-                exit_price=last_close,
-                pnl_pct=pnl_pct * 100,
-                profit=profit,
-                fee=fee_amount,
-                liquidation=equity == 0,
-            ))
+            equity, trade = self._close_position(
+                position, entry_price, last_close, equity,
+                entry_ts, rows[-1]["timestamp"], "end",
+            )
+            trades.append(trade)
             if equity_curve:
                 equity_curve[-1]["equity"] = round(equity, 2)
                 equity_curve[-1]["position"] = 0
@@ -412,6 +397,7 @@ class BacktestEngine:
         report.metrics = compute_performance_metrics(
             equity_curve, trades, cfg.initial_equity, since_ms, until_ms, cfg.leverage
         )
+        total_fees = sum(t.fee for t in trades)
         report.metrics["total_fees"] = round(total_fees, 2)
         report.metrics["fee_rate_pct"] = cfg.fee_rate_pct
         report.metrics["slippage_pct"] = cfg.slippage_pct

@@ -254,3 +254,149 @@ class TestComputePerformanceMetrics:
         curve = [{"timestamp": 0, "equity": 10000}, {"timestamp": 1, "equity": 11000}]
         result = compute_performance_metrics(curve, [], 10000, 100, 100)
         assert result["annual_return_pct"] == pytest.approx(0.0)
+
+
+# ─── BacktestEngine._close_position 測試 ───
+
+
+class TestClosePosition:
+    """測試 _close_position 輔助方法."""
+
+    def test_profitable_close(self):
+        """盈利平倉."""
+        engine = BacktestEngine(BacktestConfig(initial_equity=10000, fee_rate_pct=0.0, slippage_pct=0.0))
+        equity, trade = engine._close_position(
+            position=1, entry_price=100, exit_price=110,
+            equity=10000, entry_ts=0, exit_ts=1,
+        )
+        assert equity > 10000
+        assert trade.pnl_pct > 0
+        assert trade.profit > 0
+        assert trade.liquidation is False
+
+    def test_loss_close(self):
+        """虧損平倉."""
+        engine = BacktestEngine(BacktestConfig(initial_equity=10000, fee_rate_pct=0.0, slippage_pct=0.0))
+        equity, trade = engine._close_position(
+            position=1, entry_price=100, exit_price=90,
+            equity=10000, entry_ts=0, exit_ts=1,
+        )
+        assert equity < 10000
+        assert trade.pnl_pct < 0
+        assert trade.profit < 0
+
+    def test_short_profitable(self):
+        """做空盈利."""
+        engine = BacktestEngine(BacktestConfig(initial_equity=10000, fee_rate_pct=0.0, slippage_pct=0.0))
+        equity, trade = engine._close_position(
+            position=-1, entry_price=100, exit_price=90,
+            equity=10000, entry_ts=0, exit_ts=1,
+        )
+        assert equity > 10000
+        assert trade.side == -1
+        assert trade.pnl_pct > 0
+
+    def test_liquidation(self):
+        """虧損到歸零應標記為 liquidation."""
+        engine = BacktestEngine(BacktestConfig(
+            initial_equity=10000, leverage=10.0,
+            fee_rate_pct=0.0, slippage_pct=0.0,
+        ))
+        equity, trade = engine._close_position(
+            position=1, entry_price=100, exit_price=90,
+            equity=10000, entry_ts=0, exit_ts=1,
+        )
+        # 10x leverage, 10% drop → 100% loss → liquidation
+        assert equity == 0.0
+        assert trade.liquidation is True
+
+    def test_with_fees(self):
+        """手續費應減少最終權益."""
+        engine_no_fee = BacktestEngine(BacktestConfig(initial_equity=10000, fee_rate_pct=0.0, slippage_pct=0.0))
+        engine_with_fee = BacktestEngine(BacktestConfig(initial_equity=10000, fee_rate_pct=0.1, slippage_pct=0.0))
+        equity_no_fee, _ = engine_no_fee._close_position(
+            1, 100, 100, 10000, 0, 1, "test",
+        )
+        equity_with_fee, _ = engine_with_fee._close_position(
+            1, 100, 100, 10000, 0, 1, "test",
+        )
+        assert equity_with_fee < equity_no_fee
+
+    def test_exit_reason_preserved(self):
+        """exit_reason 應被正確傳遞."""
+        engine = BacktestEngine(BacktestConfig(initial_equity=10000, fee_rate_pct=0.0, slippage_pct=0.0))
+        _, trade = engine._close_position(
+            1, 100, 110, 10000, 0, 1, "tp",
+        )
+        assert trade.exit_reason == "tp"
+
+
+# ─── BacktestEngine TP/SL 測試 ───
+
+
+class TestBacktestTPSL:
+    """測試止盈止損邏輯."""
+
+    def _make_rising_rows(self, n=10, start=100.0, step=5.0):
+        return [{
+            "timestamp": i * 1000,
+            "open": start + i * step,
+            "high": start + i * step + 2,
+            "low": start + i * step - 2,
+            "close": start + i * step,
+            "volume": 1000,
+        } for i in range(n)]
+
+    def test_take_profit_triggers(self):
+        """止盈應在觸及目標價時平倉."""
+        config = BacktestConfig(
+            initial_equity=10000, take_profit_pct=10.0,
+            fee_rate_pct=0.0, slippage_pct=0.0,
+        )
+        engine = BacktestEngine(config)
+        rows = self._make_rising_rows(20, start=100, step=10)
+        signals = [1] * 20  # 一直做多
+        report = engine.run(rows, signals, 0, 19000)
+        # 應有至少一筆 TP 平倉
+        tp_trades = [t for t in report.trades if t.exit_reason == "tp"]
+        assert len(tp_trades) >= 1
+
+    def test_stop_loss_triggers(self):
+        """止損應在觸及止損價時平倉."""
+        config = BacktestConfig(
+            initial_equity=10000, stop_loss_pct=5.0,
+            fee_rate_pct=0.0, slippage_pct=0.0,
+        )
+        engine = BacktestEngine(config)
+        rows = [{
+            "timestamp": i * 1000,
+            "open": 100,
+            "high": 100,
+            "low": 100 - i * 2,  # 不斷下跌
+            "close": 100 - i * 2,
+            "volume": 1000,
+        } for i in range(20)]
+        signals = [1] * 20
+        report = engine.run(rows, signals, 0, 19000)
+        sl_trades = [t for t in report.trades if t.exit_reason == "sl"]
+        assert len(sl_trades) >= 1
+
+    def test_short_stop_loss(self):
+        """做空止損."""
+        config = BacktestConfig(
+            initial_equity=10000, stop_loss_pct=5.0,
+            fee_rate_pct=0.0, slippage_pct=0.0,
+        )
+        engine = BacktestEngine(config)
+        rows = [{
+            "timestamp": i * 1000,
+            "open": 100,
+            "high": 100 + i * 2,  # 不斷上漲（做空虧損）
+            "low": 100,
+            "close": 100 + i * 2,
+            "volume": 1000,
+        } for i in range(20)]
+        signals = [-1] * 20  # 做空
+        report = engine.run(rows, signals, 0, 19000)
+        sl_trades = [t for t in report.trades if t.exit_reason == "sl"]
+        assert len(sl_trades) >= 1

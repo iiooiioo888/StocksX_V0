@@ -222,3 +222,196 @@ class TestWithMiddleware:
         assert result == 42
         assert "before" in called
         assert "after" in called
+
+
+# ─── RetryMiddleware 測試 ───
+
+
+class TestRetryMiddleware:
+    """測試 RetryMiddleware 重試邏輯."""
+
+    def test_retry_succeeds_after_failures(self):
+        """前幾次失敗後成功應返回結果."""
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError(f"attempt {call_count}")
+            return "success"
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RetryMiddleware(max_retries=3, delay=0.01, backoff=1.0))
+        result = pipe.execute(flaky)
+        assert result == "success"
+        assert call_count == 3
+
+    def test_retry_exhausted_raises(self):
+        """重試耗盡應拋出最後的異常."""
+        def always_fail():
+            raise RuntimeError("always")
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RetryMiddleware(max_retries=2, delay=0.01))
+        with pytest.raises(RuntimeError, match="always"):
+            pipe.execute(always_fail)
+
+    def test_retry_only_matching_exceptions(self):
+        """只重試指定的異常類型."""
+        call_count = 0
+
+        def wrong_error():
+            nonlocal call_count
+            call_count += 1
+            raise TypeError("wrong type")
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RetryMiddleware(max_retries=3, delay=0.01, exceptions=(ValueError,)))
+        with pytest.raises(TypeError):
+            pipe.execute(wrong_error)
+        assert call_count == 1  # 不應重試
+
+    def test_retry_exponential_backoff(self):
+        """重試應有指數退避延遲."""
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("fail")
+            return "ok"
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RetryMiddleware(max_retries=3, delay=0.05, backoff=2.0))
+        start = time.monotonic()
+        result = pipe.execute(flaky)
+        elapsed = time.monotonic() - start
+        assert result == "ok"
+        # 第一次重試 delay=0.05, 第二次 delay=0.05*2=0.1, 總共至少 0.15s
+        assert elapsed >= 0.1
+
+    def test_before_sets_retry_counter(self):
+        """before 應初始化重試計數器."""
+        mw = RetryMiddleware(max_retries=3)
+        ctx = {}
+        mw.before(ctx)
+        assert ctx["_retry_count"] == 0
+        assert ctx["_retry_max"] == 3
+
+    def test_error_returns_none(self):
+        """error 應返回 None（由 Pipeline 處理重試）."""
+        mw = RetryMiddleware(max_retries=3)
+        ctx = {"_retry_count": 0}
+        result = mw.error(ctx, ValueError("test"))
+        assert result is None
+
+    def test_success_no_retry(self):
+        """成功時不應重試."""
+        call_count = 0
+
+        def succeed():
+            nonlocal call_count
+            call_count += 1
+            return "ok"
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RetryMiddleware(max_retries=3, delay=0.01))
+        result = pipe.execute(succeed)
+        assert result == "ok"
+        assert call_count == 1
+
+    def test_retry_with_recovery_middleware(self):
+        """RetryMiddleware 與 RecoveryMiddleware 共存時，Recovery 優先."""
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ValueError("fail once")
+            return "ok"
+
+        class RecoveryMiddleware(Middleware):
+            def error(self, ctx, exc):
+                if isinstance(exc, ValueError):
+                    return "recovered"
+                return None
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RecoveryMiddleware())
+        pipe.use(RetryMiddleware(max_retries=3, delay=0.01))
+        result = pipe.execute(flaky)
+        # RecoveryMiddleware 先 intercept，所以不會觸發重試
+        assert result == "recovered"
+        assert call_count == 1
+
+    def test_retry_zero_retries(self):
+        """max_retries=0 時不應重試."""
+        call_count = 0
+
+        def always_fail():
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("fail")
+
+        pipe = MiddlewarePipeline()
+        pipe.use(RetryMiddleware(max_retries=0, delay=0.01))
+        with pytest.raises(RuntimeError):
+            pipe.execute(always_fail)
+        assert call_count == 1
+
+
+# ─── MiddlewarePipeline 整合測試 ───
+
+
+class TestPipelineIntegration:
+    """中間件管道組合測試."""
+
+    def test_multiple_middlewares_order(self):
+        """多中間件應按正確順序執行."""
+        order = []
+
+        class MW1(Middleware):
+            def before(self, ctx):
+                order.append("mw1_before")
+            def after(self, ctx, result):
+                order.append("mw1_after")
+                return result
+
+        class MW2(Middleware):
+            def before(self, ctx):
+                order.append("mw2_before")
+            def after(self, ctx, result):
+                order.append("mw2_after")
+                return result
+
+        pipe = MiddlewarePipeline()
+        pipe.use(MW1())
+        pipe.use(MW2())
+        pipe.execute(lambda: order.append("func") or "done")
+
+        assert order == [
+            "mw1_before", "mw2_before",
+            "func",
+            "mw2_after", "mw1_after",
+        ]
+
+    def test_timing_and_retry_together(self):
+        """TimingMiddleware 與 RetryMiddleware 可共存."""
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionError("network")
+            return "data"
+
+        pipe = MiddlewarePipeline()
+        pipe.use(TimingMiddleware())
+        pipe.use(RetryMiddleware(max_retries=3, delay=0.01, backoff=1.0))
+        result = pipe.execute(flaky)
+        assert result == "data"
+        assert call_count == 2

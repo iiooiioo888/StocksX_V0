@@ -17,8 +17,7 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
@@ -65,25 +64,11 @@ class LoggingMiddleware(Middleware):
 
 
 class RetryMiddleware(Middleware):
-    """自動重試中間件.
+    """自動重試中間件（指數退避）.
 
-    在 pipeline.execute 中，error hook 被呼叫時嘗試重試。
-    因為 pipeline 的 error hook 無法重新執行 func()，所以
-    RetryMiddleware 透過包裹 pipeline.execute 的方式工作：
-    它在 error 中設置 context 標記，由 MiddlewarePipeline 感知後重試。
-
-    但更簡潔的做法：直接覆寫 execute 的行為。
-    我們採用子類 MiddlewarePipeline 的方式——
-    在 error 中拋出特殊異常 RetrySignal，由 execute 捕獲後重試。
-
-    然而最小改動是讓 RetryMiddleware 在 before 中初始化計數器，
-    在 error 中執行重試邏輯（直接呼叫 func）。
-    但 error hook 沒有 func 引用。
-
-    最終方案：RetryMiddleware 不走標準 before/after/error，
-    而是提供一個 `wrap` 方法來包裹整個執行。
-    在 MiddlewarePipeline.execute 中，若發現 RetryMiddleware，
-    則由其 wrap 處理重試邏輯。
+    RetryMiddleware 通過在 error hook 中設置 context 標記 `_retry_needed`，
+    由 MiddlewarePipeline.execute 感知後執行重試循環。
+    支持指定可重試的異常類型、最大重試次數、初始延遲與退避係數。
     """
 
     def __init__(
