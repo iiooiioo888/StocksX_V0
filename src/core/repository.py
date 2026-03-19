@@ -91,10 +91,10 @@ class BacktestRepository(Protocol):
 _CREATE_BACKTEST_TABLE = """
 CREATE TABLE IF NOT EXISTS backtest_results (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id         INTEGER NOT NULL,
+    user_id         INTEGER NOT NULL DEFAULT 0,
     symbol          TEXT NOT NULL,
     strategy        TEXT NOT NULL,
-    timeframe       TEXT NOT NULL,
+    timeframe       TEXT NOT NULL DEFAULT '1h',
     initial_equity  REAL DEFAULT 0,
     final_equity    REAL DEFAULT 0,
     total_return_pct REAL DEFAULT 0,
@@ -103,8 +103,7 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     num_trades      INTEGER DEFAULT 0,
     win_rate_pct    REAL DEFAULT 0,
     metrics_json    TEXT DEFAULT '{}',
-    created_at      TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    created_at      TEXT DEFAULT (datetime('now'))
 )
 """
 
@@ -123,7 +122,6 @@ class SqliteBacktestRepository:
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.execute(_CREATE_BACKTEST_TABLE)
         self._conn.executescript(_INDEX_SQL)
         self._conn.commit()
