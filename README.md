@@ -1,8 +1,10 @@
 <div align="center">
 
+<img src="https://github.com/iiooiioo888/StocksX_V0/blob/main/assets/logo.png" alt="StocksX Logo" width="120" />
+
 # 📊 StocksX
 
-**機構級回測與交易監控平台**
+### 機構級回測與交易監控平台
 
 [![Python](https://img.shields.io/badge/python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/streamlit-1.32+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
@@ -13,9 +15,11 @@
 
 跨市場回測 · 15+ 專業策略 · 即時監控 · WebSocket 推送 · AI 情緒分析
 
-[快速開始](#-快速開始) · [策略列表](#-策略庫) · [部署指南](#-部署) · [貢獻指南](CONTRIBUTING.md)
-
 </div>
+
+---
+
+StocksX 是一個開源的量化交易回測與即時監控平台，支援加密貨幣、美股、台股、ETF 與期貨。整合 11 個交易所的真實數據、15+ 經典與機器學習策略、WebSocket 即時推送以及 AI 情緒分析，讓你以機構級的標準打造與驗證交易系統。從策略開發、回測驗證到即時監控的全流程皆可在單一平台完成。
 
 ---
 
@@ -67,6 +71,18 @@
 </td>
 </tr>
 </table>
+
+---
+
+## 📸 截圖 / Demo
+
+> **[截圖待添加]**
+>
+> 請在此處加入平台實際操作截圖或 GIF 動畫，展示：
+> - 回測結果儀表板
+> - 即時監控介面
+> - K 線圖與技術指標
+> - AI 情緒分析面板
 
 ---
 
@@ -154,6 +170,73 @@ docker compose --profile monitoring up -d
 
 ---
 
+## 🏗️ 技術架構
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        使用者層 (User Layer)                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+│  │ 回測頁面  │  │ 監控頁面  │  │ AI 分析  │  │ 歷史記錄 & 對比  │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬──────────┘ │
+└───────┼──────────────┼──────────────┼────────────────┼──────────┘
+        │              │              │                │
+┌───────▼──────────────▼──────────────▼────────────────▼──────────┐
+│                      前端層 (Frontend)                            │
+│         Streamlit · Plotly.js · Glassmorphism 主題               │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────────┐
+│                       API 層 (Backend)                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+│  │  FastAPI      │  │  WebSocket   │  │  Celery 任務隊列      │  │
+│  │  REST API     │  │  即時推送     │  │  (非同步回測)         │  │
+│  └──────┬───────┘  └──────┬───────┘  └───────────┬───────────┘  │
+└─────────┼─────────────────┼───────────────────────┼─────────────┘
+          │                 │                       │
+┌─────────▼─────────────────▼───────────────────────▼─────────────┐
+│                      核心引擎層 (Core Engine)                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+│  │  回測引擎     │  │  策略引擎     │  │  交易引擎 (自動下單)   │  │
+│  │  14+ 策略     │  │  參數優化     │  │  風控模組             │  │
+│  └──────────────┘  └──────────────┘  └───────────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+│  │  ML / LSTM    │  │  NLP 情緒    │  │  強化學習 (RL)        │  │
+│  │  預測模型     │  │  FinBERT     │  │  Gymnasium            │  │
+│  └──────────────┘  └──────────────┘  └───────────────────────┘  │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────────┐
+│                      數據層 (Data Layer)                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+│  │  CCXT         │  │  yfinance    │  │  CoinGecko / 鏈上     │  │
+│  │  (11 交易所)   │  │  (美股/台股)  │  │  (巨鯨/流量)          │  │
+│  └──────────────┘  └──────────────┘  └───────────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐                              │
+│  │  API Hub      │  │  Redis 快取  │                              │
+│  │  (限流+重試)   │  │  (TTL 緩存)  │                              │
+│  └──────────────┘  └──────────────┘                              │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────────┘
+│                     基礎設施層 (Infrastructure)                    │
+│      Docker · Prometheus · Grafana · GitHub Actions CI/CD        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 技術棧一覽
+
+| 層級 | 技術 |
+|:----:|------|
+| **前端** | Streamlit · Plotly.js · Glassmorphism CSS |
+| **後端** | Python 3.10+ · FastAPI · SQLite / PostgreSQL |
+| **即時** | WebSocket · CCXT · Binance API |
+| **數據** | Pandas · NumPy · yfinance · CoinGecko |
+| **AI/ML** | scikit-learn · TensorFlow · FinBERT · Gymnasium |
+| **基礎設施** | Docker · Redis · Celery · Prometheus · Grafana |
+| **品質** | Ruff · pytest · GitHub Actions · pre-commit |
+
+---
+
 ## 📁 專案結構
 
 ```
@@ -191,25 +274,32 @@ StocksX_V0/
 
 ---
 
-## 🏗️ 技術棧
+## ⚙️ API & 配置說明
 
-<div align="center">
+### 環境變數 (.env)
 
-| 層級 | 技術 |
-|:----:|------|
-| **前端** | Streamlit · Plotly.js · Glassmorphism CSS |
-| **後端** | Python 3.10+ · FastAPI · SQLite / PostgreSQL |
-| **即時** | WebSocket · CCXT · Binance API |
-| **數據** | Pandas · NumPy · yfinance · CoinGecko |
-| **AI/ML** | scikit-learn · TensorFlow · FinBERT · Gymnasium |
-| **基礎設施** | Docker · Redis · Celery · Prometheus · Grafana |
-| **品質** | Ruff · pytest · GitHub Actions · pre-commit |
+| 變數 | 說明 | 預設值 |
+|------|------|--------|
+| `SECRET_KEY` | JWT 簽名密鑰（**必填**） | — |
+| `ADMIN_PASSWORD` | 管理員密碼（**必填**） | — |
+| `DATABASE_URL` | 資料庫連接字串 | `sqlite:///data/stocksx.db` |
+| `REDIS_URL` | Redis 連接字串 | `redis://localhost:6379/0` |
+| `LOG_LEVEL` | 日誌等級 | `INFO` |
+| `STREAMLIT_SERVER_PORT` | Streamlit 連接埠 | `8501` |
+| `WEBSOCKET_PORT` | WebSocket 連接埠 | `8001` |
 
-</div>
+### API 端點
+
+| 端點 | 方法 | 說明 |
+|------|------|------|
+| `/api/v1/health` | GET | 健康檢查 |
+| `/ws` | WebSocket | 即時行情推送 |
+| `/api/v1/backtest` | POST | 提交回測任務 |
+| `/api/v1/strategies` | GET | 策略列表 |
 
 ---
 
-## 🚀 部署
+## 🚀 部署指南
 
 ### Docker Compose 服務
 
@@ -308,12 +398,14 @@ streamlit run app.py --server.port=8501 --server.address=0.0.0.0
 
 ---
 
-## 🤝 貢獻
+## 🤝 貢獻指南
 
-歡迎貢獻！請閱讀 [CONTRIBUTING.md](CONTRIBUTING.md)。
+歡迎貢獻！請閱讀 [CONTRIBUTING.md](CONTRIBUTING.md) 了解詳細流程。
+
+### 開發環境設置
 
 ```bash
-# 開發環境
+# 安裝開發依賴
 pip install -r requirements-dev.txt
 pre-commit install
 
@@ -325,11 +417,22 @@ ruff format src/ app.py pages/
 pytest tests/ -v
 ```
 
+### 提交規範
+
+```
+feat: 新增功能
+fix: 修復 bug
+docs: 文件更新
+refactor: 重構
+test: 測試相關
+chore: 建置 / 工具變更
+```
+
 ---
 
 ## 📄 授權
 
-[MIT License](LICENSE)
+本專案採用 [MIT License](LICENSE) 授權。
 
 ---
 
@@ -343,7 +446,13 @@ pytest tests/ -v
 
 <div align="center">
 
-**Made with ❤️ by StocksX Team**
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=iiooiioo888/StocksX_V0&type=Date)](https://star-history.com/#iiooiioo888/StocksX_V0&Date)
+
+---
+
+**Made with ❤️ by StocksX Team** · © 2024–2026
 
 [⬆ 回到頂部](#-stocksx)
 
