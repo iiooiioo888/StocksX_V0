@@ -2,6 +2,7 @@
 import streamlit as st
 
 from src.auth import UserDB
+from src.core import get_orchestrator
 from src.ui_common import apply_theme
 
 st.set_page_config(page_title="StocksX — 登入", page_icon="🔐", layout="centered")

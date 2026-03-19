@@ -12,6 +12,7 @@ from plotly.subplots import make_subplots
 
 from src.auth import UserDB
 from src.config import STRATEGY_LABELS, format_price
+from src.core import get_orchestrator
 from src.data.service import data_service  # 真實數據服務
 
 # ════════════════════════════════════════════════════════════

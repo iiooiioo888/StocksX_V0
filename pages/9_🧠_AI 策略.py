@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
+from src.core import get_orchestrator
+
 st.set_page_config(page_title="AI 策略 - StocksX", page_icon="🧠", layout="wide")
 
 # 自定义 CSS

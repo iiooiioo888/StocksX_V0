@@ -3,6 +3,7 @@ import time
 
 import streamlit as st
 
+from src.core import get_orchestrator
 from src.utils.health_check import (
     get_system_health,
 )
