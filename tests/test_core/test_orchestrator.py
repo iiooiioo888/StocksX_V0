@@ -54,6 +54,7 @@ class TestOrchestratorInit:
     def test_get_orchestrator_singleton(self):
         """get_orchestrator 應返回同一實例."""
         import src.core.orchestrator as orch_mod
+
         orch_mod._orchestrator = None  # 重置
         a = get_orchestrator()
         b = get_orchestrator()
@@ -128,9 +129,7 @@ class TestOrchestratorBacktest:
     def test_run_multi_backtest(self):
         """run_multi_backtest 應返回 dict."""
         orch = Orchestrator(cache=DictCache())
-        results = orch.run_multi_backtest(
-            "NONEXISTENT/PAIR", "1h", ["sma_cross", "buy_and_hold"]
-        )
+        results = orch.run_multi_backtest("NONEXISTENT/PAIR", "1h", ["sma_cross", "buy_and_hold"])
         assert isinstance(results, dict)
         assert "sma_cross" in results
         assert "buy_and_hold" in results
@@ -139,8 +138,11 @@ class TestOrchestratorBacktest:
         """指定時間範圍的回測."""
         orch = Orchestrator(cache=DictCache())
         report = orch.run_backtest(
-            "NONEXISTENT/PAIR", "1h", "sma_cross",
-            since_ms=0, until_ms=100000,
+            "NONEXISTENT/PAIR",
+            "1h",
+            "sma_cross",
+            since_ms=0,
+            until_ms=100000,
         )
         assert isinstance(report, BacktestReport)
 

@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
-from .backtest import BacktestConfig, BacktestEngine, BacktestReport, compute_performance_metrics
+from .backtest import BacktestConfig, BacktestEngine
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class WFResult:
         if mean_s <= 0:
             return 0.0
         variance = sum((s - mean_s) ** 2 for s in sharpes) / len(sharpes)
-        cv = (variance ** 0.5) / mean_s if mean_s != 0 else float("inf")
+        cv = (variance**0.5) / mean_s if mean_s != 0 else float("inf")
         return max(0.0, 1.0 - cv)
 
     def to_dict(self) -> dict[str, Any]:

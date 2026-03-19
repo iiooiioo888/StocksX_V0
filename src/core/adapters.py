@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 
 from .provider import CacheBackend, DictCache, MarketProvider, OHLCV, OrderBook, Ticker
 
@@ -117,15 +116,19 @@ class CCXTProvider:
                 volume_24h=float(t.get("baseVolume", 0)),
                 timestamp=int(time.time() * 1000),
             )
-            self._cache.set(cache_key, {
-                "symbol": data.symbol,
-                "price": data.price,
-                "change_pct": data.change_pct,
-                "high_24h": data.high_24h,
-                "low_24h": data.low_24h,
-                "volume_24h": data.volume_24h,
-                "timestamp": data.timestamp,
-            }, ttl=5)
+            self._cache.set(
+                cache_key,
+                {
+                    "symbol": data.symbol,
+                    "price": data.price,
+                    "change_pct": data.change_pct,
+                    "high_24h": data.high_24h,
+                    "low_24h": data.low_24h,
+                    "volume_24h": data.volume_24h,
+                    "timestamp": data.timestamp,
+                },
+                ttl=5,
+            )
             return data
         except Exception as e:
             logger.warning("fetch_ticker failed %s: %s", symbol, e)
@@ -156,15 +159,27 @@ class CCXTProvider:
 
 # Yahoo 時間框架對應
 _YF_INTERVALS = {
-    "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-    "1h": "1h", "4h": "1h",  # yfinance 無 4h，用 1h 代替
-    "1d": "1d", "1w": "1wk", "1M": "1mo",
+    "1m": "1m",
+    "5m": "5m",
+    "15m": "15m",
+    "30m": "30m",
+    "1h": "1h",
+    "4h": "1h",  # yfinance 無 4h，用 1h 代替
+    "1d": "1d",
+    "1w": "1wk",
+    "1M": "1mo",
 }
 
 _YF_PERIODS = {
-    "1m": "7d", "5m": "60d", "15m": "60d", "30m": "60d",
-    "1h": "730d", "4h": "730d",
-    "1d": "max", "1w": "max", "1M": "max",
+    "1m": "7d",
+    "5m": "60d",
+    "15m": "60d",
+    "30m": "60d",
+    "1h": "730d",
+    "4h": "730d",
+    "1d": "max",
+    "1w": "max",
+    "1M": "max",
 }
 
 
@@ -214,14 +229,16 @@ class YahooProvider:
 
             rows = []
             for ts, row in df.iterrows():
-                rows.append(OHLCV(
-                    timestamp=int(ts.timestamp() * 1000),
-                    open=float(row["Open"]),
-                    high=float(row["High"]),
-                    low=float(row["Low"]),
-                    close=float(row["Close"]),
-                    volume=float(row.get("Volume", 0)),
-                ))
+                rows.append(
+                    OHLCV(
+                        timestamp=int(ts.timestamp() * 1000),
+                        open=float(row["Open"]),
+                        high=float(row["High"]),
+                        low=float(row["Low"]),
+                        close=float(row["Close"]),
+                        volume=float(row.get("Volume", 0)),
+                    )
+                )
 
             self._cache.set(cache_key, [r.to_dict() for r in rows], ttl=300)
             return rows

@@ -81,12 +81,14 @@ class TestAlertManager:
     def test_check_triggers_alert(self):
         """滿足條件時 check 應觸發告警."""
         mgr = self._make_manager()
-        mgr.add_rule(AlertRule(
-            name="high_value",
-            condition=lambda m: m.get("value", 0) > 100,
-            message_template="Value too high: {value}",
-            cooldown_seconds=0,
-        ))
+        mgr.add_rule(
+            AlertRule(
+                name="high_value",
+                condition=lambda m: m.get("value", 0) > 100,
+                message_template="Value too high: {value}",
+                cooldown_seconds=0,
+            )
+        )
 
         fired = mgr.check({"value": 150})
         assert len(fired) == 1
@@ -95,11 +97,13 @@ class TestAlertManager:
     def test_check_no_trigger(self):
         """不滿足條件時不觸發."""
         mgr = self._make_manager()
-        mgr.add_rule(AlertRule(
-            name="high_value",
-            condition=lambda m: m.get("value", 0) > 100,
-            cooldown_seconds=0,
-        ))
+        mgr.add_rule(
+            AlertRule(
+                name="high_value",
+                condition=lambda m: m.get("value", 0) > 100,
+                cooldown_seconds=0,
+            )
+        )
 
         fired = mgr.check({"value": 50})
         assert len(fired) == 0
@@ -107,11 +111,13 @@ class TestAlertManager:
     def test_cooldown(self):
         """冷卻期內不重複觸發."""
         mgr = self._make_manager()
-        mgr.add_rule(AlertRule(
-            name="test",
-            condition=lambda m: True,
-            cooldown_seconds=999,
-        ))
+        mgr.add_rule(
+            AlertRule(
+                name="test",
+                condition=lambda m: True,
+                cooldown_seconds=999,
+            )
+        )
 
         mgr.check({})
         fired = mgr.check({})
@@ -120,12 +126,14 @@ class TestAlertManager:
     def test_disabled_rule(self):
         """已停用的規則不應觸發."""
         mgr = self._make_manager()
-        mgr.add_rule(AlertRule(
-            name="disabled",
-            condition=lambda m: True,
-            enabled=False,
-            cooldown_seconds=0,
-        ))
+        mgr.add_rule(
+            AlertRule(
+                name="disabled",
+                condition=lambda m: True,
+                enabled=False,
+                cooldown_seconds=0,
+            )
+        )
 
         fired = mgr.check({})
         assert len(fired) == 0
@@ -133,11 +141,13 @@ class TestAlertManager:
     def test_history(self):
         """觸發的告警應記錄在 history 中."""
         mgr = self._make_manager()
-        mgr.add_rule(AlertRule(
-            name="test",
-            condition=lambda m: True,
-            cooldown_seconds=0,
-        ))
+        mgr.add_rule(
+            AlertRule(
+                name="test",
+                condition=lambda m: True,
+                cooldown_seconds=0,
+            )
+        )
 
         mgr.check({})
         mgr.check({})
@@ -147,11 +157,13 @@ class TestAlertManager:
     def test_history_limit(self):
         """history 應遵守 limit."""
         mgr = self._make_manager()
-        mgr.add_rule(AlertRule(
-            name="test",
-            condition=lambda m: True,
-            cooldown_seconds=0,
-        ))
+        mgr.add_rule(
+            AlertRule(
+                name="test",
+                condition=lambda m: True,
+                cooldown_seconds=0,
+            )
+        )
 
         for _ in range(10):
             mgr.check({})

@@ -51,6 +51,7 @@ user = st.session_state.get("user")
 # 載入市場數據（快取 + session 狀態保護）
 # ════════════════════════════════════════════════════════════
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_data():
     return fetch_market_data()

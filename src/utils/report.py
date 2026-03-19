@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -61,13 +60,21 @@ class BacktestReportGenerator:
         # 指標卡片
         metrics_html = ""
         metric_items = [
-            ("總報酬", f"{m.get('total_return_pct', 0):+.2f}%", "#00cc96" if m.get('total_return_pct', 0) > 0 else "#ef553b"),
-            ("年化報酬", f"{m.get('annual_return_pct', 0):+.2f}%", "#00cc96" if m.get('annual_return_pct', 0) > 0 else "#ef553b"),
+            (
+                "總報酬",
+                f"{m.get('total_return_pct', 0):+.2f}%",
+                "#00cc96" if m.get("total_return_pct", 0) > 0 else "#ef553b",
+            ),
+            (
+                "年化報酬",
+                f"{m.get('annual_return_pct', 0):+.2f}%",
+                "#00cc96" if m.get("annual_return_pct", 0) > 0 else "#ef553b",
+            ),
             ("最大回撤", f"{m.get('max_drawdown_pct', 0):.2f}%", "#ef553b"),
             ("Sharpe", f"{m.get('sharpe_ratio', 0):.2f}", "#667eea"),
             ("Sortino", f"{m.get('sortino_ratio', 0):.2f}", "#667eea"),
-            ("勝率", f"{m.get('win_rate_pct', 0):.1f}%", "#00cc96" if m.get('win_rate_pct', 0) > 50 else "#ef553b"),
-            ("交易次數", str(m.get('num_trades', 0)), "#8b949e"),
+            ("勝率", f"{m.get('win_rate_pct', 0):.1f}%", "#00cc96" if m.get("win_rate_pct", 0) > 50 else "#ef553b"),
+            ("交易次數", str(m.get("num_trades", 0)), "#8b949e"),
             ("利潤因子", f"{m.get('profit_factor', 0):.2f}", "#667eea"),
         ]
 
@@ -88,10 +95,10 @@ class BacktestReportGenerator:
             trades_html += f"""
             <tr>
                 <td style="padding:8px;border-bottom:1px solid #30363d;">{side}</td>
-                <td style="padding:8px;border-bottom:1px solid #30363d;">{t.get('entry_price', 0):.2f}</td>
-                <td style="padding:8px;border-bottom:1px solid #30363d;">{t.get('exit_price', 0):.2f}</td>
+                <td style="padding:8px;border-bottom:1px solid #30363d;">{t.get("entry_price", 0):.2f}</td>
+                <td style="padding:8px;border-bottom:1px solid #30363d;">{t.get("exit_price", 0):.2f}</td>
                 <td style="padding:8px;border-bottom:1px solid #30363d;color:{color};">{pnl:+.4f}%</td>
-                <td style="padding:8px;border-bottom:1px solid #30363d;color:{color};">{t.get('profit', 0):+.2f}</td>
+                <td style="padding:8px;border-bottom:1px solid #30363d;color:{color};">{t.get("profit", 0):+.2f}</td>
                 <td style="padding:8px;border-bottom:1px solid #30363d;">{reason}</td>
             </tr>"""
 
@@ -127,7 +134,7 @@ class BacktestReportGenerator:
     <div class="container">
         <h1>📊 回測報告 — {self._strategy}</h1>
         <div class="meta">
-            交易對: {self._symbol or 'N/A'} · 生成時間: {self._generated_at} · StocksX v5.2
+            交易對: {self._symbol or "N/A"} · 生成時間: {self._generated_at} · StocksX v5.2
         </div>
 
         <div class="section">
@@ -153,15 +160,15 @@ class BacktestReportGenerator:
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
                 <div style="background:rgba(255,255,255,0.05);padding:16px;border-radius:12px;">
                     <div style="color:#8b949e;font-size:12px;">手續費總計</div>
-                    <div style="color:#f0f0f0;font-size:20px;">${m.get('total_fees', 0):,.2f}</div>
+                    <div style="color:#f0f0f0;font-size:20px;">${m.get("total_fees", 0):,.2f}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.05);padding:16px;border-radius:12px;">
                     <div style="color:#8b949e;font-size:12px;">Omega Ratio</div>
-                    <div style="color:#667eea;font-size:20px;">{m.get('omega_ratio', 0):.2f}</div>
+                    <div style="color:#667eea;font-size:20px;">{m.get("omega_ratio", 0):.2f}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.05);padding:16px;border-radius:12px;">
                     <div style="color:#8b949e;font-size:12px;">Tail Ratio</div>
-                    <div style="color:#667eea;font-size:20px;">{m.get('tail_ratio', 0):.2f}</div>
+                    <div style="color:#667eea;font-size:20px;">{m.get("tail_ratio", 0):.2f}</div>
                 </div>
             </div>
         </div>
@@ -223,7 +230,7 @@ class StrategyComparisonGenerator:
                 <td style="padding:12px 8px;border-bottom:1px solid #30363d;color:#ef553b;">{dd:.2f}%</td>
                 <td style="padding:12px 8px;border-bottom:1px solid #30363d;color:#667eea;">{sharpe:.2f}</td>
                 <td style="padding:12px 8px;border-bottom:1px solid #30363d;">{wr:.1f}%</td>
-                <td style="padding:12px 8px;border-bottom:1px solid #30363d;">{m.get('num_trades', 0)}</td>
+                <td style="padding:12px 8px;border-bottom:1px solid #30363d;">{m.get("num_trades", 0)}</td>
             </tr>"""
 
         html = f"""<!DOCTYPE html>
@@ -243,7 +250,7 @@ class StrategyComparisonGenerator:
 <body>
     <div class="container">
         <h1>📊 策略對比報告</h1>
-        <p style="color:#8b949e;">交易對: {self._symbol or 'N/A'} · {len(self._results)} 個策略</p>
+        <p style="color:#8b949e;">交易對: {self._symbol or "N/A"} · {len(self._results)} 個策略</p>
         <table>
             <thead>
                 <tr><th>#</th><th>策略</th><th>總報酬</th><th>最大回撤</th><th>Sharpe</th><th>勝率</th><th>交易數</th></tr>

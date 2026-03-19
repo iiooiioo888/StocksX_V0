@@ -1,4 +1,6 @@
-# EditorConfig — 統一編輯器設定
+# EditorConfig — 跨編輯器一致的程式碼風格
+# https://editorconfig.org
+
 root = true
 
 [*]
@@ -9,14 +11,15 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-[*.{yml,yaml}]
+[*.{js,ts,jsx,tsx,json,yml,yaml}]
 indent_size = 2
-
-[*.{json,toml}]
-indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false
 
 [Makefile]
 indent_style = tab
+
+[*.py]
+# Python 風格由 ruff 管理
+max_line_length = 120

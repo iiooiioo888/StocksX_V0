@@ -158,7 +158,9 @@ if run_btn and since_ms < until_ms:
         _bar.progress(40, text="回測所有策略…")
         # ✅ 新架構：run_all_strategies_new
         results = run_all_strategies_new(
-            rows, since_ms, until_ms,
+            rows,
+            since_ms,
+            until_ms,
             initial_equity=initial_equity,
             leverage=1.0,
             fee_rate=user_fee,

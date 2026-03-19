@@ -13,8 +13,8 @@ Pipeline = [Step₁ → Step₂ → ... → Stepₙ]
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Generic, TypeVar
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 

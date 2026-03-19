@@ -141,8 +141,7 @@ class TestBacktestEngineEdgeCases:
         from src.core.backtest import BacktestEngine, BacktestConfig
 
         rows = [
-            {"timestamp": i * 1000, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 100}
-            for i in range(10)
+            {"timestamp": i * 1000, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 100} for i in range(10)
         ]
         signals = [1] * 10
         engine = BacktestEngine(config=BacktestConfig())

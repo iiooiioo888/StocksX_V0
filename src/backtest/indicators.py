@@ -19,7 +19,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 
@@ -121,7 +120,7 @@ def aroon(rows: list[dict[str, Any]], period: int = 25) -> tuple[list[float], li
     osc = [0.0] * (period - 1)
 
     for i in range(period - 1, n):
-        window = rows[i - period + 1: i + 1]
+        window = rows[i - period + 1 : i + 1]
         highs = [r["high"] for r in window]
         lows = [r["low"] for r in window]
         max_idx = highs.index(max(highs))
@@ -177,7 +176,7 @@ def stochastic_rsi(
 
     stoch_k = [50.0] * (rsi_period + stoch_period - 1)
     for i in range(rsi_period + stoch_period - 1, n):
-        window = rsi_vals[i - stoch_period + 1: i + 1]
+        window = rsi_vals[i - stoch_period + 1 : i + 1]
         lowest = min(window)
         highest = max(window)
         if highest == lowest:
@@ -190,7 +189,7 @@ def stochastic_rsi(
     if len(stoch_k) >= k_period:
         stoch_d = []
         for i in range(k_period - 1, len(stoch_k)):
-            stoch_d.append(sum(stoch_k[i - k_period + 1: i + 1]) / k_period)
+            stoch_d.append(sum(stoch_k[i - k_period + 1 : i + 1]) / k_period)
         stoch_d = [50.0] * (len(stoch_k) - len(stoch_d)) + stoch_d
 
     return stoch_k, stoch_d
@@ -214,14 +213,16 @@ def heikin_ashi(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ha_open = (ha_rows[i - 1]["open"] + ha_rows[i - 1]["close"]) / 2
         ha_high = max(r["high"], ha_open, ha_close)
         ha_low = min(r["low"], ha_open, ha_close)
-        ha_rows.append({
-            "open": ha_open,
-            "high": ha_high,
-            "low": ha_low,
-            "close": ha_close,
-            "timestamp": r["timestamp"],
-            "volume": r.get("volume", 0),
-        })
+        ha_rows.append(
+            {
+                "open": ha_open,
+                "high": ha_high,
+                "low": ha_low,
+                "close": ha_close,
+                "timestamp": r["timestamp"],
+                "volume": r.get("volume", 0),
+            }
+        )
     return ha_rows
 
 
@@ -332,7 +333,10 @@ def volume_profile(rows: list[dict[str, Any]], n_bins: int = 20) -> dict[str, An
         return {"bins": [], "poc": p_max, "vah": p_max, "val": p_min}
 
     bin_width = (p_max - p_min) / n_bins
-    bins = [{"price_low": p_min + i * bin_width, "price_high": p_min + (i + 1) * bin_width, "volume": 0.0} for i in range(n_bins)]
+    bins = [
+        {"price_low": p_min + i * bin_width, "price_high": p_min + (i + 1) * bin_width, "volume": 0.0}
+        for i in range(n_bins)
+    ]
 
     for price, vol in zip(prices, volumes):
         idx = min(int((price - p_min) / bin_width), n_bins - 1)

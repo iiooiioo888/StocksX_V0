@@ -99,6 +99,7 @@ __all__ = [
     "Middleware",
     "MiddlewarePipeline",
     "LoggingMiddleware",
+    "RetryMiddleware",
     "RateLimitMiddleware",
     "TimingMiddleware",
     "with_middleware",

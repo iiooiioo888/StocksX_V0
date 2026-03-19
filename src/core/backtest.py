@@ -345,8 +345,13 @@ class BacktestEngine:
 
                 if exit_price is not None:
                     equity, trade = self._close_position(
-                        position, entry_price, exit_price, equity,
-                        entry_ts, ts, exit_reason,
+                        position,
+                        entry_price,
+                        exit_price,
+                        equity,
+                        entry_ts,
+                        ts,
+                        exit_reason,
                     )
                     trades.append(trade)
                     liquidated = trade.liquidation
@@ -358,8 +363,13 @@ class BacktestEngine:
             # ── 信號平倉 ──
             if position != 0 and target != position and entry_price:
                 equity, trade = self._close_position(
-                    position, entry_price, close, equity,
-                    entry_ts, ts, "signal",
+                    position,
+                    entry_price,
+                    close,
+                    equity,
+                    entry_ts,
+                    ts,
+                    "signal",
                 )
                 trades.append(trade)
                 liquidated = trade.liquidation
@@ -384,8 +394,13 @@ class BacktestEngine:
         if not liquidated and position != 0 and entry_price and rows:
             last_close = rows[-1]["close"]
             equity, trade = self._close_position(
-                position, entry_price, last_close, equity,
-                entry_ts, rows[-1]["timestamp"], "end",
+                position,
+                entry_price,
+                last_close,
+                equity,
+                entry_ts,
+                rows[-1]["timestamp"],
+                "end",
             )
             trades.append(trade)
             if equity_curve:

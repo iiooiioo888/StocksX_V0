@@ -59,6 +59,7 @@ class TestMiddlewarePipeline:
         class TrackMiddleware(Middleware):
             def before(self, ctx):
                 order.append("before")
+
             def after(self, ctx, result):
                 order.append("after")
                 return result
@@ -76,6 +77,7 @@ class TestMiddlewarePipeline:
             def after(self, ctx, result):
                 order.append("mw1_after")
                 return result
+
         class MW2(Middleware):
             def after(self, ctx, result):
                 order.append("mw2_after")
@@ -89,6 +91,7 @@ class TestMiddlewarePipeline:
 
     def test_error_recovery(self):
         """error hook 返回非 None 時應替代異常."""
+
         class RecoveryMiddleware(Middleware):
             def error(self, ctx, exc):
                 return "recovered"
@@ -210,6 +213,7 @@ class TestWithMiddleware:
         class TrackMiddleware(Middleware):
             def before(self, ctx):
                 called.append("before")
+
             def after(self, ctx, result):
                 called.append("after")
                 return result
@@ -249,6 +253,7 @@ class TestRetryMiddleware:
 
     def test_retry_exhausted_raises(self):
         """重試耗盡應拋出最後的異常."""
+
         def always_fail():
             raise RuntimeError("always")
 
@@ -376,6 +381,7 @@ class TestPipelineIntegration:
         class MW1(Middleware):
             def before(self, ctx):
                 order.append("mw1_before")
+
             def after(self, ctx, result):
                 order.append("mw1_after")
                 return result
@@ -383,6 +389,7 @@ class TestPipelineIntegration:
         class MW2(Middleware):
             def before(self, ctx):
                 order.append("mw2_before")
+
             def after(self, ctx, result):
                 order.append("mw2_after")
                 return result
@@ -393,9 +400,11 @@ class TestPipelineIntegration:
         pipe.execute(lambda: order.append("func") or "done")
 
         assert order == [
-            "mw1_before", "mw2_before",
+            "mw1_before",
+            "mw2_before",
             "func",
-            "mw2_after", "mw1_after",
+            "mw2_after",
+            "mw1_after",
         ]
 
     def test_timing_and_retry_together(self):

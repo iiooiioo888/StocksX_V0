@@ -187,6 +187,12 @@ ignore = [
     "I001",
     "F811",
     "F841",
+    "PERF203",  # try-except in loop — 合理的錯誤處理模式
+    "PERF401",  # list comprehension 建議 — 可讀性優先
+    "PERF403",  # dict comprehension 建議
+    "TC001",    # move import to TYPE_CHECKING — 可能破壞運行時
+    "TC003",    # move stdlib to TYPE_CHECKING — 可能破壞運行時
+    "N802",     # function naming — ContextManager 慣例
 ]
 
 [tool.ruff.lint.per-file-ignores]

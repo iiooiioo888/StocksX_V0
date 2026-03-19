@@ -17,8 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -133,19 +132,25 @@ class SqliteBacktestRepository:
                 total_return_pct, max_drawdown_pct, sharpe_ratio, num_trades, win_rate_pct, metrics_json)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                record.user_id, record.symbol, record.strategy, record.timeframe,
-                record.initial_equity, record.final_equity, record.total_return_pct,
-                record.max_drawdown_pct, record.sharpe_ratio, record.num_trades,
-                record.win_rate_pct, record.metrics_json,
+                record.user_id,
+                record.symbol,
+                record.strategy,
+                record.timeframe,
+                record.initial_equity,
+                record.final_equity,
+                record.total_return_pct,
+                record.max_drawdown_pct,
+                record.sharpe_ratio,
+                record.num_trades,
+                record.win_rate_pct,
+                record.metrics_json,
             ),
         )
         self._conn.commit()
         return cur.lastrowid or 0
 
     def find_by_id(self, record_id: int) -> BacktestRecord | None:
-        row = self._conn.execute(
-            "SELECT * FROM backtest_results WHERE id=?", (record_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM backtest_results WHERE id=?", (record_id,)).fetchone()
         return self._row_to_record(row) if row else None
 
     def find_by_user(self, user_id: int, limit: int = 50) -> list[BacktestRecord]:

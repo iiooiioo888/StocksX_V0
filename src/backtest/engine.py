@@ -369,5 +369,6 @@ def run_backtest(
         stop_loss_pct=stop_loss_pct,
     )
 
+
 # Public alias
 compute_metrics = _compute_metrics

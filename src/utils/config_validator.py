@@ -21,7 +21,6 @@ import os
 import string
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 
 @dataclass(slots=True)
@@ -74,21 +73,25 @@ def _check_secret_key(report: ConfigReport) -> None:
     key = os.getenv("SECRET_KEY", "")
 
     if not key:
-        report.issues.append(ConfigIssue(
-            field="SECRET_KEY",
-            severity="error",
-            message="SECRET_KEY 未設定",
-            suggestion="執行: python -c \"import secrets; print(secrets.token_hex(32))\"",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="SECRET_KEY",
+                severity="error",
+                message="SECRET_KEY 未設定",
+                suggestion='執行: python -c "import secrets; print(secrets.token_hex(32))"',
+            )
+        )
         return
 
     if len(key) < 16:
-        report.issues.append(ConfigIssue(
-            field="SECRET_KEY",
-            severity="error",
-            message=f"SECRET_KEY 長度不足（{len(key)} 字元，建議 ≥32）",
-            suggestion="使用更長的密鑰以增強安全性",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="SECRET_KEY",
+                severity="error",
+                message=f"SECRET_KEY 長度不足（{len(key)} 字元，建議 ≥32）",
+                suggestion="使用更長的密鑰以增強安全性",
+            )
+        )
         return
 
     # 檢查複雜度
@@ -97,12 +100,14 @@ def _check_secret_key(report: ConfigReport) -> None:
     has_digit = any(c in string.digits for c in key)
 
     if not (has_lower and has_upper and has_digit):
-        report.issues.append(ConfigIssue(
-            field="SECRET_KEY",
-            severity="warning",
-            message="SECRET_KEY 複雜度較低",
-            suggestion="建議包含大小寫字母和數字",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="SECRET_KEY",
+                severity="warning",
+                message="SECRET_KEY 複雜度較低",
+                suggestion="建議包含大小寫字母和數字",
+            )
+        )
     else:
         report.checks_passed += 1
 
@@ -113,12 +118,14 @@ def _check_admin_password(report: ConfigReport) -> None:
     pw = os.getenv("ADMIN_PASSWORD", "")
 
     if not pw:
-        report.issues.append(ConfigIssue(
-            field="ADMIN_PASSWORD",
-            severity="warning",
-            message="ADMIN_PASSWORD 未設定，將自動生成隨機密碼",
-            suggestion="在 .env 中設定 ADMIN_PASSWORD 以固定管理員密碼",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="ADMIN_PASSWORD",
+                severity="warning",
+                message="ADMIN_PASSWORD 未設定，將自動生成隨機密碼",
+                suggestion="在 .env 中設定 ADMIN_PASSWORD 以固定管理員密碼",
+            )
+        )
     else:
         report.checks_passed += 1
 
@@ -135,12 +142,14 @@ def _check_database(report: ConfigReport) -> None:
         test_file.unlink()
         report.checks_passed += 1
     except OSError as e:
-        report.issues.append(ConfigIssue(
-            field="DATABASE",
-            severity="error",
-            message=f"資料庫目錄不可寫: {e}",
-            suggestion="確保 data/ 目錄存在且有寫入權限",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="DATABASE",
+                severity="error",
+                message=f"資料庫目錄不可寫: {e}",
+                suggestion="確保 data/ 目錄存在且有寫入權限",
+            )
+        )
 
 
 def _check_redis(report: ConfigReport) -> None:
@@ -150,26 +159,31 @@ def _check_redis(report: ConfigReport) -> None:
 
     try:
         import redis
+
         r = redis.from_url(redis_url, socket_connect_timeout=3)
         r.ping()
         report.checks_passed += 1
     except ImportError:
-        report.issues.append(ConfigIssue(
-            field="REDIS",
-            severity="info",
-            message="redis-py 未安裝，快取功能受限",
-            suggestion="pip install redis",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="REDIS",
+                severity="info",
+                message="redis-py 未安裝，快取功能受限",
+                suggestion="pip install redis",
+            )
+        )
         report.checks_passed += 1  # 非致命
     except Exception as e:
         env = os.getenv("APP_ENV", "production")
         severity = "info" if env == "development" else "warning"
-        report.issues.append(ConfigIssue(
-            field="REDIS",
-            severity=severity,
-            message=f"Redis 連接失敗: {e}",
-            suggestion="確認 Redis 服務已啟動，或使用 Docker Compose",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="REDIS",
+                severity=severity,
+                message=f"Redis 連接失敗: {e}",
+                suggestion="確認 Redis 服務已啟動，或使用 Docker Compose",
+            )
+        )
 
 
 def _check_exchange_keys(report: ConfigReport) -> None:
@@ -185,22 +199,26 @@ def _check_exchange_keys(report: ConfigReport) -> None:
         api_key = os.getenv(api_key_env, "")
         secret = os.getenv(secret_env, "")
         if api_key and not secret:
-            report.issues.append(ConfigIssue(
-                field=api_key_env,
-                severity="warning",
-                message=f"{api_key_env} 已設定但 {secret_env} 未設定",
-                suggestion=f"請同時設定 {secret_env}",
-            ))
+            report.issues.append(
+                ConfigIssue(
+                    field=api_key_env,
+                    severity="warning",
+                    message=f"{api_key_env} 已設定但 {secret_env} 未設定",
+                    suggestion=f"請同時設定 {secret_env}",
+                )
+            )
         elif api_key and secret:
             has_any = True
 
     if not has_any:
-        report.issues.append(ConfigIssue(
-            field="EXCHANGE_KEYS",
-            severity="info",
-            message="未設定交易所 API 密鑰，自動交易功能不可用",
-            suggestion="如需自動交易，在 .env 中設定 BINANCE_API_KEY 和 BINANCE_SECRET_KEY",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="EXCHANGE_KEYS",
+                severity="info",
+                message="未設定交易所 API 密鑰，自動交易功能不可用",
+                suggestion="如需自動交易，在 .env 中設定 BINANCE_API_KEY 和 BINANCE_SECRET_KEY",
+            )
+        )
 
     report.checks_passed += 1
 
@@ -214,12 +232,14 @@ def _check_log_dir(report: ConfigReport) -> None:
         log_dir.mkdir(parents=True, exist_ok=True)
         report.checks_passed += 1
     except OSError as e:
-        report.issues.append(ConfigIssue(
-            field="LOG_DIR",
-            severity="warning",
-            message=f"日誌目錄不可寫: {e}",
-            suggestion="確保 logs/ 目錄存在且有寫入權限",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="LOG_DIR",
+                severity="warning",
+                message=f"日誌目錄不可寫: {e}",
+                suggestion="確保 logs/ 目錄存在且有寫入權限",
+            )
+        )
 
 
 def _check_timezone(report: ConfigReport) -> None:
@@ -227,12 +247,14 @@ def _check_timezone(report: ConfigReport) -> None:
     report.checks_total += 1
     tz = os.getenv("TZ", "")
     if not tz:
-        report.issues.append(ConfigIssue(
-            field="TZ",
-            severity="info",
-            message="未設定時區，使用系統預設",
-            suggestion="在 .env 中設定 TZ=Asia/Shanghai",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="TZ",
+                severity="info",
+                message="未設定時區，使用系統預設",
+                suggestion="在 .env 中設定 TZ=Asia/Shanghai",
+            )
+        )
     report.checks_passed += 1
 
 

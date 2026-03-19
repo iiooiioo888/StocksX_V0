@@ -53,9 +53,7 @@ def setup_logging(
 
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"{app_name}.log")
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file, when="midnight", backupCount=7, encoding="utf-8"
-    )
+    file_handler = logging.handlers.TimedRotatingFileHandler(log_file, when="midnight", backupCount=7, encoding="utf-8")
     file_handler.setFormatter(fmt)
     root_logger.addHandler(file_handler)
 

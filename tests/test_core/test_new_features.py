@@ -9,19 +9,23 @@ import asyncio
 # Technical Indicators
 # ════════════════════════════════════════════════════════════
 
+
 def _make_rows(n=50):
     """生成測試用 K 線."""
     rows = []
     price = 100.0
     for i in range(n):
         import random
+
         random.seed(i)
         change = random.gauss(0, 2)
         o = price
         c = price + change
         h = max(o, c) + abs(random.gauss(0, 1))
         l = min(o, c) - abs(random.gauss(0, 1))
-        rows.append({"timestamp": i * 3600000, "open": o, "high": h, "low": l, "close": c, "volume": random.uniform(100, 10000)})
+        rows.append(
+            {"timestamp": i * 3600000, "open": o, "high": h, "low": l, "close": c, "volume": random.uniform(100, 10000)}
+        )
         price = c
     return rows
 
@@ -29,6 +33,7 @@ def _make_rows(n=50):
 class TestATR:
     def test_atr_length(self):
         from src.backtest.indicators import atr
+
         rows = _make_rows(50)
         result = atr(rows, period=14)
         assert len(result) == 50
@@ -36,12 +41,14 @@ class TestATR:
 
     def test_atr_empty(self):
         from src.backtest.indicators import atr
+
         assert atr([], 14) == []
 
 
 class TestOBV:
     def test_obv_starts_zero(self):
         from src.backtest.indicators import obv
+
         rows = _make_rows(20)
         result = obv(rows)
         assert result[0] == 0.0
@@ -51,6 +58,7 @@ class TestOBV:
 class TestCCI:
     def test_cci_range(self):
         from src.backtest.indicators import cci
+
         rows = _make_rows(50)
         result = cci(rows, period=20)
         assert len(result) == 50
@@ -61,6 +69,7 @@ class TestCCI:
 class TestMFI:
     def test_mfi_range(self):
         from src.backtest.indicators import mfi
+
         rows = _make_rows(50)
         result = mfi(rows, period=14)
         assert len(result) == 50
@@ -72,6 +81,7 @@ class TestMFI:
 class TestAroon:
     def test_aroon_osc_range(self):
         from src.backtest.indicators import aroon
+
         rows = _make_rows(50)
         up, down, osc = aroon(rows, period=25)
         assert len(up) == 50
@@ -81,6 +91,7 @@ class TestAroon:
 class TestHeikinAshi:
     def test_heikin_ashi_length(self):
         from src.backtest.indicators import heikin_ashi
+
         rows = _make_rows(30)
         ha = heikin_ashi(rows)
         assert len(ha) == 30
@@ -90,6 +101,7 @@ class TestHeikinAshi:
 class TestKeltnerChannel:
     def test_keltner_bands(self):
         from src.backtest.indicators import keltner_channel
+
         rows = _make_rows(50)
         upper, middle, lower = keltner_channel(rows)
         assert len(upper) == 50
@@ -101,6 +113,7 @@ class TestKeltnerChannel:
 class TestVolumeProfile:
     def test_volume_profile_structure(self):
         from src.backtest.indicators import volume_profile
+
         rows = _make_rows(100)
         vp = volume_profile(rows, n_bins=10)
         assert "poc" in vp
@@ -113,9 +126,11 @@ class TestVolumeProfile:
 # OHLCV Validators
 # ════════════════════════════════════════════════════════════
 
+
 class TestOHLCVValidator:
     def test_valid_data(self):
         from src.data.validators import validate_ohlcv
+
         rows = _make_rows(20)
         report = validate_ohlcv(rows)
         assert report.is_valid
@@ -123,6 +138,7 @@ class TestOHLCVValidator:
 
     def test_missing_field(self):
         from src.data.validators import validate_ohlcv
+
         rows = [{"timestamp": 1, "open": 100, "high": 105, "low": 95}]  # missing close
         report = validate_ohlcv(rows, check_timestamps=False)
         assert not report.is_valid
@@ -130,12 +146,14 @@ class TestOHLCVValidator:
 
     def test_high_lower_than_low(self):
         from src.data.validators import validate_ohlcv
+
         rows = [{"timestamp": 1, "open": 100, "high": 90, "low": 95, "close": 100, "volume": 1000}]
         report = validate_ohlcv(rows, check_timestamps=False)
         assert report.error_count > 0
 
     def test_clean_removes_errors(self):
         from src.data.validators import validate_ohlcv
+
         rows = _make_rows(10)
         rows.append({"timestamp": 99, "open": 0, "high": 0, "low": 0, "close": 0, "volume": 0})
         report = validate_ohlcv(rows, check_timestamps=False)
@@ -147,15 +165,18 @@ class TestOHLCVValidator:
 # Circuit Breaker
 # ════════════════════════════════════════════════════════════
 
+
 class TestCircuitBreaker:
     def test_initial_state_closed(self):
         from src.trading.circuit_breaker import CircuitBreaker, BreakerState
+
         cb = CircuitBreaker()
         assert cb.state == BreakerState.CLOSED
         assert cb.can_trade()
 
     def test_consecutive_loss_trip(self):
         from src.trading.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, BreakerState
+
         config = CircuitBreakerConfig(max_consecutive_losses=3)
         cb = CircuitBreaker(config)
         cb.update_equity(10000)
@@ -170,6 +191,7 @@ class TestCircuitBreaker:
 
     def test_reset(self):
         from src.trading.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, BreakerState
+
         config = CircuitBreakerConfig(max_consecutive_losses=2)
         cb = CircuitBreaker(config)
         cb.update_equity(10000)
@@ -183,6 +205,7 @@ class TestCircuitBreaker:
 
     def test_profit_resets_consecutive(self):
         from src.trading.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+
         config = CircuitBreakerConfig(max_consecutive_losses=3)
         cb = CircuitBreaker(config)
         cb.update_equity(10000)

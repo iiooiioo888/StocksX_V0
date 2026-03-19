@@ -22,6 +22,7 @@ class TestPipelineStep:
 
     def test_name_defaults_to_func_name(self):
         """未指定 name 時，應使用函式名稱."""
+
         def my_func(x):
             return x
 
@@ -85,6 +86,7 @@ class TestPipeline:
 
     def test_step_skip_on_error(self):
         """skip_on_error=True 時，步驟出錯應跳過."""
+
         def fail(x):
             raise RuntimeError("oops")
 
@@ -147,9 +149,9 @@ class TestOhlcvCleanPipeline:
         """綜合測試：去重 + 去零量 + 排序."""
         p = ohlcv_clean_pipeline()
         rows = [
-            {"timestamp": 5, "volume": 0},     # 零量 → 移除
+            {"timestamp": 5, "volume": 0},  # 零量 → 移除
             {"timestamp": 3, "volume": 100},
-            {"timestamp": 3, "volume": 200},    # 重複 → 移除
+            {"timestamp": 3, "volume": 200},  # 重複 → 移除
             {"timestamp": 1, "volume": 50},
             {"timestamp": 10, "volume": 300},
         ]

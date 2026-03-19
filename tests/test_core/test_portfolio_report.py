@@ -11,10 +11,12 @@ import tempfile
 # Portfolio Analyzer
 # ════════════════════════════════════════════════════════════
 
+
 class TestPortfolioAnalyzer:
     def _make_returns(self):
         """創建測試用的報酬數據."""
         import random
+
         random.seed(42)
         return {
             "BTC": [random.gauss(0.001, 0.03) for _ in range(100)],
@@ -88,6 +90,7 @@ class TestPortfolioAnalyzer:
 # Report Generator
 # ════════════════════════════════════════════════════════════
 
+
 class TestReportGenerator:
     def test_html_generation(self):
         from src.utils.report import BacktestReportGenerator
@@ -102,7 +105,14 @@ class TestReportGenerator:
                 "profit_factor": 1.8,
             },
             "trades": [
-                {"side": 1, "entry_price": 100, "exit_price": 105, "pnl_pct": 5.0, "profit": 500, "exit_reason": "signal"},
+                {
+                    "side": 1,
+                    "entry_price": 100,
+                    "exit_price": 105,
+                    "pnl_pct": 5.0,
+                    "profit": 500,
+                    "exit_reason": "signal",
+                },
             ],
         }
 
@@ -137,8 +147,24 @@ class TestReportGenerator:
         from src.utils.report import StrategyComparisonGenerator
 
         results = {
-            "SMA": {"metrics": {"total_return_pct": 10, "sharpe_ratio": 1.2, "max_drawdown_pct": -5, "win_rate_pct": 60, "num_trades": 30}},
-            "RSI": {"metrics": {"total_return_pct": 15, "sharpe_ratio": 1.5, "max_drawdown_pct": -8, "win_rate_pct": 55, "num_trades": 40}},
+            "SMA": {
+                "metrics": {
+                    "total_return_pct": 10,
+                    "sharpe_ratio": 1.2,
+                    "max_drawdown_pct": -5,
+                    "win_rate_pct": 60,
+                    "num_trades": 30,
+                }
+            },
+            "RSI": {
+                "metrics": {
+                    "total_return_pct": 15,
+                    "sharpe_ratio": 1.5,
+                    "max_drawdown_pct": -8,
+                    "win_rate_pct": 55,
+                    "num_trades": 40,
+                }
+            },
         }
 
         gen = StrategyComparisonGenerator(results, symbol="BTC/USDT")

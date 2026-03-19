@@ -130,7 +130,9 @@ if run_btn and since_ms < until_ms:
             # ✅ 新架構：使用 compat 層的 run_all_strategies_new
             _bar.progress(40, text="回測所有策略…")
             results = run_all_strategies_new(
-                rows, since_ms, until_ms,
+                rows,
+                since_ms,
+                until_ms,
                 initial_equity=initial_equity,
                 leverage=leverage,
                 fee_rate=user_fee,
@@ -141,8 +143,11 @@ if run_btn and since_ms < until_ms:
             if selected_strategy and custom_params:
                 _bar.progress(40, text=f"回測策略：{STRATEGY_LABELS.get(selected_strategy, selected_strategy)}…")
                 result = run_single_strategy_new(
-                    rows, selected_strategy, custom_params,
-                    since_ms, until_ms,
+                    rows,
+                    selected_strategy,
+                    custom_params,
+                    since_ms,
+                    until_ms,
                     initial_equity=initial_equity,
                     leverage=leverage,
                     fee_rate=user_fee,

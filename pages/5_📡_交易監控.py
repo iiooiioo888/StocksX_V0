@@ -10,7 +10,6 @@ import streamlit as st
 
 from src.auth import UserDB
 from src.config import STRATEGY_LABELS, format_price
-from src.core import get_orchestrator
 from src.data.live_monitor import batch_calculate_signals, batch_get_live_prices
 from src.trading.worker import (
     check_position,

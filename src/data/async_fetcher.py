@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -53,11 +52,13 @@ class AsyncOHLCVFetcher:
         self._semaphore = asyncio.Semaphore(self._max_concurrent)
         try:
             import ccxt.async_support as ccxt_async
+
             exchange_class = getattr(ccxt_async, self._exchange_id)
             self._exchange = exchange_class({"timeout": int(self._timeout * 1000)})
         except (ImportError, AttributeError):
             # Fallback: use sync ccxt in thread pool
             import ccxt
+
             exchange_class = getattr(ccxt, self._exchange_id)
             self._exchange = exchange_class({"timeout": int(self._timeout * 1000)})
             self._sync_mode = True
@@ -102,14 +103,16 @@ class AsyncOHLCVFetcher:
                     rows = []
                     for candle in raw:
                         if len(candle) >= 6:
-                            rows.append({
-                                "timestamp": candle[0],
-                                "open": candle[1],
-                                "high": candle[2],
-                                "low": candle[3],
-                                "close": candle[4],
-                                "volume": candle[5],
-                            })
+                            rows.append(
+                                {
+                                    "timestamp": candle[0],
+                                    "open": candle[1],
+                                    "high": candle[2],
+                                    "low": candle[3],
+                                    "close": candle[4],
+                                    "volume": candle[5],
+                                }
+                            )
 
                     logger.info(
                         "async_fetch_ok",
@@ -119,7 +122,7 @@ class AsyncOHLCVFetcher:
 
                 except Exception as e:
                     if attempt < self._max_retries:
-                        wait = 1.0 * (2 ** attempt)
+                        wait = 1.0 * (2**attempt)
                         logger.warning(
                             "async_fetch_retry",
                             extra={"symbol": symbol, "attempt": attempt + 1, "error": str(e), "wait": wait},
@@ -153,10 +156,7 @@ class AsyncOHLCVFetcher:
         Returns:
             {symbol: [ohlcv_rows]}
         """
-        tasks = {
-            symbol: asyncio.create_task(self._fetch_one(symbol, timeframe, limit, since))
-            for symbol in symbols
-        }
+        tasks = {symbol: asyncio.create_task(self._fetch_one(symbol, timeframe, limit, since)) for symbol in symbols}
 
         results: dict[str, list[dict[str, Any]]] = {}
         for symbol, task in tasks.items():

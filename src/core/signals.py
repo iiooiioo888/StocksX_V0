@@ -9,10 +9,10 @@ SignalBus = 發布/訂閱，支持多策略組合
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class SignalBus:
         """發布信號."""
         self._history.append(signal)
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
 
         # 通知全局訂閱者
         for handler in self._global_handlers:

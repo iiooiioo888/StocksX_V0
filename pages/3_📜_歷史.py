@@ -8,7 +8,6 @@ import streamlit as st
 
 from src.auth import UserDB
 from src.config import STRATEGY_LABELS
-from src.core import get_orchestrator
 from src.ui_backtest_detail import render_backtest_detail
 from src.ui_history_enhanced import (
     filter_history,

@@ -212,6 +212,7 @@ class TestGetSettings:
         """多次呼叫應返回同一實例."""
         # 重置全域單例
         import src.core.config as cfg_mod
+
         cfg_mod._settings = None
         s1 = get_settings()
         s2 = get_settings()

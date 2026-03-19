@@ -33,6 +33,7 @@ class TestSubmit:
 
     def test_submit_with_args(self, queue):
         """submit 支持 args 參數."""
+
         def add(a, b):
             return a + b
 
@@ -65,12 +66,14 @@ class TestStatus:
 
     def test_status_failed(self, queue):
         """失敗後狀態應為 FAILED."""
+
         def fail():
             raise ValueError("boom")
 
         task_id = queue.submit("fail", fail)
         # 等待任務完成（future.result() 會重新拋出異常）
         import time
+
         time.sleep(0.2)
         try:
             queue.result(task_id, timeout=5)
@@ -102,7 +105,7 @@ class TestResult:
     def test_result_timeout(self, queue):
         """result 超時應拋出 TimeoutError."""
         task_id = queue.submit("slow", lambda: time.sleep(10))
-        with pytest.raises(Exception):
+        with pytest.raises((TimeoutError, Exception)):
             queue.result(task_id, timeout=0.1)
 
 
@@ -143,7 +146,7 @@ class TestListTasks:
     def test_list_tasks_limit(self, queue):
         """list_tasks 應遵守 limit."""
         for i in range(5):
-            queue.submit(f"t{i}", lambda: i)
+            queue.submit(f"t{i}", lambda _i=i: _i)
 
         tasks = queue.list_tasks(limit=2)
         assert len(tasks) == 2

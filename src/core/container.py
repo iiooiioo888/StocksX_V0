@@ -17,7 +17,8 @@ DI Container — 輕量依賴注入
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 

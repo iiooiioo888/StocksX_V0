@@ -34,7 +34,7 @@ class PortfolioWeights:
         return dict(zip(self.assets, self.weights))
 
     def __str__(self) -> str:
-        parts = [f"  {a}: {w*100:.1f}%" for a, w in zip(self.assets, self.weights) if w > 0.001]
+        parts = [f"  {a}: {w * 100:.1f}%" for a, w in zip(self.assets, self.weights) if w > 0.001]
         return "\n".join(parts)
 
 
@@ -312,21 +312,20 @@ class PortfolioAnalyzer:
         # 在兩個極端之間插值
         for i in range(n_points):
             t = i / (n_points - 1) if n_points > 1 else 0
-            interp_weights = [
-                (1 - t) * mv.weights[j] + t * max_r_weights[j]
-                for j in range(len(self._assets))
-            ]
+            interp_weights = [(1 - t) * mv.weights[j] + t * max_r_weights[j] for j in range(len(self._assets))]
             # 正規化
             total = sum(interp_weights)
             if total > 0:
                 interp_weights = [w / total for w in interp_weights]
 
             m = self.portfolio_metrics(interp_weights)
-            results.append({
-                "return": m.annual_return,
-                "volatility": m.annual_volatility,
-                "sharpe": m.sharpe_ratio,
-                "weights": dict(zip(self._assets, interp_weights)),
-            })
+            results.append(
+                {
+                    "return": m.annual_return,
+                    "volatility": m.annual_volatility,
+                    "sharpe": m.sharpe_ratio,
+                    "weights": dict(zip(self._assets, interp_weights)),
+                }
+            )
 
         return results

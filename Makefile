@@ -2,20 +2,29 @@
 # StocksX Makefile — 開發 & 部署命令
 # ════════════════════════════════════════════════════════════
 
-.PHONY: help lint format test run docker dev clean
+.PHONY: help lint format type-check test test-cov test-fast security run run-ws docker docker-build docker-logs docker-down docker-monitor clean install dev
 
 # ─── 預設 ───
 help: ## 顯示幫助
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-# ─── 開發 ───
-dev: ## 安裝開發依賴
-	pip install -r requirements.txt -r requirements-dev.txt
+# ─── 安裝 ───
+install: ## 安裝專案（使用 pyproject.toml）
+	pip install -e .
 
+dev: ## 安裝開發依賴（使用 pyproject.toml）
+	pip install -e ".[dev]"
+	pre-commit install
+
+# ─── 代碼品質 ───
 lint: ## 代碼檢查
 	ruff check src/ pages/ app.py tests/
 
 format: ## 代碼格式化
+	ruff format src/ pages/ app.py tests/
+
+lint-fix: ## 自動修復 lint 問題
+	ruff check --fix src/ pages/ app.py tests/
 	ruff format src/ pages/ app.py tests/
 
 type-check: ## 類型檢查

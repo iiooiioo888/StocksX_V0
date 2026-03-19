@@ -14,6 +14,7 @@ def _import_strategies():
     """安全導入舊版策略，避免循環依賴."""
     try:
         from src.backtest import strategies as _strategies
+
         return _strategies
     except Exception:
         # 直接從文件導入函數，繞過 __init__.py 的循環依賴
@@ -32,6 +33,7 @@ def _import_strategies():
                 except Exception:
                     pass
         return None
+
 
 # ─── 策略元數據定義 ───
 
@@ -146,6 +148,7 @@ _STRATEGY_META: dict[str, dict] = {
 
 # ─── 自動註冊 ───
 
+
 def _register_all() -> None:
     """從舊版策略模組自動遷移到新 Registry."""
     _strategies = _import_strategies()
@@ -153,7 +156,9 @@ def _register_all() -> None:
         return
 
     for name, meta in _STRATEGY_META.items():
-        func = getattr(_strategies, "_STRATEGY_FUNCS", {}).get(name) if hasattr(_strategies, "_STRATEGY_FUNCS") else None
+        func = (
+            getattr(_strategies, "_STRATEGY_FUNCS", {}).get(name) if hasattr(_strategies, "_STRATEGY_FUNCS") else None
+        )
         if func is None:
             # 嘗試直接從模組取函數
             func = getattr(_strategies, name, None)

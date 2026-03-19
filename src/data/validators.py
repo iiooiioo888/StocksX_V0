@@ -127,9 +127,9 @@ def validate_ohlcv(
 
     for i, row in enumerate(rows):
         # 1. 必要欄位檢查
-        for field in required_fields:
-            if field not in row:
-                report.issues.append(ValidationIssue(i, field, "error", f"缺少欄位 {field}"))
+        for req_field in required_fields:
+            if req_field not in row:
+                report.issues.append(ValidationIssue(i, req_field, "error", f"缺少欄位 {req_field}"))
 
         if "timestamp" not in row or "open" not in row:
             continue
@@ -139,9 +139,9 @@ def validate_ohlcv(
         vol = row.get("volume", 0)
 
         # 2. NaN / None 檢查
-        for field, val in [("open", o), ("high", h), ("low", l), ("close", c)]:
+        for fld, val in [("open", o), ("high", h), ("low", l), ("close", c)]:
             if val is None or (isinstance(val, float) and math.isnan(val)):
-                report.issues.append(ValidationIssue(i, field, "error", f"{field} 為 NaN/None", val))
+                report.issues.append(ValidationIssue(i, fld, "error", f"{fld} 為 NaN/None", val))
 
         if not isinstance(o, (int, float)) or not isinstance(c, (int, float)):
             continue
@@ -157,9 +157,9 @@ def validate_ohlcv(
             report.issues.append(ValidationIssue(i, "low", "warning", f"low({l}) 高於 open({o}) 和 close({c})"))
 
         # 4. 負值檢查
-        for field, val in [("open", o), ("high", h), ("low", l), ("close", c)]:
+        for fld, val in [("open", o), ("high", h), ("low", l), ("close", c)]:
             if val < 0:
-                report.issues.append(ValidationIssue(i, field, "error", f"{field} 為負值: {val}"))
+                report.issues.append(ValidationIssue(i, fld, "error", f"{fld} 為負值: {val}"))
 
         # 5. 成交量檢查
         if check_volume and vol is not None:
@@ -178,11 +178,15 @@ def validate_ohlcv(
             if prev_close and prev_close > 0 and o > 0:
                 gap_pct = abs(o - prev_close) / prev_close
                 if gap_pct > outlier_threshold:
-                    report.issues.append(ValidationIssue(
-                        i, "gap", "warning",
-                        f"異常跳空: {gap_pct*100:.1f}% (前收 {prev_close} → 開 {o})",
-                        gap_pct,
-                    ))
+                    report.issues.append(
+                        ValidationIssue(
+                            i,
+                            "gap",
+                            "warning",
+                            f"異常跳空: {gap_pct * 100:.1f}% (前收 {prev_close} → 開 {o})",
+                            gap_pct,
+                        )
+                    )
 
         # 8. 零價格
         if o == 0 and h == 0 and l == 0 and c == 0:

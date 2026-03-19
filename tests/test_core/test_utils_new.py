@@ -10,6 +10,7 @@ import time
 # Decorators
 # ════════════════════════════════════════════════════════════
 
+
 class TestRetry:
     def test_retry_succeeds_on_second_attempt(self):
         from src.utils.decorators import retry
@@ -36,7 +37,7 @@ class TestRetry:
 
         try:
             always_fail()
-            assert False, "Should have raised"
+            raise AssertionError("Should have raised")
         except RuntimeError:
             pass
 
@@ -84,6 +85,7 @@ class TestSuppressErrors:
 # Risk Analyzer
 # ════════════════════════════════════════════════════════════
 
+
 class TestRiskAnalyzer:
     def test_basic_metrics(self):
         from src.utils.risk import RiskAnalyzer
@@ -127,6 +129,7 @@ class TestRiskAnalyzer:
 # Config Validator
 # ════════════════════════════════════════════════════════════
 
+
 class TestConfigValidator:
     def test_validate_config_returns_report(self):
         from src.utils.config_validator import validate_config
@@ -141,11 +144,13 @@ class TestConfigValidator:
         report = ConfigReport()
         report.checks_total = 5
         report.checks_passed = 3
-        report.issues.append(ConfigIssue(
-            field="TEST",
-            severity="warning",
-            message="test warning",
-        ))
+        report.issues.append(
+            ConfigIssue(
+                field="TEST",
+                severity="warning",
+                message="test warning",
+            )
+        )
 
         assert report.error_count == 0
         assert report.warning_count == 1

@@ -17,7 +17,8 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
@@ -192,7 +193,7 @@ class MiddlewarePipeline:
                 if not recovered and ctx.get("_retry_needed") and attempt < max_attempts - 1:
                     # 指數退避後重試
                     if retry_mw:
-                        delay = retry_mw._delay * (retry_mw._backoff ** attempt)
+                        delay = retry_mw._delay * (retry_mw._backoff**attempt)
                         time.sleep(delay)
                     continue
 

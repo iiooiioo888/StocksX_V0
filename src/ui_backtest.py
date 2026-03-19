@@ -47,17 +47,29 @@ def run_all_strategies(
         # 單策略模式
         for strat, params in custom_params.items():
             result = run_single_strategy_new(
-                rows, strat, params, since_ms, until_ms,
-                initial_equity=initial_equity, leverage=leverage,
-                take_profit_pct=take_profit_pct, stop_loss_pct=stop_loss_pct,
-                fee_rate=fee_rate, slippage=slippage,
+                rows,
+                strat,
+                params,
+                since_ms,
+                until_ms,
+                initial_equity=initial_equity,
+                leverage=leverage,
+                take_profit_pct=take_profit_pct,
+                stop_loss_pct=stop_loss_pct,
+                fee_rate=fee_rate,
+                slippage=slippage,
             )
             return {strat: result}
     return run_all_strategies_new(
-        rows, since_ms, until_ms,
-        initial_equity=initial_equity, leverage=leverage,
-        take_profit_pct=take_profit_pct, stop_loss_pct=stop_loss_pct,
-        fee_rate=fee_rate, slippage=slippage,
+        rows,
+        since_ms,
+        until_ms,
+        initial_equity=initial_equity,
+        leverage=leverage,
+        take_profit_pct=take_profit_pct,
+        stop_loss_pct=stop_loss_pct,
+        fee_rate=fee_rate,
+        slippage=slippage,
     )
 
 

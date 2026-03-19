@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 # Settings 統一由 src.core.config 提供，這裡做導出保持向後兼容
-from src.core.config import Settings, get_settings
 
 STRATEGY_LABELS = {
     "sma_cross": "雙均線交叉",
@@ -42,20 +41,43 @@ STRATEGY_COLORS = {
 
 CRYPTO_CATEGORIES = {
     "🔥 主流永續": [
-        "BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT",
-        "SOL/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT",
-        "ADA/USDT:USDT", "AVAX/USDT:USDT", "LINK/USDT:USDT",
-        "DOT/USDT:USDT", "LTC/USDT:USDT",
+        "BTC/USDT:USDT",
+        "ETH/USDT:USDT",
+        "BNB/USDT:USDT",
+        "SOL/USDT:USDT",
+        "XRP/USDT:USDT",
+        "DOGE/USDT:USDT",
+        "ADA/USDT:USDT",
+        "AVAX/USDT:USDT",
+        "LINK/USDT:USDT",
+        "DOT/USDT:USDT",
+        "LTC/USDT:USDT",
     ],
     "💎 主流現貨": [
-        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT",
-        "XRP/USDT", "DOGE/USDT", "ADA/USDT", "AVAX/USDT",
-        "LINK/USDT", "DOT/USDT", "LTC/USDT",
+        "BTC/USDT",
+        "ETH/USDT",
+        "BNB/USDT",
+        "SOL/USDT",
+        "XRP/USDT",
+        "DOGE/USDT",
+        "ADA/USDT",
+        "AVAX/USDT",
+        "LINK/USDT",
+        "DOT/USDT",
+        "LTC/USDT",
     ],
     "🌐 DeFi": ["UNI/USDT", "AAVE/USDT", "LINK/USDT", "ATOM/USDT", "INJ/USDT"],
     "🚀 Layer2 / 新幣": [
-        "ARB/USDT", "OP/USDT", "SUI/USDT", "SEI/USDT", "TIA/USDT",
-        "APT/USDT", "NEAR/USDT", "WLD/USDT", "JUP/USDT", "STRK/USDT",
+        "ARB/USDT",
+        "OP/USDT",
+        "SUI/USDT",
+        "SEI/USDT",
+        "TIA/USDT",
+        "APT/USDT",
+        "NEAR/USDT",
+        "WLD/USDT",
+        "JUP/USDT",
+        "STRK/USDT",
     ],
     "🐸 Meme": ["DOGE/USDT", "SHIB/USDT", "PEPE/USDT", "BONK/USDT", "WIF/USDT", "FLOKI/USDT"],
 }

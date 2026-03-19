@@ -190,6 +190,7 @@ class TestGetSignalBus:
     def test_singleton(self):
         """應返回同一實例."""
         import src.core.signals as sig_mod
+
         sig_mod._global_bus = None
         b1 = get_signal_bus()
         b2 = get_signal_bus()

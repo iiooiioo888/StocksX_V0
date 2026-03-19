@@ -19,7 +19,8 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def retry(
         backoff: 退避係數
         on_retry: 重試時的回調
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -68,12 +70,15 @@ def retry(
                         time.sleep(current_delay)
                         current_delay *= backoff
             raise last_exc  # type: ignore[misc]
+
         return functools.update_wrapper(wrapper, func)  # type: ignore[return-value]
+
     return decorator
 
 
 def timed(func: F) -> F:
     """計時裝飾器 — 記錄函數執行時間."""
+
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         start = time.perf_counter()
@@ -89,9 +94,15 @@ def timed(func: F) -> F:
             elapsed = time.perf_counter() - start
             logger.warning(
                 "function_timing",
-                extra={"function": func.__name__, "elapsed_ms": round(elapsed * 1000, 2), "status": "error", "error": str(e)},
+                extra={
+                    "function": func.__name__,
+                    "elapsed_ms": round(elapsed * 1000, 2),
+                    "status": "error",
+                    "error": str(e),
+                },
             )
             raise
+
     return functools.update_wrapper(wrapper, func)  # type: ignore[return-value]
 
 
@@ -131,6 +142,7 @@ def cached(ttl: float = 300, maxsize: int = 128) -> Callable[[F], F]:
 
         wrapper.cache_clear = cache_clear  # type: ignore[attr-defined]
         return functools.update_wrapper(wrapper, func)  # type: ignore[return-value]
+
     return decorator
 
 
@@ -164,7 +176,9 @@ def rate_limit(max_calls: int = 10, period: float = 60.0) -> Callable[[F], F]:
 
             calls.append(now)
             return func(*args, **kwargs)
+
         return functools.update_wrapper(wrapper, func)  # type: ignore[return-value]
+
     return decorator
 
 
@@ -176,6 +190,7 @@ def suppress_errors(default: Any = None, log: bool = True) -> Callable[[F], F]:
         default: 異常時返回的預設值
         log: 是否記錄異常
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -188,5 +203,7 @@ def suppress_errors(default: Any = None, log: bool = True) -> Callable[[F], F]:
                         extra={"function": func.__name__, "error": str(e)},
                     )
                 return default
+
         return functools.update_wrapper(wrapper, func)  # type: ignore[return-value]
+
     return decorator

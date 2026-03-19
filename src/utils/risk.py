@@ -178,7 +178,7 @@ class RiskAnalyzer:
             if equity > peak:
                 peak = equity
             dd_pct = ((peak - equity) / peak) * 100 if peak else 0
-            dd_squares.append(dd_pct ** 2)
+            dd_squares.append(dd_pct**2)
         return math.sqrt(sum(dd_squares) / len(dd_squares)) if dd_squares else 0.0
 
     @property

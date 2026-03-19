@@ -33,11 +33,28 @@ class JSONFormatter(logging.Formatter):
         # 附加 extra 欄位
         for key, value in record.__dict__.items():
             if key not in (
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "thread", "threadName", "exc_info", "exc_text", "stack_info",
-                "message", "timestamp",
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "message",
+                "timestamp",
             ):
                 log_entry[key] = value
 
@@ -56,10 +73,10 @@ class ConsoleFormatter(logging.Formatter):
     """彩色控制台輸出 — 開發環境使用."""
 
     COLORS = {
-        "DEBUG": "\033[36m",     # cyan
-        "INFO": "\033[32m",      # green
-        "WARNING": "\033[33m",   # yellow
-        "ERROR": "\033[31m",     # red
+        "DEBUG": "\033[36m",  # cyan
+        "INFO": "\033[32m",  # green
+        "WARNING": "\033[33m",  # yellow
+        "ERROR": "\033[31m",  # red
         "CRITICAL": "\033[35m",  # magenta
     }
     RESET = "\033[0m"

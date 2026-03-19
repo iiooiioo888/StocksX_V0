@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # 嘗試導入結構化日誌
 try:
     from src.utils.logging_config import get_logger, setup_logging
+
     setup_logging()
     logger = get_logger(__name__)
 except ImportError:
@@ -58,6 +59,7 @@ app.add_middleware(
 # ════════════════════════════════════════════════════════════
 # 連接管理器（支持心跳）
 # ════════════════════════════════════════════════════════════
+
 
 class ConnectionManager:
     """WebSocket 連接管理器 — 支持心跳保活、連接統計."""
@@ -231,6 +233,7 @@ async def fetch_price(symbol: str) -> dict[str, Any] | None:
 # 後台任務
 # ════════════════════════════════════════════════════════════
 
+
 async def price_push_loop() -> None:
     """價格推送主循環."""
     default_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
@@ -276,12 +279,15 @@ async def heartbeat_loop() -> None:
 async def startup() -> None:
     asyncio.create_task(price_push_loop())
     asyncio.create_task(heartbeat_loop())
-    logger.info("ws_service_started", extra={"heartbeat_interval": HEARTBEAT_INTERVAL, "price_interval": PRICE_INTERVAL})
+    logger.info(
+        "ws_service_started", extra={"heartbeat_interval": HEARTBEAT_INTERVAL, "price_interval": PRICE_INTERVAL}
+    )
 
 
 # ════════════════════════════════════════════════════════════
 # JWT 驗證
 # ════════════════════════════════════════════════════════════
+
 
 def verify_token(token: str) -> dict | None:
     try:
@@ -293,6 +299,7 @@ def verify_token(token: str) -> dict | None:
 # ════════════════════════════════════════════════════════════
 # WebSocket 端點
 # ════════════════════════════════════════════════════════════
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(
@@ -335,13 +342,15 @@ async def websocket_endpoint(
     await manager.connect(websocket, user_id, symbol)
 
     # 歡迎消息
-    await websocket.send_json({
-        "type": "connected",
-        "message": "WebSocket 已連接",
-        "heartbeat_interval": HEARTBEAT_INTERVAL,
-        "protocol_version": "2.0",
-        "timestamp": int(time.time() * 1000),
-    })
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "message": "WebSocket 已連接",
+            "heartbeat_interval": HEARTBEAT_INTERVAL,
+            "protocol_version": "2.0",
+            "timestamp": int(time.time() * 1000),
+        }
+    )
 
     subscribed: set[str] = set()
 
@@ -399,6 +408,7 @@ async def websocket_endpoint(
 # REST 端點
 # ════════════════════════════════════════════════════════════
 
+
 @app.get("/health")
 async def health() -> dict:
     """輕量健康檢查."""
@@ -431,4 +441,5 @@ async def subscriptions(user_id: int) -> dict:
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8001)

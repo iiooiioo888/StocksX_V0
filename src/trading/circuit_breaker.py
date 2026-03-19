@@ -37,9 +37,9 @@ logger = logging.getLogger(__name__)
 class BreakerState(Enum):
     """熔斷器狀態."""
 
-    CLOSED = auto()    # 正常運行
-    OPEN = auto()      # 熔斷中（禁止交易）
-    HALF_OPEN = auto() # 冷卻後試探
+    CLOSED = auto()  # 正常運行
+    OPEN = auto()  # 熔斷中（禁止交易）
+    HALF_OPEN = auto()  # 冷卻後試探
 
 
 @dataclass(slots=True)
@@ -212,7 +212,7 @@ class CircuitBreaker:
 
         # 4. 異常率
         if len(self._all_trades) >= cfg.error_window:
-            recent = self._all_trades[-cfg.error_window:]
+            recent = self._all_trades[-cfg.error_window :]
             errors = sum(1 for t in recent if t.is_error)
             error_rate = errors / len(recent)
             if error_rate > cfg.max_error_rate:

@@ -22,7 +22,6 @@ from typing import Any
 from .adapters import CompositeProvider
 from .backtest import BacktestConfig, BacktestEngine, BacktestReport
 from .config import Settings, get_settings
-from .pipeline import ohlcv_clean_pipeline
 from .provider import CacheBackend, MarketProvider, OrderBook, Ticker, make_cache
 from .registry import registry
 from .signals import Direction, Signal, get_signal_bus
@@ -217,9 +216,13 @@ class Orchestrator:
         results: dict[str, BacktestReport] = {}
         for strat in strategies:
             results[strat] = self.run_backtest(
-                symbol, timeframe, strat,
-                since_ms=since_ms, until_ms=until_ms,
-                config=config, **strategy_params,
+                symbol,
+                timeframe,
+                strat,
+                since_ms=since_ms,
+                until_ms=until_ms,
+                config=config,
+                **strategy_params,
             )
         return results
 

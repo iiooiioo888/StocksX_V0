@@ -57,6 +57,10 @@ __all__ = [
     "check_disk_usage",
     "check_memory",
     "get_system_health",
+    # Logging
+    "get_logger",
+    "setup_logging",
+    "JSONFormatter",
     # Decorators
     "retry",
     "timed",

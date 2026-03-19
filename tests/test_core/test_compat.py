@@ -45,9 +45,14 @@ class TestReportToResult:
         from src.core.backtest import TradeRecord
 
         trade = TradeRecord(
-            entry_ts=1000, exit_ts=2000, side=1,
-            entry_price=100, exit_price=110,
-            pnl_pct=10.0, profit=1000, fee=10,
+            entry_ts=1000,
+            exit_ts=2000,
+            side=1,
+            entry_price=100,
+            exit_price=110,
+            pnl_pct=10.0,
+            profit=1000,
+            fee=10,
         )
         report = BacktestReport(
             equity_curve=[{"timestamp": 1000, "equity": 11000}],

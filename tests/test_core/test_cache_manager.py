@@ -108,7 +108,7 @@ class TestCacheNamespace:
     def test_stats_tracking(self, ns):
         """統計數據應正確追蹤."""
         ns.set("k", "v")
-        ns.get("k")       # hit
+        ns.get("k")  # hit
         ns.get("missing")  # miss
         ns.delete("k")
         assert ns.stats.hits == 1
@@ -183,6 +183,7 @@ class TestGetCacheManager:
     def test_singleton(self):
         """應返回同一實例."""
         import src.core.cache_manager as cm_mod
+
         cm_mod._cache_manager = None
         cm1 = get_cache_manager()
         cm2 = get_cache_manager()

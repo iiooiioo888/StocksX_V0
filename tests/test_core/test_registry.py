@@ -168,6 +168,7 @@ class TestRegisterStrategyDecorator:
             def decorator(func):
                 local_reg.register(func=func, name=name, label=label, category=category, **kw)
                 return func
+
             return decorator
 
         @decorator_factory(name="test_dec", label="Test", category="trend")
@@ -184,6 +185,7 @@ class TestRegisterStrategyDecorator:
             def decorator(func):
                 local_reg.register(func=func, name=name, label=label, category=category)
                 return func
+
             return decorator
 
         @decorator_factory(name="passthrough", label="PT", category="trend")
