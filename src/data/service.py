@@ -1,4 +1,4 @@
-# 數據服務層 - 整合真實數據源
+# 數據服務層 - 整合真實數據源（延遲初始化）
 from __future__ import annotations
 
 import logging
@@ -25,32 +25,38 @@ except ImportError:
 
 
 class DataService:
-    """數據服務類 - 整合所有真實數據源"""
+    """數據服務類 - 整合所有真實數據源（延遲初始化）"""
 
-    def __init__(self):
-        # 初始化交易所
-        if CCXT_AVAILABLE:
-            self.binance = ccxt.binance(
-                {
-                    "options": {"defaultType": "spot"},
-                    "timeout": 10000,
-                }
-            )
-            self.binance_futures = ccxt.binance(
-                {
-                    "options": {"defaultType": "future"},
-                    "timeout": 10000,
-                }
-            )
-        else:
-            self.binance = None
-            self.binance_futures = None
-
+    def __init__(self) -> None:
+        self._binance = None
+        self._binance_futures = None
         # 緩存
         self.price_cache: dict[str, dict] = {}
         self.kline_cache: dict[str, pd.DataFrame] = {}
         self.depth_cache: dict[str, dict] = {}
         self.last_update: dict[str, float] = {}
+
+    @property
+    def binance(self):
+        if self._binance is None and CCXT_AVAILABLE:
+            self._binance = ccxt.binance(
+                {
+                    "options": {"defaultType": "spot"},
+                    "timeout": 10000,
+                }
+            )
+        return self._binance
+
+    @property
+    def binance_futures(self):
+        if self._binance_futures is None and CCXT_AVAILABLE:
+            self._binance_futures = ccxt.binance(
+                {
+                    "options": {"defaultType": "future"},
+                    "timeout": 10000,
+                }
+            )
+        return self._binance_futures
 
     # ════════════════════════════════════════════════════════════
     # 價格數據
@@ -201,16 +207,15 @@ class DataService:
             return None
 
     def get_whale_transactions(self, symbol: str, limit: int = 24) -> pd.DataFrame | None:
-        """取得巨鯨交易數據（模擬真實數據）"""
+        """取得巨鯨交易數據（⚠️ 模擬數據，僅供演示）"""
         try:
             import random
             from datetime import datetime, timedelta
 
-            # 生成 24 小時數據
+            # ⚠️ 此為模擬數據，真實場景請接入 Whale Alert / Arkham 等 API
             now = datetime.now()
             timestamps = [now - timedelta(hours=i) for i in range(limit)]
 
-            # 真實範圍的隨機數據
             if "BTC" in symbol:
                 whale_buy = [random.uniform(50, 500) for _ in range(limit)]
                 whale_sell = [random.uniform(50, 500) for _ in range(limit)]
@@ -354,5 +359,24 @@ class DataService:
             return None
 
 
-# 全域數據服務實例
-data_service = DataService()
+# 延遲初始化：首次呼叫時才建立實例
+_data_service_instance: DataService | None = None
+
+
+def get_data_service() -> DataService:
+    """取得數據服務實例（延遲初始化）."""
+    global _data_service_instance
+    if _data_service_instance is None:
+        _data_service_instance = DataService()
+    return _data_service_instance
+
+
+# 向後兼容：data_service 屬性代理
+class _LazyDataService:
+    """屬性代理，延遲初始化 DataService，保持舊程式碼兼容。"""
+
+    def __getattr__(self, name: str):
+        return getattr(get_data_service(), name)
+
+
+data_service = _LazyDataService()

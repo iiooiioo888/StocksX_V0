@@ -38,9 +38,9 @@ COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # 複製應用程式碼
-COPY --chown=appuser:appuser . .
+COPY . .
 
-# 建立日誌和資料目錄
+# 建立日誌和資料目錄（以 root 身份建立目錄）
 RUN mkdir -p /app/logs /app/data /app/cache \
     && chown -R appuser:appuser /app
 

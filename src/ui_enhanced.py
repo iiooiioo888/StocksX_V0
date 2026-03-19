@@ -309,7 +309,6 @@ def render_strategy_comparison(results: dict[str, Any]):
         strategies.append(strategy_name)
         metrics = result.metrics
 
-        strategies.append(strategy_name)
         sharpe_ratios.append(metrics.get("sharpe", 0))
         returns.append(metrics.get("total_return_pct", 0))
         max_drawdowns.append(abs(metrics.get("max_drawdown_pct", 0)))
