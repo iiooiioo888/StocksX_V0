@@ -1,6 +1,10 @@
 # 共用配置 — 策略標籤、顏色、市場分類
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
 STRATEGY_LABELS = {
     "sma_cross": "雙均線交叉",
     "buy_and_hold": "買入持有",
@@ -39,129 +43,85 @@ STRATEGY_COLORS = {
 
 CRYPTO_CATEGORIES = {
     "🔥 主流永續": [
-        "BTC/USDT:USDT",
-        "ETH/USDT:USDT",
-        "BNB/USDT:USDT",
-        "SOL/USDT:USDT",
-        "XRP/USDT:USDT",
-        "DOGE/USDT:USDT",
-        "ADA/USDT:USDT",
-        "AVAX/USDT:USDT",
-        "LINK/USDT:USDT",
-        "DOT/USDT:USDT",
-        "LTC/USDT:USDT",
+        "BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT",
+        "SOL/USDT:USDT", "XRP/USDT:USDT", "DOGE/USDT:USDT",
+        "ADA/USDT:USDT", "AVAX/USDT:USDT", "LINK/USDT:USDT",
+        "DOT/USDT:USDT", "LTC/USDT:USDT",
     ],
     "💎 主流現貨": [
-        "BTC/USDT",
-        "ETH/USDT",
-        "BNB/USDT",
-        "SOL/USDT",
-        "XRP/USDT",
-        "DOGE/USDT",
-        "ADA/USDT",
-        "AVAX/USDT",
-        "LINK/USDT",
-        "DOT/USDT",
-        "LTC/USDT",
+        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT",
+        "XRP/USDT", "DOGE/USDT", "ADA/USDT", "AVAX/USDT",
+        "LINK/USDT", "DOT/USDT", "LTC/USDT",
     ],
     "🌐 DeFi": ["UNI/USDT", "AAVE/USDT", "LINK/USDT", "ATOM/USDT", "INJ/USDT"],
     "🚀 Layer2 / 新幣": [
-        "ARB/USDT",
-        "OP/USDT",
-        "SUI/USDT",
-        "SEI/USDT",
-        "TIA/USDT",
-        "APT/USDT",
-        "NEAR/USDT",
-        "WLD/USDT",
-        "JUP/USDT",
-        "STRK/USDT",
+        "ARB/USDT", "OP/USDT", "SUI/USDT", "SEI/USDT", "TIA/USDT",
+        "APT/USDT", "NEAR/USDT", "WLD/USDT", "JUP/USDT", "STRK/USDT",
     ],
     "🐸 Meme": ["DOGE/USDT", "SHIB/USDT", "PEPE/USDT", "BONK/USDT", "WIF/USDT", "FLOKI/USDT"],
 }
 
+EXCHANGE_OPTIONS = ["binance", "okx", "bybit", "gate", "bitget", "huobi", "kucoin", "mexc"]
+
 TRADITIONAL_CATEGORIES = {
-    "📈 美股": [
-        "AAPL",
-        "MSFT",
-        "GOOGL",
-        "AMZN",
-        "NVDA",
-        "META",
-        "TSLA",
-        "AMD",
-        "INTC",
-        "NFLX",
-        "CRM",
-        "ORCL",
-        "ADBE",
-        "PYPL",
-        "COIN",
-        "MSTR",
-        "PLTR",
-        "UBER",
-    ],
-    "🇹🇼 台股": [
-        "2330.TW",
-        "2317.TW",
-        "2454.TW",
-        "2308.TW",
-        "2881.TW",
-        "2882.TW",
-        "2303.TW",
-        "3711.TW",
-        "2412.TW",
-        "1301.TW",
-    ],
-    "🏦 ETF": [
-        "SPY",
-        "QQQ",
-        "IWM",
-        "DIA",
-        "VTI",
-        "GLD",
-        "SLV",
-        "USO",
-        "TLT",
-        "HYG",
-        "ARKK",
-        "SOXX",
-        "XLF",
-        "XLE",
-        "XLK",
-        "0050.TW",
-        "00878.TW",
-        "00919.TW",
-    ],
-    "🛢️ 期貨 / 商品": ["GC=F", "SI=F", "CL=F", "NG=F", "ES=F", "NQ=F", "YM=F", "RTY=F"],
-    "🌍 指數": ["^GSPC", "^DJI", "^IXIC", "^RUT", "^FTSE", "^GDAXI", "^N225", "^HSI", "^TWII"],
+    "🇺🇸 美股": ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "SPY", "QQQ"],
+    "🇹🇼 台股": ["2330.TW", "2317.TW", "2454.TW", "2308.TW", "0050.TW", "0056.TW"],
+    "📈 ETF": ["SPY", "QQQ", "IWM", "EFA", "VWO", "TLT", "GLD", "SLV"],
 }
 
-EXCHANGE_OPTIONS = {
-    "okx": "OKX",
-    "bitget": "Bitget",
-    "gate": "Gate.io",
-    "kucoin": "KuCoin（僅現貨）",
-    "mexc": "MEXC",
-    "htx": "HTX (火幣)",
-    "bingx": "BingX",
-    "woo": "WOO X",
-    "binance": "Binance（受地區限制）",
-    "bybit": "Bybit（受地區限制）",
-    "cryptocom": "Crypto.com（僅現貨）",
-}
+# ─── Settings ───
+
+@dataclass
+class Settings:
+    """應用配置（從環境變數讀取）"""
+    db_path: str = field(default_factory=lambda: os.getenv("STOCKSX_DB_PATH", "data/stocksx.db"))
+    redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+    secret_key: str = field(default_factory=lambda: os.getenv("SECRET_KEY", "change-me-in-production"))
+    admin_password: str = field(default_factory=lambda: os.getenv("ADMIN_PASSWORD", "admin123"))
+    log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
+    log_dir: str = field(default_factory=lambda: os.getenv("LOG_DIR", "logs"))
+    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
+    default_exchange: str = field(default_factory=lambda: os.getenv("DEFAULT_EXCHANGE", "binance"))
+    default_timeframe: str = field(default_factory=lambda: os.getenv("DEFAULT_TIMEFRAME", "1h"))
 
 
-def format_price(price: float, symbol: str = "") -> str:
-    """智能價格格式化"""
-    if price >= 10000:
-        return f"${price:,.0f}"
+_settings: Settings | None = None
+
+
+def get_settings() -> Settings:
+    """取得全域設定（單例）"""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+def format_price(price: float, decimals: int = 2) -> str:
+    """格式化價格顯示"""
+    if price >= 1000:
+        return f"{price:,.{decimals}f}"
     elif price >= 1:
-        return f"${price:,.2f}"
-    elif price >= 0.01:
-        return f"${price:.4f}"
+        return f"{price:.{decimals}f}"
     else:
-        return f"${price:.8f}"
+        return f"{price:.{max(decimals, 4)}f}"
 
 
-from src.static.css import APP_CSS
+# ─── CSS ───
+
+APP_CSS = """
+<style>
+/* ─── 全局 ─── */
+.stApp { background: #0e1117; color: #e0e0e0; }
+.stSidebar { background: #161b22; }
+[data-testid="stMetricValue"] { color: #58a6ff; }
+.stButton > button {
+    background: linear-gradient(135deg, #238636, #2ea043);
+    color: #fff; border: none; border-radius: 8px; padding: 0.5rem 1.2rem;
+}
+.stButton > button:hover { background: linear-gradient(135deg, #2ea043, #3fb950); }
+.stSelectbox > div > div { background: #161b22; border-color: #30363d; }
+.stTextInput > div > div > input { background: #161b22; border-color: #30363d; color: #e0e0e0; }
+.stTabs [data-baseweb="tab"] { color: #8b949e; }
+.stTabs [aria-selected="true"] { color: #58a6ff; border-bottom-color: #58a6ff; }
+</style>
+"""
