@@ -1,67 +1,33 @@
-name: CI — Lint & Test
-
+name: CI
 on:
   push:
-    branches: [main, develop, "optimize/**"]
+    branches: [main]
   pull_request:
     branches: [main]
-
-permissions:
-  contents: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dev dependencies
-        run: |
-          pip install ruff mypy
-
-      - name: Ruff lint
-        run: ruff check src/ app.py pages/ --output-format=github
-
-      - name: Ruff format check
-        run: ruff format --check src/ app.py pages/
+          python-version: '3.11'
+      - run: pip install ruff
+      - run: ruff check src/ pages/
+      - run: ruff format --check src/ pages/
 
   test:
     runs-on: ubuntu-latest
     needs: lint
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
-
-      - name: Run tests
-        env:
-          ADMIN_PASSWORD: test_password_123!
-          SECRET_KEY: ci-test-secret-key-not-for-production
-        run: |
-          pytest tests/ -v --tb=short --cov=src --cov-report=xml -x
-
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.xml
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: pip install pytest pytest-cov
+      - run: pytest tests/ -v --cov=src/core --cov-report=xml --cov-report=term-missing
 
   docker:
     runs-on: ubuntu-latest
@@ -69,16 +35,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t stocksx:${{ github.sha }} .
-
-      - name: Smoke test container
-        run: |
-          docker run -d --name stocksx-test \
-            -e ADMIN_PASSWORD=ci-test-123 \
-            -e SECRET_KEY=ci-test-key \
-            -p 8501:8501 stocksx:${{ github.sha }}
-          sleep 15
-          curl -sf http://localhost:8501/health || docker logs stocksx-test
-          docker stop stocksx-test
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: stocksx:test

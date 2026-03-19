@@ -1,5 +1,5 @@
-# 加密貨幣回測（增強版 v4.0）
-# 新增：策略參數管理、參數預設、快捷設定
+# 加密貨幣回測（v4.2 — 新架構 Orchestrator）
+# 使用 src.core 做數據拉取 + 回測，保留 UI 渲染
 
 import time as _time_mod
 from datetime import datetime, timezone
@@ -8,17 +8,16 @@ import streamlit as st
 
 from src.auth import UserDB
 from src.backtest.fees import get_fee_rate, get_slippage
+from src.compat import run_all_strategies_new, run_single_strategy_new
 from src.config import CRYPTO_CATEGORIES, EXCHANGE_OPTIONS, STRATEGY_LABELS
-from src.data.crypto import CryptoDataFetcher
+from src.core import get_orchestrator
 from src.data.integrity import validate_ohlcv
 from src.ui_backtest import (
-    ALL_STRATEGIES,
     render_equity_curves,
     render_kline_chart,
     render_performance_table,
     render_summary_line,
     render_trade_details,
-    run_all_strategies,
 )
 from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
 from src.ui_strategy_params import (
@@ -115,8 +114,10 @@ if run_btn and since_ms < until_ms:
     _bar = st.progress(0, text="連接交易所…")
     try:
         _bar.progress(20, text="拉取 K 線…")
-        fetcher = CryptoDataFetcher(exchange_id or "okx")
-        rows = fetcher.get_ohlcv(symbol or "BTC/USDT:USDT", timeframe, since_ms, until_ms, fill_gaps=True)
+        # ✅ 新架構：使用 Orchestrator 統一數據入口
+        orch = get_orchestrator()
+        rows = orch.fetch_ohlcv(symbol or "BTC/USDT:USDT", timeframe, since=since_ms, limit=5000)
+        rows = [r for r in rows if since_ms <= r["timestamp"] <= until_ms]
         _issues = validate_ohlcv(rows) if rows else ["無數據"]
         for _i in _issues:
             st.warning(f"⚠️ {_i}")
@@ -126,41 +127,26 @@ if run_btn and since_ms < until_ms:
 
     if rows:
         if mode == "全部策略":
-            # 執行所有策略
-            _bar.progress(40, text=f"回測 {len(ALL_STRATEGIES)} 策略…")
-            results = run_all_strategies(
-                rows,
-                exchange_id,
-                symbol,
-                timeframe,
-                since_ms,
-                until_ms,
-                initial_equity,
-                leverage,
-                None,
-                None,
-                user_fee,
-                user_slip,
+            # ✅ 新架構：使用 compat 層的 run_all_strategies_new
+            _bar.progress(40, text="回測所有策略…")
+            results = run_all_strategies_new(
+                rows, since_ms, until_ms,
+                initial_equity=initial_equity,
+                leverage=leverage,
+                fee_rate=user_fee,
+                slippage=user_slip,
             )
         else:
-            # 執行單一策略（自訂參數）
+            # ✅ 新架構：單一策略也走 compat 層
             if selected_strategy and custom_params:
                 _bar.progress(40, text=f"回測策略：{STRATEGY_LABELS.get(selected_strategy, selected_strategy)}…")
-                from src.backtest.engine import run_backtest as run_single_backtest
-
-                result = run_single_backtest(
-                    rows,
-                    exchange_id,
-                    symbol,
-                    timeframe,
-                    since_ms,
-                    until_ms,
-                    initial_equity,
-                    leverage,
-                    selected_strategy,
-                    custom_params,
-                    user_fee,
-                    user_slip,
+                result = run_single_strategy_new(
+                    rows, selected_strategy, custom_params,
+                    since_ms, until_ms,
+                    initial_equity=initial_equity,
+                    leverage=leverage,
+                    fee_rate=user_fee,
+                    slippage=user_slip,
                 )
                 results = {selected_strategy: result}
             else:

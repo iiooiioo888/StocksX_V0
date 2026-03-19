@@ -1,4 +1,4 @@
-# 傳統市場回測 — 股票 / ETF / 債券 / 期貨 / 指數
+# 傳統市場回測 — v4.2 新架構
 import time as _time_mod
 from datetime import datetime, timezone
 
@@ -6,16 +6,15 @@ import streamlit as st
 
 from src.auth import UserDB
 from src.backtest.fees import get_fee_rate, get_slippage
+from src.compat import run_all_strategies_new
+from src.core import get_orchestrator
 from src.data.integrity import validate_ohlcv
-from src.data.traditional import TraditionalDataFetcher
 from src.ui_backtest import (
-    ALL_STRATEGIES,
     render_equity_curves,
     render_kline_chart,
     render_performance_table,
     render_summary_line,
     render_trade_details,
-    run_all_strategies,
 )
 from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
 
@@ -145,8 +144,10 @@ if run_btn and since_ms < until_ms:
     _bar = st.progress(0, text="連接 Yahoo Finance…")
     try:
         _bar.progress(20, text="拉取數據…")
-        fetcher = TraditionalDataFetcher()
-        rows = fetcher.get_ohlcv(symbol or "AAPL", timeframe, since_ms, until_ms, fill_gaps=True)
+        # ✅ 新架構：Orchestrator 自動路由到 YahooProvider
+        orch = get_orchestrator()
+        rows = orch.fetch_ohlcv(symbol or "AAPL", timeframe, since=since_ms, limit=5000)
+        rows = [r for r in rows if since_ms <= r["timestamp"] <= until_ms]
         _issues = validate_ohlcv(rows) if rows else ["無數據"]
         for _i in _issues:
             st.warning(f"⚠️ {_i}")
@@ -154,9 +155,14 @@ if run_btn and since_ms < until_ms:
         st.error(f"❌ {e}")
         rows = None
     if rows:
-        _bar.progress(40, text=f"回測 {len(ALL_STRATEGIES)} 策略…")
-        results = run_all_strategies(
-            rows, "yfinance", symbol, timeframe, since_ms, until_ms, initial_equity, 1, None, None, user_fee, user_slip
+        _bar.progress(40, text="回測所有策略…")
+        # ✅ 新架構：run_all_strategies_new
+        results = run_all_strategies_new(
+            rows, since_ms, until_ms,
+            initial_equity=initial_equity,
+            leverage=1.0,
+            fee_rate=user_fee,
+            slippage=user_slip,
         )
         _bar.progress(100, text="✅ 完成")
         _elapsed = _time_mod.time() - _t0

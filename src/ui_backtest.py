@@ -8,13 +8,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from src.backtest import BacktestResult
-from src.backtest import strategies as backtest_strategies
-from src.backtest.engine import _run_backtest_on_rows
+from src.compat import BacktestResult
 from src.chart_theme import apply_dark_theme
 from src.config import STRATEGY_COLORS, STRATEGY_LABELS
+from src.core.registry import registry
 
-ALL_STRATEGIES = list(backtest_strategies.STRATEGY_CONFIG.keys())
+ALL_STRATEGIES = registry.names or list(STRATEGY_LABELS.keys())
 
 # 專業配色
 _UP = "#26A69A"
@@ -24,6 +23,8 @@ _VOL_UP = "rgba(38,166,154,0.35)"
 _VOL_DOWN = "rgba(239,83,80,0.35)"
 
 
+# run_all_strategies 已遷移至 src.compat.run_all_strategies_new
+# 保留此處僅做向後兼容（舊頁面可繼續導入）
 def run_all_strategies(
     rows,
     exchange_id,
@@ -39,30 +40,25 @@ def run_all_strategies(
     slippage,
     custom_params=None,
 ):
-    """對所有策略執行回測"""
-    results = {}
-    for strategy in ALL_STRATEGIES:
-        params = (custom_params or {}).get(strategy) or (
-            backtest_strategies.STRATEGY_CONFIG.get(strategy, {}).get("defaults") or {}
-        ).copy()
-        res = _run_backtest_on_rows(
-            rows=rows,
-            exchange_id=exchange_id,
-            symbol=symbol,
-            timeframe=timeframe,
-            since_ms=since_ms,
-            until_ms=until_ms,
-            strategy=strategy,
-            strategy_params=params,
-            initial_equity=initial_equity,
-            leverage=leverage,
-            take_profit_pct=take_profit_pct or None,
-            stop_loss_pct=stop_loss_pct or None,
-            fee_rate=fee_rate,
-            slippage=slippage,
-        )
-        results[strategy] = res
-    return results
+    """向後兼容：內部調用新架構."""
+    from src.compat import run_all_strategies_new, run_single_strategy_new
+
+    if custom_params:
+        # 單策略模式
+        for strat, params in custom_params.items():
+            result = run_single_strategy_new(
+                rows, strat, params, since_ms, until_ms,
+                initial_equity=initial_equity, leverage=leverage,
+                take_profit_pct=take_profit_pct, stop_loss_pct=stop_loss_pct,
+                fee_rate=fee_rate, slippage=slippage,
+            )
+            return {strat: result}
+    return run_all_strategies_new(
+        rows, since_ms, until_ms,
+        initial_equity=initial_equity, leverage=leverage,
+        take_profit_pct=take_profit_pct, stop_loss_pct=stop_loss_pct,
+        fee_rate=fee_rate, slippage=slippage,
+    )
 
 
 def render_summary_line(results: dict[str, BacktestResult]):
