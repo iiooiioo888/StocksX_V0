@@ -1,130 +1,137 @@
-# Docker Compose 配置（生產環境）
 version: '3.8'
 
 services:
-  # Redis（任務隊列 + 快取）
+  # ════════════════════════════════════════════════════════════
+  # 主应用 - Streamlit
+  # ════════════════════════════════════════════════════════════
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stocksx-app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=sqlite:///app/data/stocksx.db
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+    networks:
+      - stocksx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ════════════════════════════════════════════════════════════
+  # WebSocket 服务
+  # ════════════════════════════════════════════════════════════
+  websocket:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stocksx-websocket
+    restart: unless-stopped
+    command: python -m src.websocket_binance
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - TZ=Asia/Shanghai
+    depends_on:
+      - redis
+    networks:
+      - stocksx-network
+
+  # ════════════════════════════════════════════════════════════
+  # Redis 缓存
+  # ════════════════════════════════════════════════════════════
   redis:
     image: redis:7-alpine
-    container_name: stocksx_redis
+    container_name: stocksx-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    networks:
+      - stocksx-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    networks:
-      - stocksx_network
+      retries: 3
 
-  # PostgreSQL（生產環境資料庫）
-  postgres:
-    image: postgres:15-alpine
-    container_name: stocksx_postgres
-    environment:
-      POSTGRES_DB: stocksx
-      POSTGRES_USER: stocksx
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stocksx_password}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stocksx"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - stocksx_network
-    profiles:
-      - production
-
-  # Streamlit 應用
-  web:
+  # ════════════════════════════════════════════════════════════
+  # Celery Worker (可选)
+  # ════════════════════════════════════════════════════════════
+  celery-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stocksx_web
-    ports:
-      - "8501:8501"
+    container_name: stocksx-celery
+    restart: unless-stopped
+    command: celery -A src.tasks worker --loglevel=info
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=sqlite:///cache/users.sqlite
-      # 生產環境使用 PostgreSQL
-      # - DATABASE_URL=postgresql://stocksx:${POSTGRES_PASSWORD}@postgres:5432/stocksx
-      - LOG_LEVEL=INFO
-      - APP_ENV=${APP_ENV:-development}
+      - REDIS_URL=redis://redis:6379
+      - TZ=Asia/Shanghai
+    depends_on:
+      - redis
+    networks:
+      - stocksx-network
     volumes:
-      - ./cache:/app/cache
       - ./logs:/app/logs
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - stocksx_network
-    restart: unless-stopped
 
-  # Celery Worker
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: stocksx_worker
-    command: celery -A src.tasks worker --loglevel=info -Q backtest,optimizer,notify
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=sqlite:///cache/users.sqlite
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./cache:/app/cache
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-    networks:
-      - stocksx_network
+  # ════════════════════════════════════════════════════════════
+  # 监控 - Prometheus (可选)
+  # ════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: stocksx-prometheus
     restart: unless-stopped
-
-  # Celery Beat（定時任務）
-  beat:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: stocksx_beat
-    command: celery -A src.tasks beat --loglevel=info
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - LOG_LEVEL=INFO
-    depends_on:
-      - redis
-    networks:
-      - stocksx_network
-    restart: unless-stopped
-
-  # Flower（Celery 監控，可選）
-  flower:
-    image: mher/flower:2.0
-    container_name: stocksx_flower
     ports:
-      - "5555:5555"
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    depends_on:
-      - redis
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
     networks:
-      - stocksx_network
+      - stocksx-network
+
+  # ════════════════════════════════════════════════════════════
+  # 监控 - Grafana (可选)
+  # ════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:latest
+    container_name: stocksx-grafana
     restart: unless-stopped
-    profiles:
-      - monitoring
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - stocksx-network
+
+networks:
+  stocksx-network:
+    driver: bridge
 
 volumes:
   redis_data:
-  postgres_data:
-
-networks:
-  stocksx_network:
-    driver: bridge
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'stocksx-app'
+    static_configs:
+      - targets: ['app:8501']
+    metrics_path: '/metrics'
+  
+  - job_name: 'stocksx-websocket'
+    static_configs:
+      - targets: ['websocket:8001']
+  
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']

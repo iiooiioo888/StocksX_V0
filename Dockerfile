@@ -1,38 +1,54 @@
-FROM python:3.12-slim
+# 多阶段构建 - 优化镜像大小
+
+# ════════════════════════════════════════════════════════════
+# 构建阶段
+# ════════════════════════════════════════════════════════════
+FROM python:3.10-slim as builder
 
 WORKDIR /app
 
-# 安裝系統依賴
+# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ \
-    curl \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# 複製並安裝 Python 依賴
+# 安装 Python 依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt
 
-# 複製應用程式
-COPY . .
+# ════════════════════════════════════════════════════════════
+# 运行阶段
+# ════════════════════════════════════════════════════════════
+FROM python:3.10-slim
 
-# 建立必要目錄
-RUN mkdir -p cache logs
+WORKDIR /app
 
-# 設定環境變數
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV LOG_DIR=/app/logs
-ENV DATABASE_URL=sqlite:///cache/users.sqlite
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1000 appuser
 
-# 健康檢查
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+# 从构建阶段复制依赖
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
 
-# 預設啟動 Streamlit（可在 docker-compose 中覆蓋）
-EXPOSE 8501
+# 复制应用代码
+COPY --chown=appuser:appuser . .
 
-ENTRYPOINT ["streamlit", "run", "app.py", \
-    "--server.port=8501", \
-    "--server.address=0.0.0.0", \
-    "--server.headless=true", \
-    "--browser.gatherUsageStats=false"]
+# 创建日志和数据目录
+RUN mkdir -p /app/logs /app/data && chown -R appuser:appuser /app
+
+# 切换到非 root 用户
+USER appuser
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8501/health || exit 1
+
+# 暴露端口
+EXPOSE 8501 8001
+
+# 默认启动命令
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
