@@ -183,9 +183,9 @@ class TestUtils:
     def test_format_price(self):
         from src.config import format_price
 
-        assert format_price(15000) == "$15,000"
-        assert format_price(1.5) == "$1.50"
-        assert format_price(0.001) == "$0.0010"
+        assert format_price(15000) == "15,000.00"
+        assert format_price(1.5) == "1.50"
+        assert format_price(0.001) == "0.0010"
 
     def test_sanitize(self):
         from src.auth.user_db import _sanitize

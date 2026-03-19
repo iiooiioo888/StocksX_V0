@@ -1,9 +1,8 @@
-# 共用配置 — 策略標籤、顏色、市場分類
+# 共用配置 — 策略標籤、顏色、市場分類（v5.1 統一化）
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
-from pathlib import Path
+# Settings 統一由 src.core.config 提供，這裡做導出保持向後兼容
+from src.core.config import Settings, get_settings
 
 STRATEGY_LABELS = {
     "sma_cross": "雙均線交叉",
@@ -69,31 +68,7 @@ TRADITIONAL_CATEGORIES = {
     "📈 ETF": ["SPY", "QQQ", "IWM", "EFA", "VWO", "TLT", "GLD", "SLV"],
 }
 
-# ─── Settings ───
-
-@dataclass
-class Settings:
-    """應用配置（從環境變數讀取）"""
-    db_path: str = field(default_factory=lambda: os.getenv("STOCKSX_DB_PATH", "data/stocksx.db"))
-    redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))
-    secret_key: str = field(default_factory=lambda: os.getenv("SECRET_KEY", "change-me-in-production"))
-    admin_password: str = field(default_factory=lambda: os.getenv("ADMIN_PASSWORD", "admin123"))
-    log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
-    log_dir: str = field(default_factory=lambda: os.getenv("LOG_DIR", "logs"))
-    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
-    default_exchange: str = field(default_factory=lambda: os.getenv("DEFAULT_EXCHANGE", "binance"))
-    default_timeframe: str = field(default_factory=lambda: os.getenv("DEFAULT_TIMEFRAME", "1h"))
-
-
-_settings: Settings | None = None
-
-
-def get_settings() -> Settings:
-    """取得全域設定（單例）"""
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+# Settings 和 get_settings 已從 src.core.config 導入（見上方）
 
 
 def format_price(price: float, decimals: int = 2) -> str:

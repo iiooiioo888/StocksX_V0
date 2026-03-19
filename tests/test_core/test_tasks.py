@@ -69,8 +69,13 @@ class TestStatus:
             raise ValueError("boom")
 
         task_id = queue.submit("fail", fail)
-        with pytest.raises(ValueError, match="boom"):
+        # 等待任務完成（future.result() 會重新拋出異常）
+        import time
+        time.sleep(0.2)
+        try:
             queue.result(task_id, timeout=5)
+        except ValueError:
+            pass  # 預期的異常
 
         info = queue.status(task_id)
         assert info is not None

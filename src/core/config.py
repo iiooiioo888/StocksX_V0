@@ -181,6 +181,24 @@ class Settings:
     def cache_dir(self) -> Path:
         return Path("cache")
 
+    # ─── 向後兼容屬性（舊 src.config.Settings 的屬性）──
+
+    @property
+    def secret_key(self) -> str:
+        return self.app.secret_key
+
+    @property
+    def admin_password(self) -> str:
+        return _env("ADMIN_PASSWORD", "admin123") or "admin123"
+
+    @property
+    def log_level(self) -> str:
+        return self.app.log_level
+
+    @property
+    def redis_url(self) -> str:
+        return self.cache.redis_url
+
 
 _settings: Settings | None = None
 
