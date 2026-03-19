@@ -44,6 +44,9 @@ from .crypto_ccxt import CcxtOhlcvSource
 from .yfinance_source import YfinanceOhlcvSource
 
 # 引入限流器與日誌
+# 限流器開關（供外部檢查）
+USE_RATE_LIMITER = False
+
 try:
     from src.utils.logger import get_logger, log_api_call
     from src.utils.rate_limiter import (
@@ -54,7 +57,6 @@ try:
     logger = get_logger("stocksx.api_hub")
     USE_RATE_LIMITER = True
 except ImportError:
-    USE_RATE_LIMITER = False
     logger = None
 
 
