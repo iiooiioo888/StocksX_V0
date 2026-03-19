@@ -10,8 +10,14 @@ from .health_check import (
     render_health_page,
 )
 from .logger import (
+    LogContext,
     get_logger,
+    init_default_logger,
+    log_api_call,
+    log_backtest,
+    log_user_action,
     setup_logging,
+    setup_logger,
 )
 from .rate_limiter import (
     API_LIMIT_CONFIG,
@@ -26,7 +32,13 @@ from .rate_limiter import (
 __all__ = [
     # Logger
     "setup_logging",
+    "setup_logger",
     "get_logger",
+    "init_default_logger",
+    "log_api_call",
+    "log_backtest",
+    "log_user_action",
+    "LogContext",
     # Rate Limiter
     "RateLimiter",
     "RateLimitExceeded",
