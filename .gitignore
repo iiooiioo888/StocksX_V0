@@ -5,6 +5,8 @@ cache/
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
 
 # 環境
 .env
@@ -12,6 +14,7 @@ cache/
 venv/
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
 .coverage
 htmlcov/
@@ -21,3 +24,15 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+# 日誌
+logs/*.log
+
+# 系統文件
+.DS_Store
+Thumbs.db
+
+# 模型檔案（ML）
+*.h5
+*.pkl
+*.joblib

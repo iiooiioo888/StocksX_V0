@@ -3,7 +3,7 @@
 # ════════════════════════════════════════════════════════════
 # 构建阶段
 # ════════════════════════════════════════════════════════════
-FROM python:3.10-slim as builder
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # ════════════════════════════════════════════════════════════
 # 运行阶段
 # ════════════════════════════════════════════════════════════
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 

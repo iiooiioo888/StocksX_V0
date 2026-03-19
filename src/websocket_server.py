@@ -11,10 +11,19 @@ from typing import Any, Dict, List, Optional, Set
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.security import HTTPBearer
+import os
+import secrets
+import logging
 import jwt
 
-# 模擬配置
-SECRET_KEY = "your-secret-key"
+logger = logging.getLogger(__name__)
+
+# 安全配置（從環境變數讀取）
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    # 開發環境自動生成（每次重啟失效，提醒使用者設定正式密鑰）
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning("SECRET_KEY 未設定，已自動生成臨時密鑰（重啟後失效）。生產環境請在 .env 中配置固定密鑰。")
 ALGORITHM = "HS256"
 
 app = FastAPI(title="StocksX WebSocket Service")

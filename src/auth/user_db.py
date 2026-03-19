@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 _MAX_LOGIN_ATTEMPTS = 5
 _LOCKOUT_SECONDS = 300
 _SESSION_TIMEOUT = 3600
-_MIN_PASSWORD_LEN = 6
+_MIN_PASSWORD_LEN = 8
 
 
 def _hash_pw(password: str, salt: str = "") -> str:
@@ -172,7 +172,9 @@ def _validate_password(password: str) -> str | None:
         return f"密碼至少 {_MIN_PASSWORD_LEN} 個字元"
     if password.isdigit():
         return "密碼不能全是數字"
-    if password.isalpha():
+    if not any(c.isupper() for c in password):
+        return "密碼需包含大寫字母"
+    if not any(c.isdigit() for c in password):
         return "密碼需包含數字"
     return None
 
@@ -182,6 +184,8 @@ class UserDB:
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
         self._migrate()
@@ -296,7 +300,13 @@ class UserDB:
     def _ensure_admin(self) -> None:
         cur = self._conn.execute("SELECT id FROM users WHERE username='admin'")
         if not cur.fetchone():
-            self.register("admin", "admin123", display_name="管理員", role="admin")
+            admin_pw = os.getenv("ADMIN_PASSWORD", "")
+            if not admin_pw:
+                import secrets
+                admin_pw = secrets.token_urlsafe(16)
+                print(f"[StockX] ⚠️ 首次建立管理員帳號，臨時密碼: {admin_pw}")
+                print(f"[StockX] 請盡快透過 UI 修改管理員密碼，或在 .env 中設定 ADMIN_PASSWORD")
+            self.register("admin", admin_pw, display_name="管理員", role="admin")
 
     def _init_system_products(self) -> None:
         cur = self._conn.execute("SELECT COUNT(*) as c FROM products WHERE is_system=1")

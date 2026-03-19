@@ -279,21 +279,34 @@ if yahoo_futures or yahoo_trending:
                     delta=fg['classification']
                 )
             
-            # 主流幣簡易報價
+            # 主流幣簡易報價（真實 API）
             st.caption("💰 主流幣簡易報價（24h）")
-            crypto_cols = st.columns(3)
-            crypto_samples = [
-                {"name": "Bitcoin", "symbol": "BTC", "price": 67500, "change": 2.5},
-                {"name": "Ethereum", "symbol": "ETH", "price": 3450, "change": -1.2},
-                {"name": "Solana", "symbol": "SOL", "price": 145, "change": 5.8},
-            ]
-            for idx, crypto in enumerate(crypto_samples):
-                _icon = "🟢" if crypto["change"] > 0 else "🔴"
-                crypto_cols[idx].metric(
-                    f"{_icon} {crypto['symbol']}",
-                    f"${crypto['price']:,.0f}",
-                    delta=f"{crypto['change']:+.1f}%"
-                )
+            from src.data.sources.api_hub import fetch_coingecko
+            crypto_data = fetch_coingecko(
+                "/simple/price",
+                params={
+                    "ids": "bitcoin,ethereum,solana",
+                    "vs_currencies": "usd",
+                    "include_24hr_change": "true",
+                },
+            )
+            if crypto_data:
+                crypto_map = {
+                    "bitcoin": {"symbol": "BTC", "name": "Bitcoin"},
+                    "ethereum": {"symbol": "ETH", "name": "Ethereum"},
+                    "solana": {"symbol": "SOL", "name": "Solana"},
+                }
+                crypto_cols = st.columns(3)
+                for idx, (cid, info) in enumerate(crypto_map.items()):
+                    if cid in crypto_data:
+                        price = crypto_data[cid].get("usd", 0)
+                        change = crypto_data[cid].get("usd_24h_change", 0)
+                        _icon = "🟢" if change > 0 else "🔴"
+                        crypto_cols[idx].metric(
+                            f"{_icon} {info['symbol']}",
+                            f"${price:,.0f}",
+                            delta=f"{change:+.1f}%"
+                        )
         except Exception:
             st.caption("加密貨幣數據載入中...")
 
