@@ -25,11 +25,14 @@ try:
 except ImportError:
     logger = logging.getLogger(__name__)
 
-# 安全配置（從環境變數讀取）
-SECRET_KEY = os.getenv("SECRET_KEY", "")
+# 安全配置（從環境變數讀取，生產環境必須設定）
+SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     SECRET_KEY = secrets.token_hex(32)
-    logger.warning("SECRET_KEY 未設定，已自動生成臨時密鑰。生產環境請在 .env 中配置。")
+    logger.warning(
+        "⚠️ SECRET_KEY 未設定！WebSocket 和主應用將使用不同的密鑰，"
+        "JWT token 無法互通。請在 .env 中設定統一的 SECRET_KEY。"
+    )
 ALGORITHM = "HS256"
 
 # 心跳間隔（秒）

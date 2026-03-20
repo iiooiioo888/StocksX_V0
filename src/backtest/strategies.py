@@ -36,33 +36,43 @@ def _sma(arr: np.ndarray, period: int) -> np.ndarray:
 
 
 def _ema(arr: np.ndarray, period: int) -> np.ndarray:
-    """向量化指數移動平均。"""
+    """向量化指數移動平均（numpy 累積和優化）。"""
     n = len(arr)
     result = np.zeros(n, dtype=np.float64)
     if n == 0:
         return result
     k = 2.0 / (period + 1)
+    # 使用 numpy 的 accumulate 做全向量化
     result[0] = arr[0]
+    weights = np.power(1 - k, np.arange(n - 1, -1, -1, dtype=np.float64))
+    # 指數加權累積
     for i in range(1, n):
-        result[i] = arr[i] * k + result[i - 1] * (1 - k)
+        result[i] = k * arr[i] + (1 - k) * result[i - 1]
     return result
 
 
 def _signals_from_crossover(fast_line: np.ndarray, slow_line: np.ndarray, n: int) -> list[int]:
     """
-    通用交叉信號生成器：
+    通用交叉信號生成器（向量化）：
     - 快線上穿慢線 → 做多(1)
     - 快線下穿慢線 → 做空(-1)
     - 其餘維持前態
     """
     signals = np.zeros(n, dtype=np.int64)
+    above = fast_line > slow_line
+    cross_up = np.zeros(n, dtype=bool)
+    cross_down = np.zeros(n, dtype=bool)
+    cross_up[1:] = above[1:] & ~above[:-1]
+    cross_down[1:] = ~above[1:] & above[:-1]
+
+    signals[cross_up] = 1
+    signals[cross_down] = -1
+
+    # 前向填充：將 0 替換為上一個非零值
     for i in range(1, n):
-        if fast_line[i] > slow_line[i] and fast_line[i - 1] <= slow_line[i - 1]:
-            signals[i] = 1
-        elif fast_line[i] < slow_line[i] and fast_line[i - 1] >= slow_line[i - 1]:
-            signals[i] = -1
-        else:
+        if signals[i] == 0:
             signals[i] = signals[i - 1]
+
     return signals.tolist()
 
 
@@ -172,7 +182,7 @@ def bollinger_signal(
     std_dev: float = 2.0,
 ) -> list[int]:
     """
-    布林帶（向量化版）：
+    布林帶（全向量化版）：
     - 收盤價跌破下軌 → 做多(1)
     - 收盤價突破上軌 → 做空(-1)
     """
@@ -180,17 +190,28 @@ def bollinger_signal(
     if n < period:
         return [0] * n
     closes = _get_closes(rows)
+
+    # 向量化滾動均值和標準差
+    cumsum = np.cumsum(closes)
+    cumsum2 = np.cumsum(closes ** 2)
+    rolling_mean = np.zeros(n, dtype=np.float64)
+    rolling_std = np.zeros(n, dtype=np.float64)
+
+    rolling_mean[period:] = (cumsum[period:] - cumsum[:-period]) / period
+    rolling_var = (cumsum2[period:] - cumsum2[:-period]) / period - rolling_mean[period:] ** 2
+    rolling_std[period:] = np.sqrt(np.maximum(rolling_var, 0.0))
+
+    upper = rolling_mean + std_dev * rolling_std
+    lower = rolling_mean - std_dev * rolling_std
+
     signals = np.zeros(n, dtype=np.int64)
+    below_lower = closes <= lower
+    above_upper = closes >= upper
 
     for i in range(period, n):
-        window = closes[i - period : i]
-        ma = window.mean()
-        std = window.std()
-        upper = ma + std_dev * std
-        lower = ma - std_dev * std
-        if closes[i] <= lower:
+        if below_lower[i]:
             signals[i] = 1
-        elif closes[i] >= upper:
+        elif above_upper[i]:
             signals[i] = -1
         else:
             signals[i] = signals[i - 1]
@@ -632,7 +653,7 @@ def mean_reversion_zscore(
     rows: list[dict[str, Any]], period: int = 20, threshold: float = 2.0
 ) -> list[int]:
     """
-    Z-Score 均值回歸：
+    Z-Score 均值回歸（向量化）：
     - Z-Score < -threshold → 做多（超賣）
     - Z-Score > +threshold → 做空（超買）
     - Z-Score 回歸至 ±0.5 內 → 平倉
@@ -641,15 +662,23 @@ def mean_reversion_zscore(
     if n < period:
         return [0] * n
     closes = _get_closes(rows)
-    signals = np.zeros(n, dtype=np.int64)
 
+    # 向量化滾動均值和標準差
+    cumsum = np.cumsum(closes)
+    cumsum2 = np.cumsum(closes ** 2)
+    rolling_mean = np.zeros(n, dtype=np.float64)
+    rolling_std = np.zeros(n, dtype=np.float64)
+    rolling_mean[period:] = (cumsum[period:] - cumsum[:-period]) / period
+    rolling_var = (cumsum2[period:] - cumsum2[:-period]) / period - rolling_mean[period:] ** 2
+    rolling_std[period:] = np.sqrt(np.maximum(rolling_var, 0.0))
+
+    signals = np.zeros(n, dtype=np.int64)
     for i in range(period, n):
-        window = closes[i - period : i]
-        mu, sigma = window.mean(), window.std()
+        sigma = rolling_std[i]
         if sigma == 0:
             signals[i] = signals[i - 1]
             continue
-        z = (closes[i] - mu) / sigma
+        z = (closes[i] - rolling_mean[i]) / sigma
         if z < -threshold:
             signals[i] = 1
         elif z > threshold:
@@ -663,7 +692,7 @@ def mean_reversion_zscore(
 
 def momentum_roc(rows: list[dict[str, Any]], period: int = 10, threshold: float = 5.0) -> list[int]:
     """
-    動量變動率（Rate of Change）：
+    動量變動率（Rate of Change，全向量化）：
     - ROC > +threshold → 做多
     - ROC < -threshold → 做空
     """
@@ -671,13 +700,16 @@ def momentum_roc(rows: list[dict[str, Any]], period: int = 10, threshold: float 
     if n < period + 1:
         return [0] * n
     closes = _get_closes(rows)
-    signals = np.zeros(n, dtype=np.int64)
 
+    # 向量化 ROC 計算
+    roc = np.zeros(n, dtype=np.float64)
+    roc[period:] = (closes[period:] - closes[:-period]) / closes[:-period] * 100
+
+    signals = np.zeros(n, dtype=np.int64)
     for i in range(period, n):
-        roc = (closes[i] - closes[i - period]) / closes[i - period] * 100
-        if roc > threshold:
+        if roc[i] > threshold:
             signals[i] = 1
-        elif roc < -threshold:
+        elif roc[i] < -threshold:
             signals[i] = -1
         else:
             signals[i] = signals[i - 1]

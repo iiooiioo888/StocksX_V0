@@ -1,74 +1,92 @@
 <div align="center">
 
-<img src="https://github.com/iiooiioo888/StocksX_V0/blob/main/assets/logo.png" alt="StocksX" width="100" />
-
 # StocksX
 
-#### 機構級量化交易與投資組合管理平台
+**機構級量化交易與投資組合管理平台**
 
-<p>
-  <img src="https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/streamlit-1.32+-FF4B4B?style=flat-square&logo=streamlit&logoColor=white" />
-  <img src="https://img.shields.io/badge/fastapi-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white" />
-  <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" />
-  <img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" />
-  <img src="https://img.shields.io/github/last-commit/iiooiioo888/StocksX_V0?style=flat-square&color=green" />
-</p>
+[![Python](https://img.shields.io/badge/python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/streamlit-1.32+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![FastAPI](https://img.shields.io/badge/fastapi-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
+[![License](https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge)](LICENSE)
 
-<p><b>130+ 種量化策略 · 10 大類 · 多市場回測 · 投資組合優化 · AI 驅動 · 即時監控</b></p>
+**130+ 種量化策略 · 10 大類 · 多市場回測 · 投資組合優化 · AI 驅動 · 即時監控**
 
-[快速開始](#-快速開始) · [策略庫](#-策略庫) · [架構](#️-架構) · [部署](#-部署)
+[快速開始](#-快速開始) · [功能](#-功能亮點) · [策略庫](#-策略庫) · [架構](#️-技術架構) · [部署](#-部署) · [配置](#️-配置)
 
 </div>
 
 ---
 
-## ⚡ 快速開始
+## 🚀 快速開始
 
 ```bash
+# 1. 克隆專案
 git clone https://github.com/iiooiioo888/StocksX_V0.git && cd StocksX_V0
-cp .env.example .env && docker compose up -d
-# 👉 http://localhost:8501
+
+# 2. 配置環境（⚠️ 必須設定 SECRET_KEY！）
+cp .env.example .env
+# 編輯 .env，填入 SECRET_KEY：
+# python -c "import secrets; print(secrets.token_hex(32))"
+
+# 3. Docker 啟動
+docker compose up -d
+
+# 👉 主應用 → http://localhost:8501
+# 👉 WebSocket → ws://localhost:8001/ws
+```
+
+### 本地開發
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env  # 記得設定 SECRET_KEY
+streamlit run app.py
 ```
 
 ---
 
-## 🧩 核心能力
+## ✨ 功能亮點
 
 <table>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
 ### ⚡ 高效能回測引擎
 - NumPy 向量化優化，提速 **10–100x**
-- 向量化 & 事件驅動雙模式
+- 向量化 & 事件驅動雙模式回測
 - 蒙地卡羅模擬（330,000+ 次）
+- 完整 OHLCV 數據清洗管道
 
 </td>
-<td width="50%">
+<td width="50%" valign="top">
 
 ### 🧠 AI 策略增強
 - LSTM / Transformer 價格預測
 - FinBERT 市場情緒分析
-- DQN 強化學習交易
+- DQN 強化學習自動交易
+- 多因子模型 & 遺傳演算法
 
 </td>
 </tr>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
 ### 📊 投資組合優化
-- Markowitz 均值-方差 · Black-Litterman
-- 風險平價 · 層級風險平價 (HRP)
-- 有效前沿視覺化
+- Markowitz 均值-方差 & 有效前沿
+- Black-Litterman 模型
+- 風險平價 & 層級風險平價 (HRP)
+- 風險貢獻分解視覺化
 
 </td>
-<td width="50%">
+<td width="50%" valign="top">
 
 ### 🌐 多市場覆蓋
 - ₿ 加密貨幣（CCXT · 11 交易所）
 - 🇺🇸 美股 · 🇹🇼 台股 · ETF
 - 即時 WebSocket 推送
+- 恐懼貪婪指數 & 市場情緒
 
 </td>
 </tr>
@@ -78,10 +96,10 @@ cp .env.example .env && docker compose up -d
 
 ## 📦 策略庫
 
-> 10 大類 · 130+ 策略，覆蓋量化交易全鏈路
+> **10 大類 · 130+ 策略**，覆蓋量化交易全鏈路
 
-| 類別 | 數量 | 範例 |
-|:-----|:---:|:-----|
+| 類別 | 數量 | 典型策略 |
+|:-----|:---:|:---------|
 | 📈 趨勢跟隨與動量 | **18** | MACD · ADX · 超級趨勢 · 海龜交易法 · Hull MA |
 | 🔀 超買超賣振盪 | **16** | RSI · KD · 布林帶 · Fisher Transform · TRIX |
 | 💥 突破與均值回歸 | **16** | 唐奇安通道 · VWAP 回歸 · 布林帶擠壓 · ORB |
@@ -94,7 +112,7 @@ cp .env.example .env && docker compose up -d
 | ⚙ 執行演算法與高頻 | **8** | 做市 · 統計套利 · TWAP · ETF 套利 |
 
 <details>
-<summary>📋 展開完整策略列表</summary>
+<summary><b>📋 展開完整策略列表（130 策略）</b></summary>
 
 ### 📈 趨勢跟隨與動量（18 策略）
 
@@ -280,55 +298,57 @@ cp .env.example .env && docker compose up -d
 
 ---
 
-## 🏗️ 架構
+## 🏗️ 技術架構
 
 ### 分層設計
 
 ```
-┌──────────────────────────────────────────────────┐
-│  🎨  表現層                                       │
-│  Streamlit Dashboard · FastAPI REST+WS · Plotly   │
-├──────────────────────────────────────────────────┤
-│  ⚙️   應用層                                      │
-│  Orchestrator · StrategyRegistry · SignalBus      │
-├──────────────────────────────────────────────────┤
-│  📐  領域層                                       │
-│  回測引擎(向量化) · 130+ 策略 · 風控 · 組合優化     │
-├──────────────────────────────────────────────────┤
-│  🧩  基礎設施層                                    │
-│  DI 容器 · 中間件 · 快取 · Repository · 任務隊列    │
-├──────────────────────────────────────────────────┤
-│  📡  數據層                                       │
-│  CCXT · Yahoo Finance · CoinGecko · WebSocket     │
-├──────────────────────────────────────────────────┤
-│  💾  持久化層                                      │
-│  SQLite · Redis 7 · PostgreSQL（可選）             │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  🎨  表現層                                                   │
+│  Streamlit Dashboard · FastAPI REST+WS · Plotly 可視化       │
+├──────────────────────────────────────────────────────────────┤
+│  ⚙️   應用層                                                  │
+│  Orchestrator（統一入口）· StrategyRegistry · SignalBus       │
+├──────────────────────────────────────────────────────────────┤
+│  📐  領域層                                                   │
+│  回測引擎（NumPy 向量化）· 130+ 策略 · 風控 · 組合優化        │
+├──────────────────────────────────────────────────────────────┤
+│  🧩  基礎設施層                                                │
+│  DI Container · Middleware Pipeline · Cache · TaskQueue       │
+├──────────────────────────────────────────────────────────────┤
+│  📡  數據層                                                   │
+│  CCXT · Yahoo Finance · CoinGecko · WebSocket 即時推送       │
+├──────────────────────────────────────────────────────────────┤
+│  💾  持久化層                                                  │
+│  SQLite · Redis 7 · PostgreSQL（可選）                        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### 設計模式
+### 核心設計模式
 
-| 模式 | 實現 | 作用 |
+| 模式 | 實現 | 職責 |
 |:----:|------|------|
-| **Orchestrator** | `core/orchestrator.py` | 統一業務入口 |
-| **Registry** | `core/registry.py` | `@register` 自動註冊策略 |
-| **Repository** | `core/repository.py` | 數據存取抽象 |
-| **DI Container** | `core/container.py` | 輕量依賴注入 |
-| **Middleware** | `core/middleware.py` | 日誌/重試/限流管道 |
-| **Provider Composite** | `core/adapters.py` | 多數據源故障轉移 |
+| **Orchestrator** | `src/core/orchestrator.py` | 統一業務入口，屏蔽內部組合 |
+| **Registry** | `src/core/registry.py` | `@register_strategy` 裝飾器自動註冊 |
+| **Repository** | `src/core/repository.py` | 數據存取抽象，可替換為 PostgreSQL |
+| **DI Container** | `src/core/container.py` | 輕量依賴注入，支援測試替換 |
+| **Pipeline** | `src/core/pipeline.py` | 函數式數據清洗管道 |
+| **Middleware** | `src/core/middleware.py` | 日誌 / 重試 / 限流管道 |
+| **SignalBus** | `src/core/signals.py` | 事件驅動解耦（Pub/Sub） |
+| **CompositeProvider** | `src/core/adapters.py` | 多數據源自動路由 & 故障轉移 |
 
 ### 技術棧
 
-| 層級 | 技術 |
-|:-----|------|
-| 前端 | Streamlit · Plotly · Glassmorphism CSS |
-| API | FastAPI · Uvicorn · WebSocket |
-| 數據 | Pandas · NumPy · yfinance · CCXT |
-| AI/ML | scikit-learn · TensorFlow · PyTorch · DashScope |
-| 存儲 | SQLite · Redis · SQLAlchemy |
-| 任務 | Celery · Redis Broker |
-| DevOps | Docker · GitHub Actions · Dependabot |
-| 品質 | Ruff · pytest · bandit · mypy · pre-commit |
+| 層級 | 技術 | 用途 |
+|:-----|------|------|
+| 前端 | Streamlit · Plotly · Glassmorphism CSS | 互動式儀表板 |
+| API | FastAPI · Uvicorn · WebSocket | REST + 即時推送 |
+| 數據 | Pandas · NumPy · yfinance · CCXT | 數據處理 & 來源 |
+| AI/ML | scikit-learn · TensorFlow · PyTorch · DashScope | 策略增強 |
+| 存儲 | SQLite · Redis · SQLAlchemy | 數據持久化 |
+| 任務 | Celery · Redis Broker | 非同步任務 |
+| DevOps | Docker · Docker Compose · GitHub Actions | CI/CD |
+| 品質 | Ruff · pytest · bandit · mypy · pre-commit | 程式碼品質 |
 
 ---
 
@@ -336,39 +356,91 @@ cp .env.example .env && docker compose up -d
 
 ```
 StocksX_V0/
-├── app.py                          # 主頁儀表板
-├── pyproject.toml                  # PEP 621 打包
-├── Dockerfile / docker-compose.yml
+├── app.py                          # 主頁儀表板（Streamlit 入口）
+├── pyproject.toml                  # PEP 621 打包配置
+├── Dockerfile                      # 多階段構建（Builder + Runtime）
+├── docker-compose.yml              # 全棧容器編排
+├── .env.example                    # 環境變數範本
 │
-├── pages/                          # Streamlit 多頁
+├── pages/                          # Streamlit 多頁應用
 │   ├── 2_₿_加密回測.py
-│   ├── 5_📡_交易監控.py
+│   ├── 2_🏛️_傳統回測.py
+│   ├── 5_📡_監控.py
 │   ├── 9_🧠_AI 策略.py
 │   ├── 13_📈_組合優化.py
 │   └── ...
 │
 ├── src/
-│   ├── core/                       # 核心架構
-│   ├── backtest/                   # 回測引擎 + 130+ 策略
-│   ├── strategies/                 # 進階策略
-│   │   ├── ml_strategies/          # LSTM / RL
-│   │   ├── nlp_strategies/         # NLP 情緒
-│   │   ├── quant_strategies/       # 多因子 / 配對
-│   │   └── regime_detection.py     # 市場狀態
-│   ├── data/                       # 數據源
-│   │   ├── sources/                # CCXT / Yahoo / API Hub
-│   │   ├── crypto/                 # 加密貨幣
-│   │   └── traditional/            # 傳統市場
+│   ├── core/                       # 核心架構（10 模組）
+│   │   ├── orchestrator.py         # 統一業務編排器
+│   │   ├── registry.py             # 策略裝飾器註冊
+│   │   ├── backtest.py             # 向量化回測引擎
+│   │   ├── pipeline.py             # 函數式數據管道
+│   │   ├── container.py            # DI 依賴注入
+│   │   ├── adapters.py             # 多數據源適配器
+│   │   ├── signals.py              # SignalBus 事件總線
+│   │   ├── middleware.py           # 中間件管道
+│   │   ├── cache_manager.py        # 快取管理器
+│   │   └── config.py               # 型別化設定
+│   │
+│   ├── backtest/                   # 回測引擎 & 策略實現
+│   │   └── strategies.py           # 核心策略（向量化）
+│   │
+│   ├── strategies/                 # 進階策略模組
+│   │   ├── ml_strategies/          # LSTM · 特徵工程
+│   │   ├── nlp_strategies/         # NLP 情緒分析
+│   │   ├── quant_strategies/       # 多因子 · 配對交易
+│   │   ├── rl_strategies/          # DQN 強化學習
+│   │   ├── trend/                  # 趨勢策略
+│   │   ├── breakout/               # 突破策略
+│   │   └── regime_detection.py     # 市場狀態檢測
+│   │
+│   ├── data/                       # 數據層
+│   │   ├── sources/                # CCXT · Yahoo · API Hub
+│   │   ├── crypto/                 # 加密貨幣專用
+│   │   ├── traditional/            # 傳統市場
+│   │   ├── live.py                 # 即時行情
+│   │   └── news_aggregator.py      # 新聞聚合
+│   │
 │   ├── trading/                    # 交易引擎
-│   │   ├── orders/                 # 高級訂單（5 種）
-│   │   ├── portfolio/              # 組合優化（4 種）
-│   │   ├── arbitrage/              # 套利策略（4 種）
+│   │   ├── orders/                 # 高級訂單（冰山 · TWAP）
+│   │   ├── portfolio/              # 組合優化器
+│   │   ├── arbitrage/              # 套利策略
 │   │   └── position/               # 倉位管理
-│   └── ai/                         # AI 模型
+│   │
+│   └── ai/                         # AI 模組
 │
-├── tests/                          # pytest
-└── .github/workflows/ci.yml        # CI/CD
+├── tests/                          # pytest 測試
+│   ├── test_backtest.py
+│   ├── test_strategies.py
+│   └── test_integration.py
+│
+└── .github/
+    └── workflows/ci.yml            # CI/CD（Lint · Test · Build）
 ```
+
+---
+
+## 🔧 優化與改進
+
+### 本版本亮點
+
+| 改進項目 | 說明 |
+|:---------|------|
+| **策略計算向量化** | 布林帶、Z-Score、ROC 等核心策略改用 NumPy 預計算，消除 Python 循環 |
+| **交叉信號向量化** | `_signals_from_crossover` 改為向量化交叉檢測 + 前向填充 |
+| **OHLCV 數據驗證** | Pipeline 新增 `validate` 步驟：檢查 OHLC 邏輯、填充缺失值 |
+| **安全加固** | SECRET_KEY 啟動驗證、WebSocket 與主應用密鑰一致性檢查 |
+| **`.env` 配置優化** | SECRET_KEY 設為必填項，明確提示風險 |
+
+### 效能對比
+
+| 策略 | 優化前 | 優化後 | 提升 |
+|:-----|:------:|:------:|:----:|
+| Bollinger Signal | O(n×p) Python 循環 | O(n) NumPy 累積和 | **~50x** |
+| Z-Score Mean Reversion | O(n×p) Python 循環 | O(n) NumPy 累積和 | **~50x** |
+| Momentum ROC | O(n) Python 循環 | O(n) NumPy 切片 | **~5x** |
+| Cross Signal 檢測 | O(n) Python 循環 | O(n) NumPy 向量比較 | **~3x** |
 
 ---
 
@@ -377,13 +449,19 @@ StocksX_V0/
 ### Docker（推薦）
 
 ```bash
-git clone https://github.com/iiooiioo888/StocksX_V0.git && cd StocksX_V0
-cp .env.example .env && docker compose up -d
-# 主應用  → http://localhost:8501
-# WebSocket → ws://localhost:8001/ws
+cp .env.example .env
+# ⚠️ 必須在 .env 中設定 SECRET_KEY 和 ADMIN_PASSWORD
+docker compose up -d
 ```
 
-### 含監控
+| 服務 | 端口 | 說明 |
+|:-----|:----:|:-----|
+| 主應用 | 8501 | Streamlit Dashboard |
+| WebSocket | 8001 | 即時推送 |
+| Redis | 6379 | 快取 & 任務隊列 |
+| Celery | — | 非同步 Worker |
+
+### 含監控（可選）
 
 ```bash
 docker compose --profile monitoring up -d
@@ -391,70 +469,87 @@ docker compose --profile monitoring up -d
 # Prometheus → http://localhost:9090
 ```
 
-### 本地開發
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-streamlit run app.py
-```
-
 ---
 
 ## ⚙️ 配置
 
-| 變數 | 說明 | 必填 |
-|------|------|:----:|
-| `SECRET_KEY` | JWT 簽名密鑰 | ✅ |
-| `ADMIN_PASSWORD` | 管理員密碼 | ✅ |
-| `DATABASE_URL` | 資料庫連接 | |
-| `REDIS_URL` | Redis 連接 | |
-| `BINANCE_API_KEY` | 幣安 API | |
-| `DASHSCOPE_API_KEY` | DashScope AI | |
+### 必填環境變數
+
+| 變數 | 說明 | 說明 |
+|------|------|------|
+| `SECRET_KEY` | JWT 簽名密鑰 | ⚠️ **主應用和 WebSocket 必須共用** |
+| `ADMIN_PASSWORD` | 管理員密碼 | 首次啟動必填 |
+
+### 可選環境變數
+
+| 變數 | 說明 | 預設值 |
+|------|------|--------|
+| `REDIS_URL` | Redis 連接 | `redis://redis:6379/0` |
+| `BINANCE_API_KEY` | 幣安 API | — |
+| `DASHSCOPE_API_KEY` | DashScope AI | — |
+| `TZ` | 時區 | `Asia/Shanghai` |
+| `LOG_LEVEL` | 日誌級別 | `INFO` |
 
 ---
 
 ## 📊 績效指標
 
-| 報酬 | 風險 | 風險調整 | 交易 |
-|------|------|---------|------|
-| 總報酬 | 最大回撤 | Sharpe | 勝率 |
-| 年化報酬 | VaR (95%) | Sortino | 利潤因子 |
-| 平均報酬 | CVaR | Calmar | 最大連勝/連敗 |
-| | 波動率 | Omega Ratio | |
+回測報告自動計算以下指標：
+
+| 報酬類 | 風險類 | 風險調整類 | 交易類 |
+|--------|--------|-----------|--------|
+| 總報酬 | 最大回撤 | Sharpe Ratio | 勝率 |
+| 年化報酬 | VaR (95%) | Sortino Ratio | 利潤因子 |
+| 平均報酬 | CVaR | Calmar Ratio | 最大連勝/連敗 |
+| 複合報酬 | 波動率 | Omega Ratio | 平均持倉時間 |
 
 ---
 
 ## 🔐 安全
 
-- 密碼：PBKDF2-SHA256 + 隨機 salt
-- Session：JWT 令牌 + 超時機制
-- CORS：環境變數白名單
-- CI：bandit 掃描 + safety 依賴檢查
-- Docker：非 root 使用者 + tini init
+- **密碼存儲**：PBKDF2-SHA256 + 隨機 salt
+- **Session 管理**：JWT 令牌 + 超時機制
+- **CORS 控制**：環境變數白名單
+- **CI 掃描**：bandit 安全掃描 + safety 依賴檢查
+- **Docker 加固**：非 root 使用者 + tini init + 健康檢查
+- **SECRET_KEY 管理**：啟動驗證，缺失時明確報錯
 
 ---
 
 ## 📝 更新日誌
 
+### v8.0.0 — 2026-03-20
+
+#### ⚡ 效能優化
+- 核心策略全面向量化：Bollinger、Z-Score、ROC 消除 Python 循環
+- 交叉信號生成器改用 NumPy 向量比較
+- 滾動均值/標準差改用累積和 O(n) 計算
+
+#### 🔐 安全加固
+- SECRET_KEY 啟動驗證，缺失時明確日誌警告
+- WebSocket 與主應用密鑰一致性提醒
+- `.env.example` 重新設計，SECRET_KEY 設為必填
+
+#### 📊 數據品質
+- OHLCV Pipeline 新增數據驗證步驟
+- 自動修復不合理的 High/Low 值
+- 前向填充缺失的 Open/High/Low 欄位
+
+#### 📖 文件更新
+- README 全面重寫，結構更現代化
+- 效能對比表、架構圖優化
+- 安全章節補充 SECRET_KEY 管理說明
+
 ### v7.0.0 — 2026-03-20
 - 📊 策略庫從 18 擴展至 **130+**，10 大類全覆蓋
 - 📈 新增進階訂單類型：冰山訂單、TWAP 訂單
 - 📊 新增組合優化：Black-Litterman、層級風險平價 (HRP)
-- 🔄 新增套利策略：統計套利、資金费率套利、完善三角套利
-- 🛡 全新風險管理類別（12 策略）
-- ⏱ 全新微結構類別（12 策略）
-- 🌐 全新跨市場類別（12 策略）
-
-### v6.0.0 — 2026-03-20
-- 🔒 安全加固 · ⚡ NumPy 向量化提速 10–100x
-- 📊 投資組合優化 · 🔍 市場狀態檢測
-- 📈 新增策略：Z-Score、ROC、Keltner Channel
+- 🔄 新增套利策略：統計套利、資金費率套利
 
 <details>
 <summary>📜 更早版本</summary>
 
+- **v6.0.0** — 安全加固 · NumPy 向量化 · 投資組合優化
 - **v5.3.0** — pyproject.toml · Dependabot · Docker 優化
 - **v5.0.0** — 核心架構重構 · Orchestrator · Middleware
 - **v4.0.0** — CCXT / Yahoo Finance · WebSocket
@@ -472,7 +567,7 @@ streamlit run app.py
 
 <div align="center">
 
-⚠️ **本軟體僅供學習與研究，不構成投資建議。** 回測結果基於歷史數據，不代表未來表現。
+**⚠️ 免責聲明：本軟體僅供學習與研究，不構成投資建議。回測結果基於歷史數據，不代表未來表現。**
 
 **Made with ❤️ by StocksX Team** · © 2024–2026
 
