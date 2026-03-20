@@ -188,12 +188,17 @@ class Settings:
 
     @property
     def admin_password(self) -> str:
+        import secrets as _secrets
+        import logging as _logging
+
         pw = _env("ADMIN_PASSWORD")
         if not pw:
-            raise RuntimeError(
-                "ADMIN_PASSWORD 環境變數未設定。"
-                "請在 .env 中設定管理員密碼：ADMIN_PASSWORD=<your-password>"
+            _auto_pw = _secrets.token_urlsafe(16)
+            _logging.getLogger(__name__).warning(
+                "ADMIN_PASSWORD 未設定，已自動生成隨機密碼。請查看日誌獲取密碼並盡快設定環境變數。"
             )
+            _logging.getLogger(__name__).warning("臨時管理員密碼: %s", _auto_pw)
+            return _auto_pw
         return pw
 
     @property

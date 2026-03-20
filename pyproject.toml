@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "stocksx"
-version = "5.3.0"
+version = "6.0.0"
 description = "機構級量化回測與即時交易監控平台"
 readme = "README.md"
 license = { text = "MIT" }

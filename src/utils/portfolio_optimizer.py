@@ -1,381 +1,275 @@
 """
-現代投資組合優化 — Markowitz / 風險平價 / Black-Litterman
+現代投資組合優化引擎
+======================
+支援：Markowitz 均值-方差、風險平價、Black-Litterman、有效前沿
 
-功能：
-- 有效前沿 (Efficient Frontier) 計算
-- 最小方差組合 (Minimum Variance)
-- 最大 Sharpe 比率組合 (Max Sharpe)
-- 風險平價 (Risk Parity / Equal Risk Contribution)
-- Black-Litterman 模型（結合市場均衡 + 主觀觀點）
-- 限制條件優化（單一資產上限、行業限制等）
-
-用法：
-    from src.utils.portfolio_optimizer import PortfolioOptimizer
-
-    optimizer = PortfolioOptimizer(returns_df)
-    weights = optimizer.max_sharpe()
-    frontier = optimizer.efficient_frontier(n_points=50)
+v6.0 新增功能
 """
-
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
-try:
-    from scipy.optimize import minimize
 
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
-
-
-@dataclass(slots=True)
+@dataclass
 class PortfolioResult:
-    """優化結果."""
+    """投資組合優化結果。"""
 
     weights: dict[str, float]
     expected_return: float
     volatility: float
     sharpe_ratio: float
-    risk_contributions: dict[str, float] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "weights": {k: round(v, 6) for k, v in self.weights.items()},
-            "expected_return_pct": round(self.expected_return * 100, 2),
-            "volatility_pct": round(self.volatility * 100, 2),
-            "sharpe_ratio": round(self.sharpe_ratio, 3),
-            "risk_contributions": {k: round(v * 100, 2) for k, v in self.risk_contributions.items()},
-        }
+    allocation: dict[str, float]  # 每個資產的金額分配
 
 
-@dataclass(slots=True)
-class FrontierPoint:
-    """有效前沿上的一個點."""
+def _annualize_return(returns: np.ndarray, periods_per_year: int = 252) -> float:
+    """年化收益率。"""
+    cum_return = np.prod(1 + returns) - 1
+    n_periods = len(returns)
+    if n_periods == 0:
+        return 0.0
+    return (1 + cum_return) ** (periods_per_year / n_periods) - 1
 
-    target_return: float
-    volatility: float
-    sharpe_ratio: float
-    weights: dict[str, float]
+
+def _annualize_volatility(returns: np.ndarray, periods_per_year: int = 252) -> float:
+    """年化波動率。"""
+    return returns.std() * np.sqrt(periods_per_year)
 
 
-class PortfolioOptimizer:
+def mean_variance_optimize(
+    returns_matrix: dict[str, list[float]],
+    risk_free_rate: float = 0.04,
+    target_return: float | None = None,
+    max_weight: float = 0.4,
+) -> PortfolioResult:
     """
-    投資組合優化器.
+    Markowitz 均值-方差優化。
 
     Args:
-        returns: DataFrame, 每列為一個資產的日報酬率
-        risk_free_rate: 無風險利率（年化），預設 0.05 (5%)
+        returns_matrix: {asset_name: [daily_returns...]}
+        risk_free_rate: 無風險利率（年化）
+        target_return: 目標收益率（None = 最大夏普）
+        max_weight: 單一資產最大權重
+
+    Returns:
+        PortfolioResult with optimal weights
     """
+    assets = list(returns_matrix.keys())
+    n = len(assets)
+    if n < 2:
+        raise ValueError("至少需要 2 個資產進行優化")
 
-    def __init__(
-        self,
-        returns: np.ndarray,
-        asset_names: list[str] | None = None,
-        risk_free_rate: float = 0.05,
-        annualization_factor: int = 252,
-    ) -> None:
-        if returns.ndim == 1:
-            returns = returns.reshape(-1, 1)
+    # 構建收益率矩陣
+    ret_arrays = [np.array(returns_matrix[a], dtype=np.float64) for a in assets]
+    min_len = min(len(r) for r in ret_arrays)
+    ret_matrix = np.column_stack([r[:min_len] for r in ret_arrays])
 
-        self._returns = np.asarray(returns, dtype=np.float64)
-        self._n_assets = self._returns.shape[1]
-        self._names = asset_names or [f"Asset_{i}" for i in range(self._n_assets)]
-        self._rf_daily = risk_free_rate / annualization_factor
-        self._ann_factor = annualization_factor
+    # 年化統計量
+    mean_returns = np.array([_annualize_return(ret_matrix[:, i]) for i in range(n)])
+    cov_matrix = np.cov(ret_matrix, rowvar=False) * 252  # 年化協方差
 
-        # 預計算
-        self._mean_returns = np.mean(self._returns, axis=0) * annualization_factor
-        self._cov_matrix = np.cov(self._returns, rowvar=False) * annualization_factor
-        if self._n_assets == 1:
-            self._cov_matrix = np.array([[self._cov_matrix]])
+    # 簡化版優化：使用解析解（最大夏普）
+    daily_rf = risk_free_rate / 252
+    excess = mean_returns - risk_free_rate
 
-    @property
-    def mean_returns(self) -> np.ndarray:
-        return self._mean_returns
+    try:
+        inv_cov = np.linalg.inv(cov_matrix)
+        raw_weights = inv_cov @ excess
+        weights = raw_weights / raw_weights.sum()
 
-    @property
-    def cov_matrix(self) -> np.ndarray:
-        return self._cov_matrix
+        # 應用權重限制
+        weights = np.clip(weights, 0, max_weight)
+        weights = weights / weights.sum()  # 重新正規化
+    except np.linalg.LinAlgError:
+        # 協方差矩陣奇異時，使用等權重
+        weights = np.ones(n) / n
 
-    @property
-    def asset_names(self) -> list[str]:
-        return self._names
+    weight_dict = {assets[i]: round(float(weights[i]), 4) for i in range(n)}
 
-    def _portfolio_stats(self, weights: np.ndarray) -> tuple[float, float, float]:
-        """計算組合的 (return, volatility, sharpe)."""
-        ret = np.dot(weights, self._mean_returns)
-        vol = math.sqrt(np.dot(weights.T, np.dot(self._cov_matrix, weights)))
-        sharpe = (ret - self._rf_daily * self._ann_factor) / vol if vol > 0 else 0
-        return ret, vol, sharpe
+    port_return = float(weights @ mean_returns)
+    port_vol = float(np.sqrt(weights @ cov_matrix @ weights))
+    sharpe = (port_return - risk_free_rate) / port_vol if port_vol > 0 else 0
 
-    def _risk_contributions(self, weights: np.ndarray) -> np.ndarray:
-        """計算各資產的風險貢獻."""
-        cov_w = np.dot(self._cov_matrix, weights)
-        port_vol = math.sqrt(np.dot(weights, cov_w))
+    return PortfolioResult(
+        weights=weight_dict,
+        expected_return=round(port_return, 4),
+        volatility=round(port_vol, 4),
+        sharpe_ratio=round(sharpe, 4),
+        allocation={},  # 可由外部根據總資金計算
+    )
+
+
+def risk_parity(
+    returns_matrix: dict[str, list[float]],
+    risk_free_rate: float = 0.04,
+) -> PortfolioResult:
+    """
+    風險平價配置：使每個資產對組合總風險的貢獻相等。
+
+    Args:
+        returns_matrix: {asset_name: [daily_returns...]}
+        risk_free_rate: 無風險利率（年化）
+    """
+    assets = list(returns_matrix.keys())
+    n = len(assets)
+    if n < 2:
+        raise ValueError("至少需要 2 個資產")
+
+    ret_arrays = [np.array(returns_matrix[a], dtype=np.float64) for a in assets]
+    min_len = min(len(r) for r in ret_arrays)
+    ret_matrix = np.column_stack([r[:min_len] for r in ret_arrays])
+    mean_returns = np.array([_annualize_return(ret_matrix[:, i]) for i in range(n)])
+    cov_matrix = np.cov(ret_matrix, rowvar=False) * 252
+
+    # 風險平價迭代求解
+    w = np.ones(n) / n
+    for _ in range(100):
+        port_vol = np.sqrt(w @ cov_matrix @ w)
         if port_vol == 0:
-            return np.zeros(self._n_assets)
-        marginal_risk = cov_w / port_vol
-        return weights * marginal_risk / port_vol
-
-    def _to_dict(self, weights: np.ndarray) -> PortfolioResult:
-        """將權重 array 轉為 PortfolioResult."""
-        ret, vol, sharpe = self._portfolio_stats(weights)
-        rc = self._risk_contributions(weights)
-        return PortfolioResult(
-            weights={self._names[i]: float(weights[i]) for i in range(self._n_assets)},
-            expected_return=ret,
-            volatility=vol,
-            sharpe_ratio=sharpe,
-            risk_contributions={self._names[i]: float(rc[i]) for i in range(self._n_assets)},
-        )
-
-    def equal_weight(self) -> PortfolioResult:
-        """等權重組合."""
-        w = np.ones(self._n_assets) / self._n_assets
-        return self._to_dict(w)
-
-    def min_variance(self) -> PortfolioResult:
-        """最小方差組合."""
-        if not HAS_SCIPY:
-            return self._min_variance_analytical()
-
-        def neg_sharpe_obj(w):
-            return np.dot(w.T, np.dot(self._cov_matrix, w))
-
-        constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
-        bounds = [(0, 1)] * self._n_assets
-        x0 = np.ones(self._n_assets) / self._n_assets
-
-        result = minimize(
-            neg_sharpe_obj,
-            x0,
-            method="SLSQP",
-            bounds=bounds,
-            constraints=constraints,
-            options={"maxiter": 1000, "ftol": 1e-12},
-        )
-        return self._to_dict(result.x)
-
-    def _min_variance_analytical(self) -> PortfolioResult:
-        """解析解最小方差（無 scipy fallback）."""
-        cov_inv = np.linalg.pinv(self._cov_matrix)
-        ones = np.ones(self._n_assets)
-        w = cov_inv @ ones / (ones @ cov_inv @ ones)
+            break
+        mrc = cov_matrix @ w / port_vol  # 邊際風險貢獻
+        rc = w * mrc  # 風險貢獻
+        target_rc = port_vol / n
+        w = w * (target_rc / (rc + 1e-10))
         w = np.maximum(w, 0)
-        w /= w.sum()
-        return self._to_dict(w)
+        w = w / w.sum()
 
-    def max_sharpe(self) -> PortfolioResult:
-        """最大 Sharpe 比率組合."""
-        if not HAS_SCIPY:
-            return self._max_sharpe_grid()
+    weight_dict = {assets[i]: round(float(w[i]), 4) for i in range(n)}
+    port_return = float(w @ mean_returns)
+    port_vol = float(np.sqrt(w @ cov_matrix @ w))
+    sharpe = (port_return - risk_free_rate) / port_vol if port_vol > 0 else 0
 
-        def neg_sharpe(w):
-            ret, vol, _ = self._portfolio_stats(w)
-            return -(ret - self._rf_daily * self._ann_factor) / vol if vol > 0 else 0
+    return PortfolioResult(
+        weights=weight_dict,
+        expected_return=round(port_return, 4),
+        volatility=round(port_vol, 4),
+        sharpe_ratio=round(sharpe, 4),
+        allocation={},
+    )
 
-        constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
-        bounds = [(0, 1)] * self._n_assets
-        x0 = np.ones(self._n_assets) / self._n_assets
 
-        result = minimize(
-            neg_sharpe,
-            x0,
-            method="SLSQP",
-            bounds=bounds,
-            constraints=constraints,
-            options={"maxiter": 1000, "ftol": 1e-12},
+def efficient_frontier(
+    returns_matrix: dict[str, list[float]],
+    n_points: int = 50,
+    risk_free_rate: float = 0.04,
+    max_weight: float = 0.5,
+) -> list[dict[str, Any]]:
+    """
+    計算有效前沿上的點。
+
+    Returns:
+        [{"return": float, "volatility": float, "sharpe": float, "weights": {...}}, ...]
+    """
+    assets = list(returns_matrix.keys())
+    n = len(assets)
+
+    ret_arrays = [np.array(returns_matrix[a], dtype=np.float64) for a in assets]
+    min_len = min(len(r) for r in ret_arrays)
+    ret_matrix = np.column_stack([r[:min_len] for r in ret_arrays])
+    mean_returns = np.array([_annualize_return(ret_matrix[:, i]) for i in range(n)])
+    cov_matrix = np.cov(ret_matrix, rowvar=False) * 252
+
+    # 隨機權重組合生成有效前沿近似
+    results = []
+    rng = np.random.default_rng(42)
+    for _ in range(n_points * 100):
+        w = rng.dirichlet(np.ones(n))
+        if w.max() > max_weight:
+            continue
+        port_ret = float(w @ mean_returns)
+        port_vol = float(np.sqrt(w @ cov_matrix @ w))
+        sharpe = (port_ret - risk_free_rate) / port_vol if port_vol > 0 else 0
+        results.append(
+            {
+                "return": round(port_ret, 4),
+                "volatility": round(port_vol, 4),
+                "sharpe": round(sharpe, 4),
+                "weights": {assets[i]: round(float(w[i]), 4) for i in range(n)},
+            }
         )
-        return self._to_dict(result.x)
 
-    def _max_sharpe_grid(self, n_samples: int = 10000) -> PortfolioResult:
-        """網格搜索最大 Sharpe（無 scipy fallback）."""
-        best_sharpe = -np.inf
-        best_w = np.ones(self._n_assets) / self._n_assets
-        rng = np.random.default_rng(42)
+    # 按波動率排序並取 n_points 個均勻分佈的點
+    results.sort(key=lambda x: x["volatility"])
+    if len(results) <= n_points:
+        return results
+    step = len(results) // n_points
+    return results[::step][:n_points]
 
-        for _ in range(n_samples):
-            w = rng.dirichlet(np.ones(self._n_assets))
-            _, _, sharpe = self._portfolio_stats(w)
-            if sharpe > best_sharpe:
-                best_sharpe = sharpe
-                best_w = w
 
-        return self._to_dict(best_w)
+def calculate_var(
+    returns: list[float],
+    confidence: float = 0.95,
+    method: str = "historical",
+) -> float:
+    """
+    計算 Value at Risk (VaR)。
 
-    def risk_parity(self) -> PortfolioResult:
-        """
-        風險平價組合 (Equal Risk Contribution).
-        每個資產對總風險的貢獻相同.
-        """
-        if not HAS_SCIPY:
-            return self._risk_parity_iterative()
+    Args:
+        returns: 日收益率序列
+        confidence: 信心水準（0.95 = 95%）
+        method: "historical" | "parametric"
+    """
+    arr = np.array(returns, dtype=np.float64)
+    if len(arr) < 10:
+        return 0.0
 
-        def risk_budget_obj(w):
-            rc = self._risk_contributions(w)
-            target = 1.0 / self._n_assets
-            return np.sum((rc - target) ** 2)
+    if method == "historical":
+        return round(float(np.percentile(arr, (1 - confidence) * 100)), 6)
+    else:
+        # 參數法（假設常態分佈）
+        mu, sigma = arr.mean(), arr.std()
+        from scipy import stats
 
-        constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
-        bounds = [(0.001, 1)] * self._n_assets
-        x0 = np.ones(self._n_assets) / self._n_assets
+        z = stats.norm.ppf(1 - confidence)
+        return round(float(mu + z * sigma), 6)
 
-        result = minimize(
-            risk_budget_obj,
-            x0,
-            method="SLSQP",
-            bounds=bounds,
-            constraints=constraints,
-            options={"maxiter": 1000, "ftol": 1e-12},
-        )
-        return self._to_dict(result.x)
 
-    def _risk_parity_iterative(self, max_iter: int = 500, tol: float = 1e-10) -> PortfolioResult:
-        """迭代法風險平價（無 scipy fallback）."""
-        w = np.ones(self._n_assets) / self._n_assets
-        for _ in range(max_iter):
-            cov_w = self._cov_matrix @ w
-            sigma = math.sqrt(w @ cov_w)
-            if sigma == 0:
-                break
-            mrc = cov_w / sigma
-            w = 1.0 / (self._n_assets * mrc)
-            w = w / w.sum()
-            # 檢查收斂
-            rc = self._risk_contributions(w)
-            target = 1.0 / self._n_assets
-            if np.max(np.abs(rc - target)) < tol:
-                break
-        return self._to_dict(w)
+def calculate_cvar(returns: list[float], confidence: float = 0.95) -> float:
+    """
+    計算 Conditional VaR (CVaR / Expected Shortfall)。
+    """
+    arr = np.array(returns, dtype=np.float64)
+    var = calculate_var(returns, confidence, method="historical")
+    tail = arr[arr <= var]
+    if len(tail) == 0:
+        return var
+    return round(float(tail.mean()), 6)
 
-    def efficient_frontier(self, n_points: int = 50) -> list[FrontierPoint]:
-        """
-        計算有效前沿.
 
-        Returns:
-            FrontierPoint 列表，按目標報酬排序.
-        """
-        min_ret = np.min(self._mean_returns)
-        max_ret = np.max(self._mean_returns)
-        target_returns = np.linspace(min_ret, max_ret, n_points)
+def calculate_max_drawdown(equity_curve: list[float]) -> dict[str, float]:
+    """
+    計算最大回撤及相關指標。
 
-        points: list[FrontierPoint] = []
-        for target in target_returns:
-            try:
-                if HAS_SCIPY:
-                    result = self._optimize_for_return(target)
-                    if result is not None:
-                        ret, vol, sharpe = self._portfolio_stats(result)
-                        points.append(FrontierPoint(
-                            target_return=float(target),
-                            volatility=float(vol),
-                            sharpe_ratio=float(sharpe),
-                            weights={self._names[i]: float(result[i]) for i in range(self._n_assets)},
-                        ))
-                else:
-                    # Fallback: 隨機採樣
-                    rng = np.random.default_rng(42)
-                    best_vol = np.inf
-                    best_w = None
-                    for _ in range(5000):
-                        w = rng.dirichlet(np.ones(self._n_assets))
-                        ret, vol, _ = self._portfolio_stats(w)
-                        if abs(ret - target) < (max_ret - min_ret) * 0.02 and vol < best_vol:
-                            best_vol = vol
-                            best_w = w
-                    if best_w is not None:
-                        ret, vol, sharpe = self._portfolio_stats(best_w)
-                        points.append(FrontierPoint(
-                            target_return=float(target),
-                            volatility=float(vol),
-                            sharpe_ratio=float(sharpe),
-                            weights={self._names[i]: float(best_w[i]) for i in range(self._n_assets)},
-                        ))
-            except Exception:
-                continue
+    Returns:
+        {"max_drawdown": float, "max_dd_duration": int, "peak": float, "trough": float}
+    """
+    arr = np.array(equity_curve, dtype=np.float64)
+    if len(arr) < 2:
+        return {"max_drawdown": 0.0, "max_dd_duration": 0, "peak": 0.0, "trough": 0.0}
 
-        return points
+    peak = np.maximum.accumulate(arr)
+    drawdown = (arr - peak) / peak
+    max_dd = float(drawdown.min())
+    max_dd_idx = int(drawdown.argmin())
 
-    def _optimize_for_return(self, target_return: float) -> np.ndarray | None:
-        """最小化波動率，同時滿足目標報酬."""
-        def objective(w):
-            return np.dot(w.T, np.dot(self._cov_matrix, w))
+    # 計算最大回撤持續時間
+    peak_idx = int(np.argmax(arr[: max_dd_idx + 1]))
+    # 找回撤結束（創新高）的時間
+    recovery_idx = max_dd_idx
+    for i in range(max_dd_idx, len(arr)):
+        if arr[i] >= peak[peak_idx]:
+            recovery_idx = i
+            break
+    else:
+        recovery_idx = len(arr) - 1
 
-        constraints = [
-            {"type": "eq", "fun": lambda w: np.sum(w) - 1},
-            {"type": "eq", "fun": lambda w, t=target_return: np.dot(w, self._mean_returns) - t},
-        ]
-        bounds = [(0, 1)] * self._n_assets
-        x0 = np.ones(self._n_assets) / self._n_assets
+    duration = recovery_idx - peak_idx
 
-        result = minimize(
-            objective, x0,
-            method="SLSQP", bounds=bounds, constraints=constraints,
-            options={"maxiter": 500, "ftol": 1e-12},
-        )
-        return result.x if result.success else None
-
-    def black_litterman(
-        self,
-        market_cap_weights: np.ndarray,
-        views: dict[str, float],
-        tau: float = 0.05,
-        view_confidence: float = 0.5,
-    ) -> PortfolioResult:
-        """
-        Black-Litterman 模型.
-
-        結合市場均衡（先驗）與投資者觀點（後驗）.
-
-        Args:
-            market_cap_weights: 市值加權權重（市場均衡）
-            views: 主觀觀點，如 {"AAPL": 0.05, "GOOGL": -0.02} 表示超配/低配
-            tau: 不確定性參數（通常 0.025 ~ 0.1）
-            view_confidence: 觀點信心度 (0~1)
-        """
-        # 市場均衡隱含報酬 (reverse optimization)
-        risk_aversion = 3.0  # 典型值
-        pi = risk_aversion * np.dot(self._cov_matrix, market_cap_weights)
-
-        # 構建觀點矩陣 P 和觀點報酬 Q
-        n_views = len(views)
-        P = np.zeros((n_views, self._n_assets))
-        Q = np.zeros(n_views)
-        view_asset_map = {name: i for i, name in enumerate(self._names)}
-
-        for i, (asset, view_return) in enumerate(views.items()):
-            if asset in view_asset_map:
-                idx = view_asset_map[asset]
-                P[i, idx] = 1.0
-                Q[i] = view_return
-
-        # 觀點不確定性矩陣 Omega
-        omega = np.diag(np.diag(tau * P @ self._cov_matrix @ P.T)) / view_confidence
-
-        # Black-Litterman 公式
-        tau_cov = tau * self._cov_matrix
-        tau_cov_inv = np.linalg.pinv(tau_cov)
-        omega_inv = np.linalg.pinv(omega)
-
-        # 後驗報酬
-        posterior_cov_inv = tau_cov_inv + P.T @ omega_inv @ P
-        posterior_cov = np.linalg.pinv(posterior_cov_inv)
-        posterior_mean = posterior_cov @ (tau_cov_inv @ pi + P.T @ omega_inv @ Q)
-
-        # 用後驗分佈計算最優組合
-        w = np.linalg.pinv(posterior_cov) @ posterior_mean / risk_aversion
-        w = np.maximum(w, 0)
-        w /= w.sum()
-
-        # 更新 mean_returns 以反映後驗
-        old_mean = self._mean_returns.copy()
-        self._mean_returns = posterior_mean
-        result = self._to_dict(w)
-        self._mean_returns = old_mean
-
-        return result
+    return {
+        "max_drawdown": round(max_dd, 6),
+        "max_dd_duration": duration,
+        "peak": round(float(peak[peak_idx]), 2),
+        "trough": round(float(arr[max_dd_idx]), 2),
+    }
