@@ -150,18 +150,34 @@ _STRATEGY_META: dict[str, dict] = {
 
 
 def _register_all() -> None:
-    """從舊版策略模組自動遷移到新 Registry."""
+    """從舊版策略模組自動遷移到新 Registry，優先使用向量化版本."""
     _strategies = _import_strategies()
     if _strategies is None:
         return
 
+    # 嘗試導入向量化策略（numpy 加速版）
+    _vec_strategies = None
+    try:
+        from src.backtest.strategies_vectorized import VECTORIZED_STRATEGIES
+
+        _vec_strategies = VECTORIZED_STRATEGIES
+    except Exception:
+        pass
+
     for name, meta in _STRATEGY_META.items():
-        func = (
-            getattr(_strategies, "_STRATEGY_FUNCS", {}).get(name) if hasattr(_strategies, "_STRATEGY_FUNCS") else None
-        )
+        # 優先使用向量化版本
+        func = _vec_strategies.get(name) if _vec_strategies else None
+
         if func is None:
-            # 嘗試直接從模組取函數
-            func = getattr(_strategies, name, None)
+            # 回退到舊版策略
+            func = (
+                getattr(_strategies, "_STRATEGY_FUNCS", {}).get(name)
+                if hasattr(_strategies, "_STRATEGY_FUNCS")
+                else None
+            )
+            if func is None:
+                func = getattr(_strategies, name, None)
+
         if func:
             registry.register(
                 func=func,

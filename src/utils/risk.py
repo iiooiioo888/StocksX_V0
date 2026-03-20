@@ -25,6 +25,8 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
+
 
 @dataclass(slots=True)
 class RiskMetrics:
@@ -220,7 +222,7 @@ class RiskAnalyzer:
         initial_equity: float = 10000.0,
     ) -> MonteCarloResult:
         """
-        蒙特卡羅模擬 — 基於歷史報酬分佈.
+        蒙特卡羅模擬 — 基於歷史報酬分佈 (numpy 向量化版).
 
         Args:
             n_simulations: 模擬次數
@@ -230,48 +232,44 @@ class RiskAnalyzer:
         if not self._returns:
             return MonteCarloResult()
 
-        final_equities: list[float] = []
-        max_dds: list[float] = []
+        returns_arr = np.array(self._returns, dtype=np.float64)
 
-        for _ in range(n_simulations):
-            equity = initial_equity
-            peak = equity
-            max_dd = 0.0
+        # 向量化: 一次性生成全部隨機路徑
+        rng = np.random.default_rng(42)
+        random_returns = rng.choice(returns_arr, size=(n_simulations, horizon))
 
-            for _ in range(horizon):
-                r = random.choice(self._returns)
-                equity *= 1 + r
-                if equity > peak:
-                    peak = equity
-                dd = (peak - equity) / peak if peak else 0
-                if dd > max_dd:
-                    max_dd = dd
+        # 計算每條路徑的累積報酬
+        cumulative = np.cumprod(1 + random_returns, axis=1)
+        final_equities = initial_equity * cumulative[:, -1]
 
-            final_equities.append(equity)
-            max_dds.append(max_dd)
+        # 計算每條路徑的最大回撤
+        running_max = np.maximum.accumulate(cumulative, axis=1)
+        drawdowns = (running_max - cumulative) / running_max
+        max_dds = np.max(drawdowns, axis=1)
 
+        # 排序取分位數
         final_equities.sort()
         max_dds.sort()
 
-        def percentile(data: list[float], p: float) -> float:
+        def percentile_np(data: np.ndarray, p: float) -> float:
             idx = int(len(data) * p)
-            return data[max(0, min(idx, len(data) - 1))]
+            return float(data[max(0, min(idx, len(data) - 1))])
 
         return MonteCarloResult(
             percentiles={
-                "p5": percentile(final_equities, 0.05),
-                "p25": percentile(final_equities, 0.25),
-                "p50": percentile(final_equities, 0.50),
-                "p75": percentile(final_equities, 0.75),
-                "p95": percentile(final_equities, 0.95),
+                "p5": percentile_np(final_equities, 0.05),
+                "p25": percentile_np(final_equities, 0.25),
+                "p50": percentile_np(final_equities, 0.50),
+                "p75": percentile_np(final_equities, 0.75),
+                "p95": percentile_np(final_equities, 0.95),
             },
-            mean_final_equity=sum(final_equities) / len(final_equities),
-            median_final_equity=percentile(final_equities, 0.50),
-            prob_loss=sum(1 for e in final_equities if e < initial_equity) / n_simulations,
+            mean_final_equity=float(np.mean(final_equities)),
+            median_final_equity=float(np.median(final_equities)),
+            prob_loss=float(np.mean(final_equities < initial_equity)),
             max_drawdown_dist={
-                "p50": percentile(max_dds, 0.50),
-                "p95": percentile(max_dds, 0.95),
-                "max": max(max_dds),
+                "p50": percentile_np(max_dds, 0.50),
+                "p95": percentile_np(max_dds, 0.95),
+                "max": float(np.max(max_dds)),
             },
         )
 

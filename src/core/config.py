@@ -188,7 +188,13 @@ class Settings:
 
     @property
     def admin_password(self) -> str:
-        return _env("ADMIN_PASSWORD", "admin123") or "admin123"
+        pw = _env("ADMIN_PASSWORD")
+        if not pw:
+            raise RuntimeError(
+                "ADMIN_PASSWORD 環境變數未設定。"
+                "請在 .env 中設定管理員密碼：ADMIN_PASSWORD=<your-password>"
+            )
+        return pw
 
     @property
     def log_level(self) -> str:
