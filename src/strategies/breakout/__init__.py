@@ -1,1 +1,9 @@
-"""策略模塊"""
+"""突破策略模塊 - 14/14 完成（100%）"""
+
+from .breakout_strategies import BREAKOUT_STRATEGIES
+from .breakout_strategies_complete import BREAKOUT_COMPLETE_STRATEGIES
+
+# 合併所有突破策略（14 個）
+ALL_BREAKOUT_STRATEGIES = {**BREAKOUT_STRATEGIES, **BREAKOUT_COMPLETE_STRATEGIES}
+
+__all__ = ['ALL_BREAKOUT_STRATEGIES', 'BREAKOUT_STRATEGIES', 'BREAKOUT_COMPLETE_STRATEGIES']
