@@ -333,13 +333,19 @@ class TriangularArbitrage:
     
     条件：
     - 汇率乘积 > 1 + 手续费
+    
+    套利路径类型：
+    - 正向循环：A→B→C→A（如 USDT→BTC→ETH→USDT）
+    - 反向循环：A→C→B→A（如 USDT→ETH→BTC→USDT）
     """
     
     def __init__(
         self,
         exchange_id: str,
         api_keys: Optional[Dict[str, str]] = None,
-        min_profit_pct: float = 0.1
+        min_profit_pct: float = 0.1,
+        max_position_usd: float = 5000,
+        fee_rate: float = 0.001
     ):
         """
         初始化
@@ -348,8 +354,13 @@ class TriangularArbitrage:
             exchange_id: 交易所 ID
             api_keys: API Keys
             min_profit_pct: 最小利润率
+            max_position_usd: 最大仓位
+            fee_rate: 单边手续费率
         """
+        self.exchange_id = exchange_id
         self.min_profit_pct = min_profit_pct
+        self.max_position_usd = max_position_usd
+        self.fee_rate = fee_rate
         
         if api_keys:
             exchange_class = getattr(ccxt, exchange_id)
@@ -363,49 +374,278 @@ class TriangularArbitrage:
             self.exchange = exchange_class({
                 'enableRateLimit': True,
             })
-        
-        self.exchange_id = exchange_id
+    
+    def _get_bid_ask(self, symbol: str) -> Optional[Tuple[float, float]]:
+        """获取买卖价"""
+        try:
+            orderbook = self.exchange.fetch_order_book(symbol, limit=1)
+            bid = orderbook['bids'][0][0] if orderbook['bids'] else None
+            ask = orderbook['asks'][0][0] if orderbook['asks'] else None
+            if bid and ask:
+                return bid, ask
+            return None
+        except Exception:
+            return None
     
     def find_cycles(
         self,
-        base_currency: str = "USDT"
+        base_currency: str = "USDT",
+        max_depth: int = 3,
+        quote_currencies: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        寻找套利循环
+        寻找所有三角套利循环
+        
+        构建交易对图，寻找所有 base→X→Y→base 的路径
         
         Args:
-            base_currency: 基础货币
+            base_currency: 基础货币（套利起点和终点）
+            max_depth: 最大搜索深度
+            quote_currencies: 候选中间货币
         
         Returns:
             套利循环列表
         """
-        # 简化实现
-        # 实际应该构建完整的交易对图并寻找循环
+        try:
+            markets = self.exchange.load_markets()
+        except Exception as e:
+            logger.error(f"加载市场失败：{e}")
+            return []
         
+        # 构建邻接表：base_currency → {中间货币 → 交易对}
+        # 同时记录反向
+        graph: Dict[str, List[Tuple[str, str, str]]] = {}  # currency → [(other, symbol, side)]
+        
+        for symbol, market in markets.items():
+            if not market.get('active', True):
+                continue
+            if market.get('type') not in ('spot', None):
+                continue
+            
+            base = market['base']
+            quote = market['quote']
+            
+            # base/quote: 用 quote 买 base = buy side
+            if quote not in graph:
+                graph[quote] = []
+            graph[quote].append((base, symbol, 'buy'))
+            
+            # 反向：卖 base 得 quote
+            if base not in graph:
+                graph[base] = []
+            graph[base].append((quote, symbol, 'sell'))
+        
+        if base_currency not in graph:
+            logger.warning(f"基础货币 {base_currency} 不在交易所中")
+            return []
+        
+        # DFS 寻找循环
         cycles = []
         
-        # 示例：USDT → BTC → ETH → USDT
-        # 需要获取三个交易对的价格
+        def dfs(path: List[Tuple[str, str, str]], visited: set, depth: int):
+            current_currency = path[-1][0] if path else base_currency
+            
+            if depth == 0:
+                # 检查是否能回到 base_currency
+                for next_curr, symbol, side in graph.get(current_currency, []):
+                    if next_curr == base_currency and len(set(c[0] for c in path)) >= 2:
+                        full_path = path + [(base_currency, symbol, side)]
+                        cycles.append(full_path)
+                return
+            
+            for next_curr, symbol, side in graph.get(current_currency, []):
+                if next_curr in visited and next_curr != base_currency:
+                    continue
+                if depth == max_depth - 1 and next_curr == base_currency:
+                    continue  # 第一步不能直接回去
+                
+                new_visited = visited | {current_currency}
+                dfs(path + [(next_curr, symbol, side)], new_visited, depth - 1)
+        
+        dfs([(base_currency, '', '')], set(), max_depth - 1)
         
         return cycles
     
-    def calculate_profit(
+    def calculate_cycle_profit(
         self,
-        path: List[str],
+        cycle: List[Tuple[str, str, str]],
         amount: float
-    ) -> float:
+    ) -> Optional[Dict[str, Any]]:
         """
-        计算循环利润
+        计算循环套利的利润
         
         Args:
-            path: 交易路径
+            cycle: 循环路径 [(currency, symbol, side), ...]
             amount: 初始金额
         
         Returns:
-            利润率
+            利润计算结果
         """
-        # 简化实现
-        return 0.0
+        if len(cycle) < 3:
+            return None
+        
+        legs = []
+        current_amount = amount
+        profitable = True
+        
+        for i in range(len(cycle) - 1):
+            currency, symbol, side = cycle[i]
+            next_currency = cycle[i + 1][0]
+            next_symbol = cycle[i + 1][1]
+            next_side = cycle[i + 1][2]
+            
+            # 获取价格
+            bid_ask = self._get_bid_ask(next_symbol)
+            if bid_ask is None:
+                return None
+            
+            bid, ask = bid_ask
+            
+            if next_side == 'buy':
+                # 用 current_currency 买 next_currency
+                exec_price = ask  # 买入用 ask
+                fee = current_amount * self.fee_rate
+                after_fee = current_amount - fee
+                next_amount = after_fee / exec_price
+            else:
+                # 卖 current_currency 得 next_currency
+                exec_price = bid  # 卖出用 bid
+                next_amount = current_amount * exec_price
+                fee = next_amount * self.fee_rate
+                next_amount -= fee
+            
+            legs.append({
+                'from': currency,
+                'to': next_currency,
+                'symbol': next_symbol,
+                'side': next_side,
+                'price': exec_price,
+                'amount_in': current_amount,
+                'amount_out': next_amount,
+                'fee': fee,
+            })
+            
+            current_amount = next_amount
+        
+        final_amount = current_amount
+        profit = final_amount - amount
+        profit_pct = profit / amount * 100
+        
+        return {
+            'cycle': [(c, s) for c, s, _ in cycle],
+            'legs': legs,
+            'initial_amount': amount,
+            'final_amount': final_amount,
+            'profit': profit,
+            'profit_pct': profit_pct,
+            'is_profitable': profit_pct > self.min_profit_pct,
+        }
+    
+    def scan_opportunities(
+        self,
+        base_currency: str = "USDT",
+        amount: Optional[float] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        扫描所有三角套利机会
+        
+        Args:
+            base_currency: 基础货币
+            amount: 交易金额
+        
+        Returns:
+            套利机会列表（按利润排序）
+        """
+        amount = amount or self.max_position_usd
+        
+        # 寻找所有循环
+        cycles = self.find_cycles(base_currency)
+        logger.info(f"发现 {len(cycles)} 个潜在循环")
+        
+        opportunities = []
+        
+        for cycle in cycles:
+            result = self.calculate_cycle_profit(cycle, amount)
+            if result and result['is_profitable']:
+                opportunities.append(result)
+        
+        # 按利润率排序
+        opportunities.sort(key=lambda x: x['profit_pct'], reverse=True)
+        
+        if opportunities:
+            logger.info(
+                f"发现 {len(opportunities)} 个三角套利机会，"
+                f"最高利润：{opportunities[0]['profit_pct']:.3f}%"
+            )
+        
+        return opportunities
+    
+    def execute_cycle(
+        self,
+        cycle: List[Tuple[str, str, str]],
+        amount: float
+    ) -> Dict[str, Any]:
+        """
+        执行三角套利
+        
+        Args:
+            cycle: 循环路径
+            amount: 初始金额
+        
+        Returns:
+            执行结果
+        """
+        result = {
+            'cycle': [(c, s) for c, s, _ in cycle],
+            'legs': [],
+            'initial_amount': amount,
+            'final_amount': 0,
+            'profit': 0,
+            'status': 'pending',
+        }
+        
+        current_amount = amount
+        
+        try:
+            for i in range(len(cycle) - 1):
+                _, symbol, side = cycle[i]
+                next_side = cycle[i + 1][2]
+                
+                if next_side == 'buy':
+                    order = self.exchange.create_market_buy_order(
+                        symbol, current_amount / self._get_bid_ask(symbol)[1]
+                    )
+                else:
+                    order = self.exchange.create_market_sell_order(
+                        symbol, current_amount
+                    )
+                
+                filled = order.get('filled', 0)
+                cost = order.get('cost', 0)
+                
+                result['legs'].append({
+                    'symbol': symbol,
+                    'side': next_side,
+                    'order_id': order.get('id'),
+                    'filled': filled,
+                    'cost': cost,
+                })
+                
+                current_amount = cost if next_side == 'buy' else filled
+            
+            result['final_amount'] = current_amount
+            result['profit'] = current_amount - amount
+            result['profit_pct'] = result['profit'] / amount * 100
+            result['status'] = 'completed'
+            
+            logger.info(f"三角套利完成：利润 ${result['profit']:.2f} ({result['profit_pct']:.3f}%)")
+            
+        except Exception as e:
+            logger.error(f"三角套利执行失败：{e}")
+            result['status'] = 'failed'
+            result['error'] = str(e)
+        
+        return result
 
 
 # 测试

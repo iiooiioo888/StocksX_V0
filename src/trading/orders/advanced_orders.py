@@ -5,6 +5,8 @@
 - 条件单（Conditional Orders）
 - OCO 订单（One-Cancels-Other）
 - 追踪止损（Trailing Stop）
+- 冰山订单（Iceberg Order）— 大单拆分隐藏真实数量
+- TWAP 订单（Time-Weighted Average Price）— 时间加权分批执行
 - 时间条件单
 - 指标条件单
 
@@ -13,14 +15,18 @@
 - 突破交易
 - 网格交易
 - 定投策略
+- 大额订单隐蔽执行
+- 降低市场冲击
 """
 
 from __future__ import annotations
 
 import logging
+import random
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Callable
 
@@ -36,6 +42,8 @@ class OrderType(Enum):
     CONDITIONAL = "conditional"
     OCO = "oco"
     TRAILING_STOP = "trailing_stop"
+    ICEBERG = "iceberg"
+    TWAP = "twap"
 
 
 class TriggerType(Enum):
@@ -677,6 +685,572 @@ class TrailingStop:
         }
 
 
+class IcebergOrder:
+    """
+    冰山订单（Iceberg Order）
+    
+    将大额订单拆分为多个可见的小单，隐藏真实交易意图。
+    只有"冰山一角"暴露在订单簿上，其余部分隐藏。
+    
+    核心参数：
+    - total_amount: 总数量
+    - visible_amount: 每次暴露的数量（冰山一角）
+    - price_limit: 限价（可选，市价则为 None）
+    - refresh_interval: 每批之间的最小间隔（秒）
+    - price_tolerance: 价格偏离容忍度，超过则暂停等待
+    
+    使用场景：
+    - 机构大额建仓/减仓
+    - 避免滑点和市场冲击
+    - 隐藏真实仓位意图
+    
+    示例：
+    ```python
+    iceberg = IcebergOrder(
+        symbol="BTC/USDT",
+        side="buy",
+        total_amount=10.0,      # 总共买 10 BTC
+        visible_amount=0.5,     # 每次只挂 0.5 BTC
+        price_limit=68000,      # 限价 68000
+        refresh_interval=30,    # 每 30 秒刷新一批
+    )
+    ```
+    """
+    
+    def __init__(
+        self,
+        symbol: str,
+        side: str,
+        total_amount: float,
+        visible_amount: float,
+        price_limit: Optional[float] = None,
+        refresh_interval: float = 10.0,
+        price_tolerance: float = 0.005,
+        max_slippage: float = 0.002,
+        randomize_timing: bool = True,
+        expiry: Optional[datetime] = None
+    ):
+        """
+        初始化冰山订单
+        
+        Args:
+            symbol: 交易对
+            side: 买入/卖出
+            total_amount: 总交易数量
+            visible_amount: 每批暴露数量
+            price_limit: 限价（None = 市价）
+            refresh_interval: 刷新间隔（秒）
+            price_tolerance: 价格偏离容忍度（如 0.005 = 0.5%）
+            max_slippage: 最大滑点容忍度
+            randomize_timing: 是否随机化下单时间（反侦测）
+            expiry: 过期时间
+        """
+        if visible_amount <= 0:
+            raise ValueError("visible_amount 必须大于 0")
+        if visible_amount >= total_amount:
+            raise ValueError("visible_amount 应小于 total_amount，否则不需要冰山订单")
+        
+        self.symbol = symbol
+        self.side = side
+        self.total_amount = total_amount
+        self.visible_amount = visible_amount
+        self.price_limit = price_limit
+        self.refresh_interval = refresh_interval
+        self.price_tolerance = price_tolerance
+        self.max_slippage = max_slippage
+        self.randomize_timing = randomize_timing
+        self.expiry = expiry
+        
+        # 状态追踪
+        self.status = OrderStatus.PENDING
+        self.filled_amount = 0.0
+        self.remaining_amount = total_amount
+        self.batches_sent = 0
+        self.created_at = datetime.now()
+        self.last_batch_at: Optional[datetime] = None
+        
+        # 已成交批次记录
+        self.fills: List[Dict[str, Any]] = []
+        
+        # 回调
+        self.on_batch_fill: Optional[Callable] = None
+        self.on_complete: Optional[Callable] = None
+    
+    def _compute_batch_size(self) -> float:
+        """计算当前批次大小（带随机抖动）"""
+        base = min(self.visible_amount, self.remaining_amount)
+        if self.randomize_timing:
+            # ±20% 随机抖动，避免被模式识别
+            jitter = random.uniform(0.8, 1.2)
+            base = min(base * jitter, self.remaining_amount)
+        return round(base, 8)
+    
+    def _next_delay(self) -> float:
+        """计算下一批延迟（秒）"""
+        delay = self.refresh_interval
+        if self.randomize_timing:
+            # ±30% 随机延迟
+            delay *= random.uniform(0.7, 1.3)
+        return delay
+    
+    def check_price_ok(self, current_price: float) -> bool:
+        """检查价格是否在容忍范围内"""
+        if self.price_limit is None:
+            return True
+        
+        if self.side == "buy":
+            return current_price <= self.price_limit * (1 + self.price_tolerance)
+        else:
+            return current_price >= self.price_limit * (1 - self.price_tolerance)
+    
+    def should_send_batch(self, current_price: float) -> bool:
+        """判断是否应该发送下一批"""
+        if self.status != OrderStatus.PENDING:
+            return False
+        
+        # 检查是否过期
+        if self.expiry and datetime.now() > self.expiry:
+            self.status = OrderStatus.EXPIRED
+            logger.info(f"冰山订单已过期：{self.symbol}")
+            return False
+        
+        # 检查是否全部成交
+        if self.remaining_amount <= 0:
+            self.status = OrderStatus.FILLED
+            logger.info(f"冰山订单全部成交：{self.symbol}, 共 {self.batches_sent} 批")
+            if self.on_complete:
+                self.on_complete(self)
+            return False
+        
+        # 检查价格
+        if not self.check_price_ok(current_price):
+            logger.debug(f"冰山订单价格偏离：当前={current_price}, 限价={self.price_limit}")
+            return False
+        
+        # 检查间隔
+        if self.last_batch_at:
+            elapsed = (datetime.now() - self.last_batch_at).total_seconds()
+            if elapsed < self._next_delay():
+                return False
+        
+        return True
+    
+    def send_batch(
+        self,
+        current_price: float,
+        submit_order_func: Optional[Callable] = None
+    ) -> Optional[Order]:
+        """
+        发送下一批订单
+        
+        Args:
+            current_price: 当前市场价格
+            submit_order_func: 提交订单的函数
+        
+        Returns:
+            生成的订单，如果条件不满足则为 None
+        """
+        if not self.should_send_batch(current_price):
+            return None
+        
+        batch_size = self._compute_batch_size()
+        if batch_size <= 0:
+            return None
+        
+        # 创建订单
+        order = Order(
+            symbol=self.symbol,
+            side=self.side,
+            type=OrderType.LIMIT if self.price_limit else OrderType.MARKET,
+            amount=batch_size,
+            price=self.price_limit
+        )
+        
+        # 提交
+        if submit_order_func:
+            try:
+                submit_order_func(order)
+                order.status = OrderStatus.SUBMITTED
+                logger.info(
+                    f"冰山订单第 {self.batches_sent + 1} 批已提交："
+                    f"{self.symbol} {batch_size} @ {self.price_limit or '市价'}"
+                )
+            except Exception as e:
+                logger.error(f"冰山订单批次提交失败：{e}")
+                order.status = OrderStatus.REJECTED
+                return None
+        
+        # 更新状态
+        self.batches_sent += 1
+        self.last_batch_at = datetime.now()
+        
+        # 假设本批全部成交（实际应由回调更新）
+        self.filled_amount += batch_size
+        self.remaining_amount = self.total_amount - self.filled_amount
+        
+        self.fills.append({
+            'batch': self.batches_sent,
+            'amount': batch_size,
+            'price': current_price,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        if self.on_batch_fill:
+            self.on_batch_fill(self, order, self.batches_sent)
+        
+        return order
+    
+    def get_progress(self) -> Dict[str, Any]:
+        """获取执行进度"""
+        avg_price = 0.0
+        if self.fills:
+            total_cost = sum(f['amount'] * f['price'] for f in self.fills)
+            avg_price = total_cost / self.filled_amount if self.filled_amount > 0 else 0
+        
+        return {
+            'symbol': self.symbol,
+            'side': self.side,
+            'total_amount': self.total_amount,
+            'filled_amount': self.filled_amount,
+            'remaining_amount': self.remaining_amount,
+            'progress_pct': (self.filled_amount / self.total_amount * 100) if self.total_amount > 0 else 0,
+            'batches_sent': self.batches_sent,
+            'avg_fill_price': avg_price,
+            'status': self.status.value,
+        }
+    
+    def cancel(self):
+        """取消冰山订单"""
+        self.status = OrderStatus.CANCELLED
+        logger.info(
+            f"冰山订单已取消：{self.symbol}, "
+            f"已完成 {self.filled_amount}/{self.total_amount} "
+            f"({self.batches_sent} 批)"
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            **self.get_progress(),
+            'visible_amount': self.visible_amount,
+            'price_limit': self.price_limit,
+            'refresh_interval': self.refresh_interval,
+            'created_at': self.created_at.isoformat(),
+            'fills': self.fills,
+        }
+
+
+class TWAPOrder:
+    """
+    TWAP 订单（Time-Weighted Average Price）
+    
+    在指定时间段内均匀拆分订单，按固定时间间隔执行，
+    目标是以接近时间段内 TWAP 的价格完成交易。
+    
+    与 Iceberg 的区别：
+    - Iceberg: 按固定数量拆分，关注隐藏意图
+    - TWAP: 按时间均匀拆分，关注成交均价
+    
+    核心参数：
+    - duration: 总执行时长（秒）
+    - num_slices: 切片数量
+    - total_amount: 总数量
+    
+    使用场景：
+    - 大额订单降低市场冲击
+    - 被动执行，追求均价
+    - 基准交易（Benchmark execution）
+    
+    示例：
+    ```python
+    twap = TWAPOrder(
+        symbol="BTC/USDT",
+        side="buy",
+        total_amount=5.0,
+        duration=3600,      # 1 小时内完成
+        num_slices=12,      # 分 12 批，每 5 分钟一批
+    )
+    ```
+    """
+    
+    def __init__(
+        self,
+        symbol: str,
+        side: str,
+        total_amount: float,
+        duration: float,
+        num_slices: int,
+        price_limit: Optional[float] = None,
+        start_time: Optional[datetime] = None,
+        max_participation_rate: float = 0.1,
+        urgency: str = "normal",  # low / normal / high
+        randomize_timing: bool = True,
+        expiry: Optional[datetime] = None
+    ):
+        """
+        初始化 TWAP 订单
+        
+        Args:
+            symbol: 交易对
+            side: 买入/卖出
+            total_amount: 总交易数量
+            duration: 执行时长（秒）
+            num_slices: 切片数量
+            price_limit: 限价（None = 市价）
+            start_time: 开始时间（None = 立即开始）
+            max_participation_rate: 最大参与率（避免过度影响市场）
+            urgency: 紧急程度 low/normal/high
+            randomize_timing: 是否随机化执行时间
+            expiry: 过期时间
+        """
+        if num_slices < 1:
+            raise ValueError("num_slices 必须 >= 1")
+        if duration <= 0:
+            raise ValueError("duration 必须大于 0")
+        
+        self.symbol = symbol
+        self.side = side
+        self.total_amount = total_amount
+        self.duration = duration
+        self.num_slices = num_slices
+        self.price_limit = price_limit
+        self.start_time = start_time or datetime.now()
+        self.max_participation_rate = max_participation_rate
+        self.urgency = urgency
+        self.randomize_timing = randomize_timing
+        self.expiry = expiry
+        
+        # 每片数量
+        self.slice_amount = total_amount / num_slices
+        # 每片间隔（秒）
+        self.slice_interval = duration / num_slices
+        
+        # 根据紧急程度调整
+        if urgency == "high":
+            self.slice_interval *= 0.7  # 加速 30%
+        elif urgency == "low":
+            self.slice_interval *= 1.3  # 减速 30%
+        
+        # 状态追踪
+        self.status = OrderStatus.PENDING
+        self.filled_amount = 0.0
+        self.remaining_amount = total_amount
+        self.slices_sent = 0
+        self.created_at = datetime.now()
+        self.started_at: Optional[datetime] = None
+        self.completed_at: Optional[datetime] = None
+        
+        # 执行记录
+        self.fills: List[Dict[str, Any]] = []
+        self.twap_price: float = 0.0  # 已实现 TWAP
+        
+        # 回调
+        self.on_slice_fill: Optional[Callable] = None
+        self.on_complete: Optional[Callable] = None
+    
+    def _compute_slice_size(self) -> float:
+        """计算当前切片大小"""
+        # 剩余切片平均分配
+        remaining_slices = self.num_slices - self.slices_sent
+        if remaining_slices <= 0:
+            return 0.0
+        
+        base = self.remaining_amount / remaining_slices
+        
+        if self.randomize_timing:
+            # ±15% 随机抖动
+            jitter = random.uniform(0.85, 1.15)
+            base = min(base * jitter, self.remaining_amount)
+        
+        return round(base, 8)
+    
+    def _next_delay(self) -> float:
+        """计算下一切片延迟"""
+        delay = self.slice_interval
+        if self.randomize_timing:
+            delay *= random.uniform(0.8, 1.2)
+        return delay
+    
+    def _update_twap(self, fill_price: float, fill_amount: float):
+        """更新已实现 TWAP 价格"""
+        if self.filled_amount + fill_amount <= 0:
+            return
+        self.twap_price = (
+            (self.twap_price * self.filled_amount + fill_price * fill_amount)
+            / (self.filled_amount + fill_amount)
+        )
+    
+    def get_schedule(self) -> List[Dict[str, Any]]:
+        """获取执行计划（时间表）"""
+        schedule = []
+        current = self.start_time
+        
+        for i in range(self.num_slices):
+            schedule.append({
+                'slice': i + 1,
+                'scheduled_time': current.isoformat(),
+                'amount': self.slice_amount,
+                'cumulative_amount': self.slice_amount * (i + 1),
+            })
+            current = current + timedelta(seconds=self.slice_interval)
+        
+        return schedule
+    
+    def should_send_slice(self, current_time: Optional[datetime] = None) -> bool:
+        """判断是否应该发送下一切片"""
+        if self.status != OrderStatus.PENDING:
+            return False
+        
+        now = current_time or datetime.now()
+        
+        # 检查是否已开始
+        if now < self.start_time:
+            return False
+        
+        # 检查是否过期
+        if self.expiry and now > self.expiry:
+            self.status = OrderStatus.EXPIRED
+            logger.info(f"TWAP 订单已过期：{self.symbol}")
+            return False
+        
+        # 检查是否全部完成
+        if self.remaining_amount <= 0 or self.slices_sent >= self.num_slices:
+            self.status = OrderStatus.FILLED
+            self.completed_at = now
+            logger.info(
+                f"TWAP 订单完成：{self.symbol}, "
+                f"TWAP 价格={self.twap_price:.2f}, "
+                f"共 {self.slices_sent} 片"
+            )
+            if self.on_complete:
+                self.on_complete(self)
+            return False
+        
+        # 检查时间间隔
+        if self.started_at:
+            elapsed = (now - self.started_at).total_seconds()
+            expected_time = self.slices_sent * self.slice_interval
+            if elapsed < expected_time:
+                return False
+        elif now < self.start_time:
+            return False
+        
+        return True
+    
+    def send_slice(
+        self,
+        current_price: float,
+        current_time: Optional[datetime] = None,
+        submit_order_func: Optional[Callable] = None
+    ) -> Optional[Order]:
+        """
+        发送下一切片订单
+        
+        Args:
+            current_price: 当前市场价格
+            current_time: 当前时间
+            submit_order_func: 提交订单的函数
+        
+        Returns:
+            生成的订单，如果条件不满足则为 None
+        """
+        if not self.should_send_slice(current_time):
+            return None
+        
+        if self.started_at is None:
+            self.started_at = datetime.now()
+        
+        slice_size = self._compute_slice_size()
+        if slice_size <= 0:
+            return None
+        
+        # 创建订单
+        order = Order(
+            symbol=self.symbol,
+            side=self.side,
+            type=OrderType.LIMIT if self.price_limit else OrderType.MARKET,
+            amount=slice_size,
+            price=self.price_limit
+        )
+        
+        # 提交
+        if submit_order_func:
+            try:
+                submit_order_func(order)
+                order.status = OrderStatus.SUBMITTED
+                logger.info(
+                    f"TWAP 第 {self.slices_sent + 1}/{self.num_slices} 片已提交："
+                    f"{self.symbol} {slice_size} @ {self.price_limit or '市价'}"
+                )
+            except Exception as e:
+                logger.error(f"TWAP 切片提交失败：{e}")
+                order.status = OrderStatus.REJECTED
+                return None
+        
+        # 更新状态
+        self.slices_sent += 1
+        self.filled_amount += slice_size
+        self.remaining_amount = self.total_amount - self.filled_amount
+        self._update_twap(current_price, slice_size)
+        
+        self.fills.append({
+            'slice': self.slices_sent,
+            'amount': slice_size,
+            'price': current_price,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        if self.on_slice_fill:
+            self.on_slice_fill(self, order, self.slices_sent)
+        
+        return order
+    
+    def get_progress(self) -> Dict[str, Any]:
+        """获取执行进度"""
+        elapsed = 0.0
+        if self.started_at:
+            elapsed = (datetime.now() - self.started_at).total_seconds()
+        
+        return {
+            'symbol': self.symbol,
+            'side': self.side,
+            'total_amount': self.total_amount,
+            'filled_amount': self.filled_amount,
+            'remaining_amount': self.remaining_amount,
+            'progress_pct': (self.filled_amount / self.total_amount * 100) if self.total_amount > 0 else 0,
+            'slices_sent': self.slices_sent,
+            'total_slices': self.num_slices,
+            'twap_price': self.twap_price,
+            'elapsed_seconds': elapsed,
+            'duration_seconds': self.duration,
+            'time_progress_pct': min(100, elapsed / self.duration * 100) if self.duration > 0 else 100,
+            'status': self.status.value,
+        }
+    
+    def cancel(self):
+        """取消 TWAP 订单"""
+        self.status = OrderStatus.CANCELLED
+        logger.info(
+            f"TWAP 订单已取消：{self.symbol}, "
+            f"已完成 {self.filled_amount}/{self.total_amount} "
+            f"({self.slices_sent}/{self.num_slices} 片), "
+            f"TWAP={self.twap_price:.2f}"
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            **self.get_progress(),
+            'slice_amount': self.slice_amount,
+            'slice_interval': self.slice_interval,
+            'price_limit': self.price_limit,
+            'urgency': self.urgency,
+            'created_at': self.created_at.isoformat(),
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'fills': self.fills,
+        }
+
+
 # 订单管理器
 class OrderManager:
     """
@@ -690,6 +1264,8 @@ class OrderManager:
         self.conditional_orders: List[ConditionalOrder] = []
         self.oco_orders: List[OCOOrder] = []
         self.trailing_stops: List[TrailingStop] = []
+        self.iceberg_orders: List[IcebergOrder] = []
+        self.twap_orders: List[TWAPOrder] = []
         
         # 提交订单的函数
         self.submit_order_func: Optional[Callable] = None
@@ -714,6 +1290,16 @@ class OrderManager:
         self.trailing_stops.append(stop)
         logger.info(f"添加追踪止损：{stop.symbol}")
     
+    def add_iceberg_order(self, order: IcebergOrder):
+        """添加冰山订单"""
+        self.iceberg_orders.append(order)
+        logger.info(f"添加冰山订单：{order.symbol}, 总量={order.total_amount}")
+    
+    def add_twap_order(self, order: TWAPOrder):
+        """添加 TWAP 订单"""
+        self.twap_orders.append(order)
+        logger.info(f"添加 TWAP 订单：{order.symbol}, {order.num_slices} 片/{order.duration}s")
+    
     def check_all_orders(self, market_data: Dict[str, Any]):
         """
         检查所有订单
@@ -736,6 +1322,16 @@ class OrderManager:
         for stop in self.trailing_stops[:]:
             if stop.status == OrderStatus.PENDING:
                 stop.check_and_trigger(current_price, self.submit_order_func)
+        
+        # 检查冰山订单
+        for iceberg in self.iceberg_orders[:]:
+            if iceberg.status == OrderStatus.PENDING:
+                iceberg.send_batch(current_price, self.submit_order_func)
+        
+        # 检查 TWAP 订单
+        for twap in self.twap_orders[:]:
+            if twap.status == OrderStatus.PENDING:
+                twap.send_slice(current_price, submit_order_func=self.submit_order_func)
     
     def get_active_orders(self) -> Dict[str, int]:
         """获取活跃订单数量"""
@@ -743,6 +1339,8 @@ class OrderManager:
             'conditional': sum(1 for o in self.conditional_orders if o.status == OrderStatus.PENDING),
             'oco': sum(1 for o in self.oco_orders if o.status == OrderStatus.PENDING),
             'trailing_stop': sum(1 for s in self.trailing_stops if s.status == OrderStatus.PENDING),
+            'iceberg': sum(1 for o in self.iceberg_orders if o.status == OrderStatus.PENDING),
+            'twap': sum(1 for o in self.twap_orders if o.status == OrderStatus.PENDING),
         }
 
 
@@ -776,6 +1374,7 @@ if __name__ == "__main__":
         take_profit_price=70000,
         stop_loss_price=60000
     )
+    oco.create_orders()
     
     market_data = {'current_price': 70500}
     filled = oco.check_and_fill(market_data)
@@ -796,3 +1395,50 @@ if __name__ == "__main__":
         trailing.update_stop_price(price)
         info = trailing.get_info()
         print(f"价格={price}, 止损价={info['current_stop_price']:.2f}, 最高价={info['highest_price']}")
+    
+    # 测试冰山订单
+    print("\n测试冰山订单...")
+    iceberg = IcebergOrder(
+        symbol="BTC/USDT",
+        side="buy",
+        total_amount=10.0,
+        visible_amount=0.5,
+        price_limit=68000,
+        refresh_interval=1.0,
+        randomize_timing=False
+    )
+    
+    # 模拟多次发送
+    for i in range(5):
+        order = iceberg.send_batch(67500)
+        if order:
+            print(f"  批次 {iceberg.batches_sent}: {order.amount} @ {order.price}")
+        time.sleep(0.1)
+    
+    progress = iceberg.get_progress()
+    print(f"  进度: {progress['filled_amount']}/{progress['total_amount']} "
+          f"({progress['progress_pct']:.1f}%)")
+    
+    # 测试 TWAP 订单
+    print("\n测试 TWAP 订单...")
+    twap = TWAPOrder(
+        symbol="BTC/USDT",
+        side="buy",
+        total_amount=5.0,
+        duration=60.0,   # 60 秒内完成
+        num_slices=6,     # 6 片
+        randomize_timing=False
+    )
+    
+    schedule = twap.get_schedule()
+    print(f"  执行计划: {len(schedule)} 片, 每片 {twap.slice_amount:.4f} BTC, 间隔 {twap.slice_interval:.1f}s")
+    
+    # 模拟执行
+    for i in range(6):
+        slice_order = twap.send_slice(67000 + i * 100)
+        if slice_order:
+            print(f"  片 {twap.slices_sent}/{twap.num_slices}: {slice_order.amount:.4f} @ {slice_order.price}")
+    
+    progress = twap.get_progress()
+    print(f"  进度: {progress['filled_amount']}/{progress['total_amount']} "
+          f"({progress['progress_pct']:.1f}%), TWAP={progress['twap_price']:.2f}")
