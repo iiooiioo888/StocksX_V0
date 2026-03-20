@@ -1,0 +1,9 @@
+"""趋势策略模块"""
+
+from .trend_strategies import TREND_STRATEGIES
+from .hull_ma_strategy import ADVANCED_TREND_STRATEGIES
+
+# 合并所有趋势策略
+ALL_TREND_STRATEGIES = {**TREND_STRATEGIES, **ADVANCED_TREND_STRATEGIES}
+
+__all__ = ['ALL_TREND_STRATEGIES', 'TREND_STRATEGIES', 'ADVANCED_TREND_STRATEGIES']
