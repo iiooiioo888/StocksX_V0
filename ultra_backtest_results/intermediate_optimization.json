@@ -1,0 +1,38 @@
+{
+  "classic": {
+    "count": 2500000,
+    "mean_return": 0.8335073906541023,
+    "std_return": 1.2171437826847555,
+    "min_return": -0.6198531411307937,
+    "max_return": 8.813089661775539,
+    "mean_sharpe": 0.5101627622961853,
+    "mean_drawdown": -0.38252435389884293,
+    "worst_drawdown": -0.813118195114976,
+    "profit_probability": 0.816,
+    "ruin_probability": 0.024
+  },
+  "ai": {
+    "count": 2500000,
+    "mean_return": 1.3824159948514807,
+    "std_return": 1.3439219530285809,
+    "min_return": -0.5204154011808848,
+    "max_return": 8.776433570600956,
+    "mean_sharpe": 0.8824736402933631,
+    "mean_drawdown": -0.26508030713648423,
+    "worst_drawdown": -0.5837678668196659,
+    "profit_probability": 0.944,
+    "ruin_probability": 0.004
+  },
+  "arbitrage": {
+    "count": 2500000,
+    "mean_return": 0.5764137665396765,
+    "std_return": 0.3352102064644275,
+    "min_return": -0.24201175225653226,
+    "max_return": 2.179793684102619,
+    "mean_sharpe": 1.076710166498709,
+    "mean_drawdown": -0.1035257787641908,
+    "worst_drawdown": -0.40022849121172027,
+    "profit_probability": 0.976,
+    "ruin_probability": 0.0
+  }
+}

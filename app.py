@@ -1,23 +1,32 @@
 # StocksX — 通用回測平台
 # 現代化設計 v4.0 (Glassmorphism 主題)
 
+import statistics
+
 import streamlit as st
+
 from src.auth import UserDB
 from src.config import format_price
+from src.data.market_overview import (
+    fetch_market_data,
+    fetch_yahoo_reference_futures,
+    fetch_yahoo_reference_trending,
+)
+from src.ui_enhanced import (
+    render_auto_refresh_market_data,
+    render_global_search,
+    render_quick_actions,
+)
 from src.ui_modern import (
     apply_modern_theme,
-    render_glow_metric,
-    render_hero_banner,
     render_feature_grid,
+    render_glow_metric,
     render_gradient_divider,
+    render_hero_banner,
 )
-from typing import Any, Dict, List, Optional
 
 st.set_page_config(
-    page_title="StocksX — 通用回測平台",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    page_title="StocksX — 通用回測平台", page_icon="📊", layout="wide", initial_sidebar_state="collapsed"
 )
 
 # 應用現代化主題
@@ -35,37 +44,44 @@ _admin_page = "pages/4_🛠️_管理.py"
 _news_page = "pages/6_📰_新聞.py"
 _health_page = "pages/7_🏥_健康檢查.py"
 _live_page = "pages/8_⚡_即時監控.py"
+_ai_strat_page = "pages/9_🧠_AI 策略.py"
+_backtest_compare_page = "pages/10_📊_策略回测对比.py"
 
 user = st.session_state.get("user")
 
 # ════════════════════════════════════════════════════════════
-# 載入市場數據（快取優化）
+# 載入市場數據（快取 + session 狀態保護）
 # ════════════════════════════════════════════════════════════
-from src.data.market_overview import (
-    fetch_market_data,
-    fetch_yahoo_reference_futures,
-    fetch_yahoo_reference_trending,
-)
+
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_data():
     return fetch_market_data()
 
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_yahoo_futures():
     return fetch_yahoo_reference_futures()
+
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_yahoo_trending():
     return fetch_yahoo_reference_trending()
 
-# 載入數據
-market_data = get_market_data()
-yahoo_futures = get_yahoo_futures()
-yahoo_trending = get_yahoo_trending()
+
+if "market_data_loaded" not in st.session_state:
+    st.session_state["market_data_loaded"] = True
+    market_data = get_market_data()
+    yahoo_futures = get_yahoo_futures()
+    yahoo_trending = get_yahoo_trending()
+else:
+    market_data = get_market_data()
+    yahoo_futures = get_yahoo_futures()
+    yahoo_trending = get_yahoo_trending()
 
 # 已登入用戶才載入績效數據
 if user:
+
     @st.cache_data(ttl=30, show_spinner=False)
     def get_user_performance(user_id: int):
         db = UserDB()
@@ -83,10 +99,12 @@ else:
 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
 
 with nav_col1:
-    st.markdown('<div style="font-size:1.8rem;font-weight:800;background:linear-gradient(135deg, #667eea, #764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">📊 StocksX</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:1.8rem;font-weight:800;background:linear-gradient(135deg, #667eea, #764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">📊 StocksX</div>',
+        unsafe_allow_html=True,
+    )
 
 with nav_col2:
-    from src.ui_enhanced import render_global_search
     render_global_search()
 
 with nav_col3:
@@ -95,8 +113,8 @@ with nav_col3:
             f'<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.1);padding:8px 16px;border-radius:12px;">'
             f'<span style="font-size:1.2rem;">👤</span> '
             f'<span style="color:#e0e0e8;font-weight:500;">{user["display_name"]}</span>'
-            f'</div>',
-            unsafe_allow_html=True
+            f"</div>",
+            unsafe_allow_html=True,
         )
     else:
         st.page_link(_login_page, label="🔐 登入", icon="🔐")
@@ -114,24 +132,24 @@ if not user:
             {"value": "15+", "label": "交易策略"},
             {"value": "500+", "label": "交易對"},
             {"value": "31", "label": "交易所費率"},
-            {"value": "24/7", "label": "即時監控"}
-        ]
+            {"value": "24/7", "label": "即時監控"},
+        ],
     )
 else:
-    db = UserDB()
-    stats = db.get_stats()
-    history_count = len(db.get_history(user["id"], limit=999))
-    favorites_count = len(db.get_favorites(user["id"]))
+    _db = UserDB()
+    stats = _db.get_stats()
+    history_count = len(_db.get_history(user["id"], limit=999))
+    favorites_count = len(_db.get_favorites(user["id"]))
 
     render_hero_banner(
         title=f"歡迎回來，{user['display_name']}！",
-        subtitle='👑 管理員控制台' if user['role'] == 'admin' else '👤 個人交易儀表板',
+        subtitle="👑 管理員控制台" if user["role"] == "admin" else "👤 個人交易儀表板",
         stats=[
             {"value": str(history_count), "label": "我的回測"},
             {"value": str(favorites_count), "label": "收藏策略"},
-            {"value": str(stats['total_users']), "label": "平台用戶"},
-            {"value": str(stats['recent_backtests_24h']), "label": "24H 回測"}
-        ]
+            {"value": str(stats["total_users"]), "label": "平台用戶"},
+            {"value": str(stats["recent_backtests_24h"]), "label": "24H 回測"},
+        ],
     )
 
 # ════════════════════════════════════════════════════════════
@@ -150,7 +168,6 @@ if user and history:
     worst_trade = min(returns) if returns else 0
 
     if len(returns) > 1:
-        import statistics
         std_dev = statistics.stdev(returns)
         sharpe = (avg_return / std_dev) if std_dev > 0 else 0
     else:
@@ -162,13 +179,12 @@ if user and history:
     perf_cols[2].metric("🏆 最佳交易", f"{best_trade:+.2f}%", delta=f"勝率 {win_rate:.1f}%")
     perf_cols[3].metric("📉 最大回撤", f"{worst_trade:.2f}%", delta=f"夏普：{sharpe:.2f}")
     perf_cols[4].metric("⭐ 收藏策略", f"{len(favorites)}", delta="個")
-    
+
     render_gradient_divider()
 
 # ════════════════════════════════════════════════════════════
 # 快捷操作
 # ════════════════════════════════════════════════════════════
-from src.ui_enhanced import render_quick_actions
 render_quick_actions()
 
 render_gradient_divider()
@@ -201,11 +217,25 @@ features = [
         "link": _live_page,
     },
     {
+        "icon": "🧠",
+        "title": "🧠 AI 策略中心",
+        "desc": "LSTM 預測、NLP 情緒、配對交易、強化學習等前沿 AI 策略",
+        "tags": '<span class="status-badge status-success">機器學習</span> <span class="status-badge status-success">深度學習</span>',
+        "link": _ai_strat_page,
+    },
+    {
         "icon": "📊",
         "title": "15 種專業策略",
         "desc": "雙均線、MACD、RSI、布林帶、一目均衡表等經典策略即開即用",
         "tags": '<span class="status-badge status-warning">趨勢</span> <span class="status-badge status-warning">擺盪</span>',
         "link": _crypto_page,
+    },
+    {
+        "icon": "📈",
+        "title": "策略回測對比",
+        "desc": "對比不同策略歷史表現，Sharpe、回撤、勝率全方位分析",
+        "tags": '<span class="status-badge status-info">對比</span> <span class="status-badge status-info">分析</span>',
+        "link": _backtest_compare_page,
     },
     {
         "icon": "📜",
@@ -217,8 +247,12 @@ features = [
     {
         "icon": "🛠️",
         "title": "管理員後台" if user and user["role"] == "admin" else "📰 市場新聞",
-        "desc": "用戶管理、安全日誌、數據快取、系統統計" if user and user["role"] == "admin" else "最新市場動態、加密新聞、產業資訊",
-        "tags": '<span class="status-badge status-info">管理</span>' if user and user["role"] == "admin" else '<span class="status-badge status-info">新聞</span>',
+        "desc": "用戶管理、安全日誌、數據快取、系統統計"
+        if user and user["role"] == "admin"
+        else "最新市場動態、加密新聞、產業資訊",
+        "tags": '<span class="status-badge status-info">管理</span>'
+        if user and user["role"] == "admin"
+        else '<span class="status-badge status-info">新聞</span>',
         "link": _admin_page if user and user["role"] == "admin" else _news_page,
     },
 ]
@@ -232,7 +266,6 @@ render_gradient_divider()
 # ════════════════════════════════════════════════════════════
 st.markdown("#### 📈 市場行情")
 
-from src.ui_enhanced import render_auto_refresh_market_data
 render_auto_refresh_market_data()
 
 if yahoo_futures or yahoo_trending:
@@ -270,30 +303,37 @@ if yahoo_futures or yahoo_trending:
         # 加密貨幣快速預覽
         try:
             from src.data.sources.api_hub import get_current_fear_greed
+
             fg = get_current_fear_greed()
             if fg:
                 fg_col1, fg_col2 = st.columns(2)
-                fg_col1.metric(
-                    "🌡️ 恐懼貪婪指數",
-                    f"{fg['value']}",
-                    delta=fg['classification']
-                )
-            
-            # 主流幣簡易報價
+                fg_col1.metric("🌡️ 恐懼貪婪指數", f"{fg['value']}", delta=fg["classification"])
+
+            # 主流幣簡易報價（真實 API）
             st.caption("💰 主流幣簡易報價（24h）")
-            crypto_cols = st.columns(3)
-            crypto_samples = [
-                {"name": "Bitcoin", "symbol": "BTC", "price": 67500, "change": 2.5},
-                {"name": "Ethereum", "symbol": "ETH", "price": 3450, "change": -1.2},
-                {"name": "Solana", "symbol": "SOL", "price": 145, "change": 5.8},
-            ]
-            for idx, crypto in enumerate(crypto_samples):
-                _icon = "🟢" if crypto["change"] > 0 else "🔴"
-                crypto_cols[idx].metric(
-                    f"{_icon} {crypto['symbol']}",
-                    f"${crypto['price']:,.0f}",
-                    delta=f"{crypto['change']:+.1f}%"
-                )
+            from src.data.sources.api_hub import fetch_coingecko
+
+            crypto_data = fetch_coingecko(
+                "/simple/price",
+                params={
+                    "ids": "bitcoin,ethereum,solana",
+                    "vs_currencies": "usd",
+                    "include_24hr_change": "true",
+                },
+            )
+            if crypto_data:
+                crypto_map = {
+                    "bitcoin": {"symbol": "BTC", "name": "Bitcoin"},
+                    "ethereum": {"symbol": "ETH", "name": "Ethereum"},
+                    "solana": {"symbol": "SOL", "name": "Solana"},
+                }
+                crypto_cols = st.columns(3)
+                for idx, (cid, info) in enumerate(crypto_map.items()):
+                    if cid in crypto_data:
+                        price = crypto_data[cid].get("usd", 0)
+                        change = crypto_data[cid].get("usd_24h_change", 0)
+                        _icon = "🟢" if change > 0 else "🔴"
+                        crypto_cols[idx].metric(f"{_icon} {info['symbol']}", f"${price:,.0f}", delta=f"{change:+.1f}%")
         except Exception:
             st.caption("加密貨幣數據載入中...")
 
@@ -309,13 +349,16 @@ sentiment_cols = st.columns(4)
 # 恐懼貪婪指數
 try:
     from src.data.sources.api_hub import get_current_fear_greed
+
     fg = get_current_fear_greed()
     if fg:
         fg_val = fg["value"]
         fg_color = "#00cc96" if fg_val >= 50 else "#ef553b"
-        fg_emoji = "🤑" if fg_val >= 75 else "😊" if fg_val >= 55 else "😐" if fg_val >= 45 else "😟" if fg_val >= 25 else "😱"
+        fg_emoji = (
+            "🤑" if fg_val >= 75 else "😊" if fg_val >= 55 else "😐" if fg_val >= 45 else "😟" if fg_val >= 25 else "😱"
+        )
         fg_label = fg["classification"]
-        
+
         with sentiment_cols[0]:
             render_glow_metric("恐懼貪婪指數", f"{fg_emoji} {fg_val}", fg_label)
     else:
@@ -327,14 +370,15 @@ except Exception:
 # VIX 波動率指數
 try:
     from src.data.sources.api_hub import fetch_cboe_vix
+
     vix = fetch_cboe_vix()
     if vix:
         vix_val = vix.get("close", 0)
         vix_color = "#ef553b" if vix_val > 20 else "#00cc96"
         vix_emoji = "📈" if vix_val > 20 else "📉"
-        
+
         with sentiment_cols[1]:
-            render_glow_metric("VIX 波動率", f"{vix_emoji} {vix_val:.1f}", '高波動' if vix_val > 20 else '低波動')
+            render_glow_metric("VIX 波動率", f"{vix_emoji} {vix_val:.1f}", "高波動" if vix_val > 20 else "低波動")
     else:
         raise Exception("數據不可用")
 except Exception:
@@ -344,10 +388,11 @@ except Exception:
 # 比特幣主導性
 try:
     from src.data.sources.api_hub import fetch_coingecko
+
     btc_dom_data = fetch_coingecko("/global")
     if btc_dom_data and "data" in btc_dom_data:
         btc_dom = btc_dom_data["data"].get("btc_market_cap_dominance", 0)
-        
+
         with sentiment_cols[2]:
             render_glow_metric("BTC 主導性", f"₿ {btc_dom:.1f}%", "市場份額")
     else:
@@ -364,9 +409,13 @@ try:
         trend_pct = bullish_count / total * 100 if total > 0 else 50
         trend_color = "#00cc96" if trend_pct > 50 else "#ef553b"
         trend_emoji = "🐂" if trend_pct > 50 else "🐻"
-        
+
         with sentiment_cols[3]:
-            render_glow_metric("市場趨勢", f"{trend_emoji} {trend_pct:.0f}%", f"{'多頭' if trend_pct > 50 else '空頭'} ({bullish_count}/{total})")
+            render_glow_metric(
+                "市場趨勢",
+                f"{trend_emoji} {trend_pct:.0f}%",
+                f"{'多頭' if trend_pct > 50 else '空頭'} ({bullish_count}/{total})",
+            )
     else:
         raise Exception("數據不可用")
 except Exception:
@@ -394,10 +443,13 @@ if user:
 # 頁尾
 # ════════════════════════════════════════════════════════════
 render_gradient_divider()
-st.markdown("""
+st.markdown(
+    """
 <div style="text-align:center;color:#64748b;font-size:0.85rem;padding:20px 0;">
     <p>⚠️ <strong>免責聲明</strong>：本平台僅供學習與研究，不構成投資建議。</p>
     <p>數據與參考來源：Yahoo Finance | 回測結果基於歷史數據，不代表未來表現。</p>
-    <p style="margin-top:10px;">© 2024 StocksX. All rights reserved.</p>
+    <p style="margin-top:10px;">© 2024–2026 StocksX. All rights reserved.</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)

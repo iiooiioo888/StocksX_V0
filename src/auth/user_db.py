@@ -9,7 +9,6 @@ import sqlite3
 import time
 from typing import Any
 
-
 _DB_PATH = os.path.join("cache", "users.sqlite")
 
 _SCHEMA = """
@@ -137,7 +136,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 _MAX_LOGIN_ATTEMPTS = 5
 _LOCKOUT_SECONDS = 300
 _SESSION_TIMEOUT = 3600
-_MIN_PASSWORD_LEN = 6
+_MIN_PASSWORD_LEN = 8
 
 
 def _hash_pw(password: str, salt: str = "") -> str:
@@ -172,7 +171,9 @@ def _validate_password(password: str) -> str | None:
         return f"密碼至少 {_MIN_PASSWORD_LEN} 個字元"
     if password.isdigit():
         return "密碼不能全是數字"
-    if password.isalpha():
+    if not any(c.isupper() for c in password):
+        return "密碼需包含大寫字母"
+    if not any(c.isdigit() for c in password):
         return "密碼需包含數字"
     return None
 
@@ -182,6 +183,8 @@ class UserDB:
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
         self._migrate()
@@ -197,12 +200,12 @@ class UserDB:
             self._conn.commit()
         except sqlite3.OperationalError:
             pass
-        
+
         # watchlist 表遷移 - 添加 account_id 欄位
         try:
             self._conn.execute("ALTER TABLE watchlist ADD COLUMN account_id TEXT")
             self._conn.commit()
-            
+
             # 為現有記錄生成 account_id
             cur = self._conn.execute("SELECT id FROM watchlist WHERE account_id IS NULL")
             null_account_rows = cur.fetchall()
@@ -210,7 +213,7 @@ class UserDB:
                 account_id = self._generate_account_id(row[0])
                 self._conn.execute("UPDATE watchlist SET account_id=? WHERE id=?", (account_id, row[0]))
             self._conn.commit()
-            
+
             # 設置 NOT NULL 約束（需要重建表）
             self._conn.execute("CREATE TABLE IF NOT EXISTS watchlist_new AS SELECT * FROM watchlist")
             self._conn.execute("DROP TABLE watchlist")
@@ -243,60 +246,70 @@ class UserDB:
         except sqlite3.OperationalError as e:
             if "duplicate column" not in str(e).lower():
                 pass
-        
+
         # watchlist 表遷移 - 添加 last_price 欄位
         try:
             self._conn.execute("ALTER TABLE watchlist ADD COLUMN last_price REAL DEFAULT 0")
             self._conn.commit()
         except sqlite3.OperationalError:
             pass
-        
+
         # watchlist 表遷移 - 添加 entry_price 欄位
         try:
             self._conn.execute("ALTER TABLE watchlist ADD COLUMN entry_price REAL DEFAULT 0")
             self._conn.commit()
         except sqlite3.OperationalError:
             pass
-        
+
         # watchlist 表遷移 - 添加 position 欄位
         try:
             self._conn.execute("ALTER TABLE watchlist ADD COLUMN position INTEGER DEFAULT 0")
             self._conn.commit()
         except sqlite3.OperationalError:
             pass
-        
+
         # watchlist 表遷移 - 添加 pnl_pct 欄位
         try:
             self._conn.execute("ALTER TABLE watchlist ADD COLUMN pnl_pct REAL DEFAULT 0")
             self._conn.commit()
         except sqlite3.OperationalError:
             pass
-    
+
     def _generate_account_id(self, watch_id: int = None) -> str:
         """生成唯一帳戶號碼"""
         import random
         import string
         from datetime import datetime
-        
+
         # 格式：ACC-YYYYMMDD-XXXXXX
         # YYYYMMDD: 日期
         # XXXXXX: 6 位隨機字元（數字 + 大寫字母）
-        
+
         date_str = datetime.now().strftime("%Y%m%d")
-        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        
+        random_str = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
         account_id = f"ACC-{date_str}-{random_str}"
-        
+
         # 確保唯一性
         if watch_id:
             account_id = f"ACC-{date_str}-{watch_id:06d}"
-        
+
         return account_id
 
     def _ensure_admin(self) -> None:
         cur = self._conn.execute("SELECT id FROM users WHERE username='admin'")
         if not cur.fetchone():
-            self.register("admin", "admin123", display_name="管理員", role="admin")
+            import logging
+
+            logger = logging.getLogger(__name__)
+            admin_pw = os.getenv("ADMIN_PASSWORD", "")
+            if not admin_pw:
+                import secrets
+
+                admin_pw = secrets.token_urlsafe(16)
+                logger.warning("首次建立管理員帳號，臨時密碼: %s", admin_pw)
+                logger.warning("請盡快透過 UI 修改管理員密碼，或在 .env 中設定 ADMIN_PASSWORD")
+            self.register("admin", admin_pw, display_name="管理員", role="admin")
 
     def _init_system_products(self) -> None:
         cur = self._conn.execute("SELECT COUNT(*) as c FROM products WHERE is_system=1")
@@ -371,10 +384,31 @@ class UserDB:
             try:
                 self._conn.execute(
                     "INSERT OR IGNORE INTO products (symbol, name, exchange, market_type, category, is_system, user_id, is_active, created_at) VALUES (?,?,?,?,?,1,0,1,?)",
-                    (sym, name, ex, mt, cat, now))
+                    (sym, name, ex, mt, cat, now),
+                )
             except Exception:
                 pass
         self._conn.commit()
+
+    # ─── 查詢助手（減少重複程式碼）──
+    def _fetch_all(self, sql: str, params: tuple | list = ()) -> list[dict]:
+        """執行查詢並回傳所有結果為 dict 列表。"""
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def _fetch_one(self, sql: str, params: tuple | list = ()) -> dict | None:
+        """執行查詢並回傳第一筆結果，無結果回傳 None。"""
+        row = self._conn.execute(sql, params).fetchone()
+        return dict(row) if row else None
+
+    def _execute(self, sql: str, params: tuple | list = ()) -> int:
+        """執行寫入操作，回傳影響行數。"""
+        cur = self._conn.execute(sql, params)
+        self._conn.commit()
+        return cur.rowcount
+
+    def _count(self, sql: str, params: tuple | list = ()) -> int:
+        """執行 COUNT 查詢。"""
+        return self._conn.execute(sql, params).fetchone()[0]
 
     # ─── 產品庫 CRUD ───
     def get_products(self, user_id: int = 0, market_type: str = "", category: str = "") -> list[dict]:
@@ -387,7 +421,7 @@ class UserDB:
             q += " AND category=?"
             params.append(category)
         q += " ORDER BY is_system DESC, category, symbol"
-        return [dict(r) for r in self._conn.execute(q, params).fetchall()]
+        return self._fetch_all(q, params)
 
     def get_product_categories(self, market_type: str = "") -> list[str]:
         q = "SELECT DISTINCT category FROM products WHERE is_active=1"
@@ -398,14 +432,30 @@ class UserDB:
         q += " ORDER BY category"
         return [r["category"] for r in self._conn.execute(q, params).fetchall()]
 
-    def add_product(self, symbol: str, name: str, exchange: str, market_type: str,
-                    category: str, user_id: int = 0, is_system: bool = False) -> int | str:
+    def add_product(
+        self,
+        symbol: str,
+        name: str,
+        exchange: str,
+        market_type: str,
+        category: str,
+        user_id: int = 0,
+        is_system: bool = False,
+    ) -> int | str:
         try:
             cur = self._conn.execute(
                 "INSERT INTO products (symbol, name, exchange, market_type, category, is_system, user_id, is_active, created_at) VALUES (?,?,?,?,?,?,?,1,?)",
-                (_sanitize(symbol, 50), _sanitize(name, 100), _sanitize(exchange, 20),
-                 _sanitize(market_type, 20), _sanitize(category, 50),
-                 1 if is_system else 0, user_id, time.time()))
+                (
+                    _sanitize(symbol, 50),
+                    _sanitize(name, 100),
+                    _sanitize(exchange, 20),
+                    _sanitize(market_type, 20),
+                    _sanitize(category, 50),
+                    1 if is_system else 0,
+                    user_id,
+                    time.time(),
+                ),
+            )
             self._conn.commit()
             return cur.lastrowid or 0
         except sqlite3.IntegrityError:
@@ -416,7 +466,10 @@ class UserDB:
         self._conn.commit()
 
     def get_all_products_admin(self) -> list[dict]:
-        return [dict(r) for r in self._conn.execute("SELECT * FROM products ORDER BY market_type, category, symbol").fetchall()]
+        return [
+            dict(r)
+            for r in self._conn.execute("SELECT * FROM products ORDER BY market_type, category, symbol").fetchall()
+        ]
 
     def check_rate_limit(self, key: str, max_calls: int = 10, period: float = 60) -> bool:
         """回傳 True 表示未超限，False 表示已超限"""
@@ -433,16 +486,17 @@ class UserDB:
     def validate_session(user: dict | None) -> bool:
         """验证 session 是否有效（检查登录时间是否过期）"""
         import streamlit as st
+
         if not user:
             return False
         # 优先检查 session 中存储的登录时间
         login_time = st.session_state.get("_login_time")
-        
+
         # 如果没有 _login_time，但有 user，说明是页面刷新，session 仍然有效
         # Streamlit 会自动管理 session 生命周期
         if login_time is None:
             return True
-        
+
         # 如果有登录时间，检查是否过期（1 小时）
         if login_time and time.time() - login_time > _SESSION_TIMEOUT:
             return False
@@ -527,7 +581,9 @@ class UserDB:
         return dict(row) if row else None
 
     def list_users(self) -> list[dict]:
-        cur = self._conn.execute("SELECT id, username, display_name, role, created_at, last_login, is_active FROM users ORDER BY id")
+        cur = self._conn.execute(
+            "SELECT id, username, display_name, role, created_at, last_login, is_active FROM users ORDER BY id"
+        )
         return [dict(r) for r in cur.fetchall()]
 
     def update_user(self, user_id: int, **kwargs: Any) -> None:
@@ -551,14 +607,33 @@ class UserDB:
         self._conn.commit()
 
     # ─── 回測歷史 ───
-    def save_backtest(self, user_id: int, symbol: str, exchange: str, timeframe: str,
-                      strategy: str, params: dict, metrics: dict, notes: str = "", tags: str = "") -> int:
+    def save_backtest(
+        self,
+        user_id: int,
+        symbol: str,
+        exchange: str,
+        timeframe: str,
+        strategy: str,
+        params: dict,
+        metrics: dict,
+        notes: str = "",
+        tags: str = "",
+    ) -> int:
         cur = self._conn.execute(
             """INSERT INTO backtest_history (user_id, created_at, symbol, exchange, timeframe, strategy, params, metrics, notes, tags)
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (user_id, time.time(), _sanitize(symbol, 50), _sanitize(exchange, 20), _sanitize(timeframe, 10),
-             _sanitize(strategy, 50), json.dumps(params, ensure_ascii=False),
-             json.dumps(metrics, ensure_ascii=False), _sanitize(notes, 500), _sanitize(tags, 200)),
+            (
+                user_id,
+                time.time(),
+                _sanitize(symbol, 50),
+                _sanitize(exchange, 20),
+                _sanitize(timeframe, 10),
+                _sanitize(strategy, 50),
+                json.dumps(params, ensure_ascii=False),
+                json.dumps(metrics, ensure_ascii=False),
+                _sanitize(notes, 500),
+                _sanitize(tags, 200),
+            ),
         )
         self._conn.commit()
         return cur.lastrowid or 0
@@ -581,8 +656,7 @@ class UserDB:
         return rows
 
     def toggle_favorite(self, record_id: int) -> None:
-        self._conn.execute(
-            "UPDATE backtest_history SET is_favorite = 1 - is_favorite WHERE id=?", (record_id,))
+        self._conn.execute("UPDATE backtest_history SET is_favorite = 1 - is_favorite WHERE id=?", (record_id,))
         self._conn.commit()
 
     def delete_history(self, record_id: int) -> None:
@@ -702,18 +776,36 @@ class UserDB:
         return triggered
 
     # ─── 策略訂閱 (Watchlist) ───
-    def add_watch(self, user_id: int, symbol: str, exchange: str, timeframe: str,
-                  strategy: str, strategy_params: dict, initial_equity: float = 10000,
-                  leverage: float = 1.0) -> int:
+    def add_watch(
+        self,
+        user_id: int,
+        symbol: str,
+        exchange: str,
+        timeframe: str,
+        strategy: str,
+        strategy_params: dict,
+        initial_equity: float = 10000,
+        leverage: float = 1.0,
+    ) -> int:
         # 生成唯一帳戶號碼
         account_id = self._generate_account_id()
-        
+
         cur = self._conn.execute(
             """INSERT INTO watchlist (user_id, account_id, symbol, exchange, timeframe, strategy,
                strategy_params, initial_equity, leverage, created_at)
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (user_id, account_id, symbol, exchange, timeframe, strategy,
-             json.dumps(strategy_params, ensure_ascii=False), initial_equity, leverage, time.time()),
+            (
+                user_id,
+                account_id,
+                symbol,
+                exchange,
+                timeframe,
+                strategy,
+                json.dumps(strategy_params, ensure_ascii=False),
+                initial_equity,
+                leverage,
+                time.time(),
+            ),
         )
         self._conn.commit()
         return cur.lastrowid or 0
@@ -724,7 +816,7 @@ class UserDB:
         for r in cur.fetchall():
             d = dict(r)
             d["strategy_params"] = json.loads(d.get("strategy_params") or "{}")
-            
+
             # 確保數值欄位正確轉換
             d["initial_equity"] = float(d.get("initial_equity", 10000) or 10000)
             d["leverage"] = float(d.get("leverage", 1.0) or 1.0)
@@ -733,7 +825,7 @@ class UserDB:
             d["position"] = int(d.get("position", 0) or 0)
             d["pnl_pct"] = float(d.get("pnl_pct", 0) or 0)
             d["is_active"] = int(d.get("is_active", 1) or 1)
-            
+
             rows.append(d)
         return rows
 
@@ -755,15 +847,40 @@ class UserDB:
         self._conn.commit()
 
     # ─── 模擬交易記錄 ───
-    def log_trade(self, watch_id: int, user_id: int, symbol: str, action: str,
-                  side: int, price: float, equity_before: float, equity_after: float,
-                  pnl_pct: float = 0, pnl_amount: float = 0, fee: float = 0, reason: str = "") -> int:
+    def log_trade(
+        self,
+        watch_id: int,
+        user_id: int,
+        symbol: str,
+        action: str,
+        side: int,
+        price: float,
+        equity_before: float,
+        equity_after: float,
+        pnl_pct: float = 0,
+        pnl_amount: float = 0,
+        fee: float = 0,
+        reason: str = "",
+    ) -> int:
         cur = self._conn.execute(
             """INSERT INTO trade_log (watch_id, user_id, symbol, action, side, price,
                equity_before, equity_after, pnl_pct, pnl_amount, fee, reason, created_at)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (watch_id, user_id, symbol, action, side, price,
-             equity_before, equity_after, pnl_pct, pnl_amount, fee, reason, time.time()),
+            (
+                watch_id,
+                user_id,
+                symbol,
+                action,
+                side,
+                price,
+                equity_before,
+                equity_after,
+                pnl_pct,
+                pnl_amount,
+                fee,
+                reason,
+                time.time(),
+            ),
         )
         self._conn.commit()
         return cur.lastrowid or 0
@@ -771,10 +888,12 @@ class UserDB:
     def get_trade_log(self, watch_id: int = 0, user_id: int = 0, limit: int = 100) -> list[dict]:
         if watch_id:
             cur = self._conn.execute(
-                "SELECT * FROM trade_log WHERE watch_id=? ORDER BY created_at DESC LIMIT ?", (watch_id, limit))
+                "SELECT * FROM trade_log WHERE watch_id=? ORDER BY created_at DESC LIMIT ?", (watch_id, limit)
+            )
         elif user_id:
             cur = self._conn.execute(
-                "SELECT * FROM trade_log WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
+                "SELECT * FROM trade_log WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (user_id, limit)
+            )
         else:
             return []
         return [dict(r) for r in cur.fetchall()]
@@ -783,16 +902,26 @@ class UserDB:
         logs = self.get_trade_log(watch_id=watch_id, limit=999)
         closes = [t for t in logs if t["action"] == "平倉"]
         if not closes:
-            return {"total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0,
-                    "total_pnl": 0, "total_fees": 0, "avg_pnl": 0}
+            return {
+                "total_trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "win_rate": 0,
+                "total_pnl": 0,
+                "total_fees": 0,
+                "avg_pnl": 0,
+            }
         wins = [t for t in closes if t["pnl_amount"] > 0]
         losses = [t for t in closes if t["pnl_amount"] < 0]
         total_pnl = sum(t["pnl_amount"] for t in closes)
         total_fees = sum(t["fee"] for t in closes)
         return {
-            "total_trades": len(closes), "wins": len(wins), "losses": len(losses),
+            "total_trades": len(closes),
+            "wins": len(wins),
+            "losses": len(losses),
             "win_rate": round(len(wins) / len(closes) * 100, 1) if closes else 0,
-            "total_pnl": round(total_pnl, 2), "total_fees": round(total_fees, 2),
+            "total_pnl": round(total_pnl, 2),
+            "total_fees": round(total_fees, 2),
             "avg_pnl": round(total_pnl / len(closes), 2) if closes else 0,
         }
 
@@ -808,10 +937,7 @@ class UserDB:
 
     def get_auto_strategies(self, user_id: int) -> list[dict]:
         """獲取用戶的自動策略配置"""
-        cur = self._conn.execute(
-            "SELECT * FROM auto_strategies WHERE user_id=? ORDER BY created_at DESC",
-            (user_id,)
-        )
+        cur = self._conn.execute("SELECT * FROM auto_strategies WHERE user_id=? ORDER BY created_at DESC", (user_id,))
         rows = []
         for r in cur.fetchall():
             d = dict(r)
@@ -819,8 +945,9 @@ class UserDB:
             rows.append(d)
         return rows
 
-    def update_auto_strategy(self, strategy_id: int, is_active: bool = None, 
-                            current_strategy: str = None, last_eval: float = None) -> None:
+    def update_auto_strategy(
+        self, strategy_id: int, is_active: bool = None, current_strategy: str = None, last_eval: float = None
+    ) -> None:
         """更新自動策略狀態"""
         updates = []
         params = []
@@ -833,13 +960,10 @@ class UserDB:
         if last_eval is not None:
             updates.append("last_eval = ?")
             params.append(last_eval)
-        
+
         if updates:
             params.append(strategy_id)
-            self._conn.execute(
-                f"UPDATE auto_strategies SET {','.join(updates)} WHERE id = ?",
-                params
-            )
+            self._conn.execute(f"UPDATE auto_strategies SET {','.join(updates)} WHERE id = ?", params)
             self._conn.commit()
 
     def delete_auto_strategy(self, strategy_id: int) -> None:

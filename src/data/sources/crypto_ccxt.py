@@ -82,32 +82,32 @@ class CcxtOhlcvSource:
         retries = 0
         while True:
             try:
-                candles = self._exchange.fetch_ohlcv(
-                    symbol, timeframe, since=since, limit=limit
-                )
+                candles = self._exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)
                 break
             except (ccxt.RateLimitExceeded, ccxt.NetworkError) as e:
                 retries += 1
                 if retries > 5:
                     raise
-                wait = 2 ** retries
+                wait = 2**retries
                 logger.warning("CCXT rate limit/network error, retry in %ds: %s", wait, e)
                 time.sleep(wait)
 
         for c in candles:
-            rows.append({
-                "exchange": self._exchange_id,
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "timestamp": c[0],
-                "open": c[1],
-                "high": c[2],
-                "low": c[3],
-                "close": c[4],
-                "volume": c[5],
-                "filled": 0,
-                "is_outlier": 0,
-            })
+            rows.append(
+                {
+                    "exchange": self._exchange_id,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "timestamp": c[0],
+                    "open": c[1],
+                    "high": c[2],
+                    "low": c[3],
+                    "close": c[4],
+                    "volume": c[5],
+                    "filled": 0,
+                    "is_outlier": 0,
+                }
+            )
         return rows
 
     def fetch_range(
@@ -150,15 +150,13 @@ class CcxtFundingSource:
         retries = 0
         while True:
             try:
-                rates = self._exchange.fetch_funding_rate_history(
-                    symbol, since=since, limit=limit
-                )
+                rates = self._exchange.fetch_funding_rate_history(symbol, since=since, limit=limit)
                 break
             except (ccxt.RateLimitExceeded, ccxt.NetworkError) as e:
                 retries += 1
                 if retries > 5:
                     raise
-                wait = 2 ** retries
+                wait = 2**retries
                 logger.warning("CCXT rate limit/network error, retry in %ds: %s", wait, e)
                 time.sleep(wait)
             except Exception:
@@ -166,12 +164,14 @@ class CcxtFundingSource:
 
         rows: list[dict[str, Any]] = []
         for r in rates:
-            rows.append({
-                "exchange": self._exchange_id,
-                "symbol": symbol,
-                "timestamp": r.get("timestamp", 0),
-                "funding_rate": r.get("fundingRate", 0.0),
-                "open_interest": r.get("openInterest"),
-                "mark_price": r.get("markPrice"),
-            })
+            rows.append(
+                {
+                    "exchange": self._exchange_id,
+                    "symbol": symbol,
+                    "timestamp": r.get("timestamp", 0),
+                    "funding_rate": r.get("fundingRate", 0.0),
+                    "open_interest": r.get("openInterest"),
+                    "mark_price": r.get("markPrice"),
+                }
+            )
         return rows

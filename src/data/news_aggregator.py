@@ -4,13 +4,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
-from functools import lru_cache
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +118,29 @@ KEYWORD_CATEGORIES = {
 
 # 威胁/重要性关键词
 IMPORTANT_KEYWORDS = [
-    "紧急", "突发", "breaking", "alert",
-    "暴涨", "暴跌", "surge", "crash", "plunge",
-    "黑客", "攻击", "hack", "exploit", "attack",
-    "监管", "禁令", "ban", "regulation", "SEC",
-    "破产", "清算", "bankrupt", "liquidation",
+    "紧急",
+    "突发",
+    "breaking",
+    "alert",
+    "暴涨",
+    "暴跌",
+    "surge",
+    "crash",
+    "plunge",
+    "黑客",
+    "攻击",
+    "hack",
+    "exploit",
+    "attack",
+    "监管",
+    "禁令",
+    "ban",
+    "regulation",
+    "SEC",
+    "破产",
+    "清算",
+    "bankrupt",
+    "liquidation",
 ]
 
 
@@ -133,9 +148,9 @@ class NewsAggregator:
     """新闻聚合器"""
 
     def __init__(self):
-        self.cache: Dict[str, Dict] = {}
+        self.cache: dict[str, dict] = {}
         self.cache_ttl = 300  # 5 分钟缓存
-        self.feed_cache: Dict[str, List[Dict]] = {}
+        self.feed_cache: dict[str, list[dict]] = {}
         self.feed_cache_ttl = 600  # 10 分钟 feed 缓存
 
     def get_news_digest(
@@ -143,7 +158,7 @@ class NewsAggregator:
         category: str = "all",
         lang: str = "en",
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         获取新闻摘要
 
@@ -196,7 +211,7 @@ class NewsAggregator:
 
         return result
 
-    def _get_feeds_for_category(self, category: str, lang: str) -> List[Dict]:
+    def _get_feeds_for_category(self, category: str, lang: str) -> list[dict]:
         """获取指定类别的新闻源"""
         all_feeds = []
 
@@ -216,7 +231,7 @@ class NewsAggregator:
 
         return all_feeds
 
-    def _fetch_feed(self, url: str, source_name: str) -> List[Dict]:
+    def _fetch_feed(self, url: str, source_name: str) -> list[dict]:
         """获取并解析 RSS feed"""
         cache_key = hashlib.md5(url.encode()).hexdigest()
         now = time.time()
@@ -235,9 +250,7 @@ class NewsAggregator:
 
         try:
             # 解析 RSS feed
-            feed = feedparser.parse(url, request_headers={
-                'User-Agent': 'Mozilla/5.0 (StocksX News Aggregator)'
-            })
+            feed = feedparser.parse(url, request_headers={"User-Agent": "Mozilla/5.0 (StocksX News Aggregator)"})
 
             items = []
             for entry in feed.entries[:5]:  # 每个 feed 最多 5 条
@@ -272,7 +285,7 @@ class NewsAggregator:
             if hasattr(entry, field) and entry[field]:
                 try:
                     return time.mktime(entry[field])
-                except:
+                except Exception:
                     pass
 
         # 尝试字符串格式
@@ -282,12 +295,12 @@ class NewsAggregator:
                     parsed = email.utils.parsedate_tz(entry[field])
                     if parsed:
                         return time.mktime(parsed)
-                except:
+                except Exception:
                     pass
 
         return time.time()
 
-    def _classify_item(self, item: Dict) -> str:
+    def _classify_item(self, item: dict) -> str:
         """分类新闻"""
         text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
 
@@ -300,7 +313,7 @@ class NewsAggregator:
             return max(scores, key=scores.get)
         return "general"
 
-    def _calculate_importance(self, item: Dict) -> int:
+    def _calculate_importance(self, item: dict) -> int:
         """计算重要性分数 (1-5)"""
         text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
 
@@ -319,7 +332,7 @@ class NewsAggregator:
         # 限制最高分数
         return min(score, 5)
 
-    def _deduplicate(self, items: List[Dict]) -> List[Dict]:
+    def _deduplicate(self, items: list[dict]) -> list[dict]:
         """去重（基于标题相似度）"""
         seen_titles = set()
         unique = []
@@ -327,7 +340,7 @@ class NewsAggregator:
         for item in items:
             title = item.get("title", "").lower()
             # 简化标题用于比较
-            simple_title = re.sub(r'[^a-z0-9\u4e00-\u9fff]', '', title)
+            simple_title = re.sub(r"[^a-z0-9\u4e00-\u9fff]", "", title)
 
             if simple_title not in seen_titles:
                 seen_titles.add(simple_title)
@@ -335,7 +348,7 @@ class NewsAggregator:
 
         return unique
 
-    def _generate_mock_news(self, source_name: str) -> List[Dict]:
+    def _generate_mock_news(self, source_name: str) -> list[dict]:
         """生成模拟新闻（当 feed 不可用时）"""
         import random
 
@@ -365,17 +378,17 @@ class NewsAggregator:
 news_aggregator = NewsAggregator()
 
 
-def get_crypto_news(limit: int = 20, lang: str = "en") -> List[Dict]:
+def get_crypto_news(limit: int = 20, lang: str = "en") -> list[dict]:
     """获取加密货币新闻"""
     return news_aggregator.get_news_digest(category="crypto", lang=lang, limit=limit)
 
 
-def get_finance_news(limit: int = 20, lang: str = "en") -> List[Dict]:
+def get_finance_news(limit: int = 20, lang: str = "en") -> list[dict]:
     """获取金融新闻"""
     return news_aggregator.get_news_digest(category="finance", lang=lang, limit=limit)
 
 
-def get_all_news(limit: int = 50, lang: str = "en") -> List[Dict]:
+def get_all_news(limit: int = 50, lang: str = "en") -> list[dict]:
     """获取所有新闻"""
     return news_aggregator.get_news_digest(category="all", lang=lang, limit=limit)
 

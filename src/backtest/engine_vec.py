@@ -1,9 +1,9 @@
 # 向量化回測引擎 — NumPy 實作，比循環版快 10-100 倍
 from __future__ import annotations
 
-import numpy as np
-from dataclasses import dataclass, field
 from typing import Any
+
+import numpy as np
 
 from . import strategies
 from .engine import BacktestResult, _compute_metrics
@@ -35,7 +35,7 @@ def _run_backtest_vectorized(
     out.raw_ohlcv = rows
 
     timestamps = np.array([r["timestamp"] for r in rows], dtype=np.int64)
-    opens = np.array([r["open"] for r in rows], dtype=np.float64)
+    _opens = np.array([r["open"] for r in rows], dtype=np.float64)
     highs = np.array([r["high"] for r in rows], dtype=np.float64)
     lows = np.array([r["low"] for r in rows], dtype=np.float64)
     closes = np.array([r["close"] for r in rows], dtype=np.float64)
@@ -70,21 +70,34 @@ def _run_backtest_vectorized(
                     sl_hit = stop_loss_pct and highs[i] >= entry_price * (1 + stop_loss_pct / 100)
 
                 if sl_hit or tp_hit:
-                    exit_p = (entry_price * (1 - stop_loss_pct / 100 * direction)) if sl_hit else (entry_price * (1 + take_profit_pct / 100 * direction))
+                    exit_p = (
+                        (entry_price * (1 - stop_loss_pct / 100 * direction))
+                        if sl_hit
+                        else (entry_price * (1 + take_profit_pct / 100 * direction))
+                    )
                     price_ret = (exit_p - entry_price) / entry_price * direction
                     rt_cost = cost_pct * 2
                     pnl = price_ret * leverage - rt_cost
                     fee_amt = equity * rt_cost
                     total_fees += fee_amt
                     profit = equity * pnl
-                    equity *= (1 + pnl)
+                    equity *= 1 + pnl
                     if equity <= 0:
                         equity = 0
-                    trades.append({"entry_ts": int(entry_ts), "exit_ts": int(timestamps[i]),
-                                   "side": direction, "entry_price": entry_price, "exit_price": float(exit_p),
-                                   "pnl_pct": round(pnl * 100, 4), "profit": round(profit, 2),
-                                   "fee": round(fee_amt, 2), "liquidation": equity == 0,
-                                   "exit_reason": "sl" if sl_hit else "tp"})
+                    trades.append(
+                        {
+                            "entry_ts": int(entry_ts),
+                            "exit_ts": int(timestamps[i]),
+                            "side": direction,
+                            "entry_price": entry_price,
+                            "exit_price": float(exit_p),
+                            "pnl_pct": round(pnl * 100, 4),
+                            "profit": round(profit, 2),
+                            "fee": round(fee_amt, 2),
+                            "liquidation": equity == 0,
+                            "exit_reason": "sl" if sl_hit else "tp",
+                        }
+                    )
                     position = 0
                     entry_price = 0
                     equity_arr[i] = equity
@@ -98,13 +111,22 @@ def _run_backtest_vectorized(
             fee_amt = equity * rt_cost
             total_fees += fee_amt
             profit = equity * pnl
-            equity *= (1 + pnl)
+            equity *= 1 + pnl
             if equity <= 0:
                 equity = 0
-            trades.append({"entry_ts": int(entry_ts), "exit_ts": int(timestamps[i]),
-                           "side": direction, "entry_price": entry_price, "exit_price": float(close),
-                           "pnl_pct": round(pnl * 100, 4), "profit": round(profit, 2),
-                           "fee": round(fee_amt, 2), "liquidation": equity == 0})
+            trades.append(
+                {
+                    "entry_ts": int(entry_ts),
+                    "exit_ts": int(timestamps[i]),
+                    "side": direction,
+                    "entry_price": entry_price,
+                    "exit_price": float(close),
+                    "pnl_pct": round(pnl * 100, 4),
+                    "profit": round(profit, 2),
+                    "fee": round(fee_amt, 2),
+                    "liquidation": equity == 0,
+                }
+            )
             position = 0
             entry_price = 0
 
@@ -129,17 +151,28 @@ def _run_backtest_vectorized(
         fee_amt = equity * rt_cost
         total_fees += fee_amt
         profit = equity * pnl
-        equity *= (1 + pnl)
+        equity *= 1 + pnl
         if equity <= 0:
             equity = 0
-        trades.append({"entry_ts": int(entry_ts), "exit_ts": int(timestamps[-1]),
-                       "side": direction, "entry_price": entry_price, "exit_price": float(closes[-1]),
-                       "pnl_pct": round(pnl * 100, 4), "profit": round(profit, 2),
-                       "fee": round(fee_amt, 2), "liquidation": equity == 0})
+        trades.append(
+            {
+                "entry_ts": int(entry_ts),
+                "exit_ts": int(timestamps[-1]),
+                "side": direction,
+                "entry_price": entry_price,
+                "exit_price": float(closes[-1]),
+                "pnl_pct": round(pnl * 100, 4),
+                "profit": round(profit, 2),
+                "fee": round(fee_amt, 2),
+                "liquidation": equity == 0,
+            }
+        )
         equity_arr[-1] = equity
 
-    out.equity_curve = [{"timestamp": int(timestamps[i]), "equity": round(float(equity_arr[i]), 2),
-                         "position": int(signals[i])} for i in range(n)]
+    out.equity_curve = [
+        {"timestamp": int(timestamps[i]), "equity": round(float(equity_arr[i]), 2), "position": int(signals[i])}
+        for i in range(n)
+    ]
     out.trades = trades
     out.metrics = _compute_metrics(out.equity_curve, trades, initial_equity, since_ms, until_ms, leverage=leverage)
     out.metrics["total_fees"] = round(total_fees, 2)

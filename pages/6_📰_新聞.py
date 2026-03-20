@@ -1,7 +1,7 @@
 # 市場新聞 — RSS 拉取加密貨幣 & 股市新聞
+
 import streamlit as st
-import time
-from datetime import datetime, timezone
+
 from src.ui_common import apply_theme, breadcrumb, check_session, sidebar_user_nav
 
 st.set_page_config(page_title="StocksX — 市場新聞", page_icon="📰", layout="wide")
@@ -20,7 +20,11 @@ NEWS_SOURCES = {
     "股票 & 財經": [
         {"name": "Yahoo Finance", "url": "https://finance.yahoo.com/news/rssindex", "icon": "📈"},
         {"name": "MarketWatch", "url": "https://feeds.marketwatch.com/marketwatch/topstories/", "icon": "👁️"},
-        {"name": "CNBC", "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114", "icon": "📺"},
+        {
+            "name": "CNBC",
+            "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+            "icon": "📺",
+        },
     ],
 }
 
@@ -29,8 +33,9 @@ NEWS_SOURCES = {
 def _fetch_rss(url: str, max_items: int = 15) -> list[dict]:
     """拉取 RSS 並解析"""
     try:
-        import xml.etree.ElementTree as ET
         import urllib.request
+        import xml.etree.ElementTree as ET
+
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = resp.read()

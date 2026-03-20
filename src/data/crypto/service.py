@@ -70,7 +70,9 @@ class CryptoMarketDataService:
         expected_bars = max(1, (until - aligned_since) // tf_ms)
 
         if len(cached) < expected_bars * 0.5:
-            logger.info("Cache miss or insufficient, fetching from exchange: %s %s %s", symbol, timeframe, self._exchange_id)
+            logger.info(
+                "Cache miss or insufficient, fetching from exchange: %s %s %s", symbol, timeframe, self._exchange_id
+            )
             fresh = self._ohlcv_source.fetch_range(symbol, timeframe, since, until)
             self._mark_outliers(fresh)
             self._storage.save_ohlcv(fresh)
@@ -123,19 +125,21 @@ class CryptoMarketDataService:
                 last_close = bar["close"]
                 filled.append(bar)
             else:
-                filled.append({
-                    "exchange": self._exchange_id,
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "timestamp": cursor,
-                    "open": last_close,
-                    "high": last_close,
-                    "low": last_close,
-                    "close": last_close,
-                    "volume": 0.0,
-                    "filled": 1,
-                    "is_outlier": 0,
-                })
+                filled.append(
+                    {
+                        "exchange": self._exchange_id,
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "timestamp": cursor,
+                        "open": last_close,
+                        "high": last_close,
+                        "low": last_close,
+                        "close": last_close,
+                        "volume": 0.0,
+                        "filled": 1,
+                        "is_outlier": 0,
+                    }
+                )
             cursor += tf_ms
 
         return filled

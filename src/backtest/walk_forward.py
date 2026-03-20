@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .engine import _run_backtest_on_rows, BacktestResult
 from . import strategies as _strat_mod
+from .engine import _run_backtest_on_rows
 from .optimizer import _param_grid_to_list
 
 
@@ -70,10 +70,20 @@ def walk_forward_analysis(
         for params in combos:
             merged = {**defaults, **params}
             res = _run_backtest_on_rows(
-                rows=train_rows, exchange_id=exchange_id, symbol=symbol, timeframe=timeframe,
-                since_ms=train_since, until_ms=train_until, strategy=strategy, strategy_params=merged,
-                initial_equity=initial_equity, leverage=leverage,
-                take_profit_pct=None, stop_loss_pct=None, fee_rate=fee_rate, slippage=slippage,
+                rows=train_rows,
+                exchange_id=exchange_id,
+                symbol=symbol,
+                timeframe=timeframe,
+                since_ms=train_since,
+                until_ms=train_until,
+                strategy=strategy,
+                strategy_params=merged,
+                initial_equity=initial_equity,
+                leverage=leverage,
+                take_profit_pct=None,
+                stop_loss_pct=None,
+                fee_rate=fee_rate,
+                slippage=slippage,
             )
             if res.error:
                 continue
@@ -84,24 +94,36 @@ def walk_forward_analysis(
 
         # Out-of-sample: 用最優參數測試
         oos_res = _run_backtest_on_rows(
-            rows=test_rows, exchange_id=exchange_id, symbol=symbol, timeframe=timeframe,
-            since_ms=test_since, until_ms=test_until, strategy=strategy, strategy_params=best_params,
-            initial_equity=initial_equity, leverage=leverage,
-            take_profit_pct=None, stop_loss_pct=None, fee_rate=fee_rate, slippage=slippage,
+            rows=test_rows,
+            exchange_id=exchange_id,
+            symbol=symbol,
+            timeframe=timeframe,
+            since_ms=test_since,
+            until_ms=test_until,
+            strategy=strategy,
+            strategy_params=best_params,
+            initial_equity=initial_equity,
+            leverage=leverage,
+            take_profit_pct=None,
+            stop_loss_pct=None,
+            fee_rate=fee_rate,
+            slippage=slippage,
         )
 
         oos_metrics = oos_res.metrics if not oos_res.error else {}
-        results.append({
-            "fold": fold + 1,
-            "train_bars": len(train_rows),
-            "test_bars": len(test_rows),
-            "best_params": best_params,
-            "in_sample_score": round(best_score, 4) if best_score > -float("inf") else None,
-            "oos_return_pct": oos_metrics.get("total_return_pct", 0),
-            "oos_sharpe": oos_metrics.get("sharpe_ratio", 0),
-            "oos_drawdown_pct": oos_metrics.get("max_drawdown_pct", 0),
-            "oos_trades": oos_metrics.get("num_trades", 0),
-        })
+        results.append(
+            {
+                "fold": fold + 1,
+                "train_bars": len(train_rows),
+                "test_bars": len(test_rows),
+                "best_params": best_params,
+                "in_sample_score": round(best_score, 4) if best_score > -float("inf") else None,
+                "oos_return_pct": oos_metrics.get("total_return_pct", 0),
+                "oos_sharpe": oos_metrics.get("sharpe_ratio", 0),
+                "oos_drawdown_pct": oos_metrics.get("max_drawdown_pct", 0),
+                "oos_trades": oos_metrics.get("num_trades", 0),
+            }
+        )
 
         if oos_res.equity_curve:
             oos_equities.extend(oos_res.equity_curve)

@@ -1,0 +1,234 @@
+# ════════════════════════════════════════════════════════════
+# StocksX — pyproject.toml（PEP 621 現代化打包標準）
+# ════════════════════════════════════════════════════════════
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stocksx"
+version = "6.0.0"
+description = "機構級量化回測與即時交易監控平台"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "StocksX Team" },
+]
+keywords = [
+    "quantitative-trading",
+    "backtesting",
+    "crypto",
+    "stocks",
+    "trading-bot",
+    "streamlit",
+    "fastapi",
+    "websocket",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+
+# ─── 核心依賴 ───
+dependencies = [
+    # Web UI
+    "streamlit>=1.32.0",
+    # 數據處理
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    # 圖表可視化
+    "plotly>=5.18.0",
+    # 加密貨幣交易所 API
+    "ccxt>=4.2.0",
+    # 股票數據
+    "yfinance>=0.2.36",
+    # HTTP 客戶端
+    "requests>=2.31.0",
+    "aiohttp>=3.9.0",
+    # 環境變數
+    "python-dotenv>=1.0.0",
+    # 任務隊列與快取
+    "celery>=5.3.0",
+    "redis>=5.0.0",
+    # 即時通訊
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "websockets>=12.0",
+    # JWT 認證
+    "PyJWT>=2.8.0",
+    # 監控與系統
+    "psutil>=5.9.0",
+    "prometheus-client>=0.20.0",
+    # 新聞與 RSS
+    "feedparser>=6.0.0",
+    # 統計與數學
+    "scipy>=1.12.0",
+    "statsmodels>=0.14.0",
+    # 機器學習
+    "scikit-learn>=1.4.0",
+    # AI / LLM
+    "dashscope>=1.10.0",
+    # 生產環境
+    "psycopg2-binary>=2.9.0",
+    "sqlalchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+# ML 深度學習（可選，安裝較大）
+ml = [
+    "tensorflow>=2.15.0; platform_machine != 'aarch64'",
+    "torch>=2.0.0",
+]
+# NLP 情緒分析
+nlp = [
+    "transformers>=4.37.0",
+    "nltk>=3.8.0",
+]
+# 強化學習
+rl = [
+    "gymnasium>=0.29.0",
+    "stable-baselines3>=2.2.0",
+]
+# 開發工具
+dev = [
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-xdist>=3.5.0",
+    "httpx>=0.27.0",
+    "bandit[toml]>=1.7.0",
+    "safety>=3.0.0",
+    "pre-commit>=3.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+    "ipython>=8.20.0",
+    "rich>=13.7.0",
+]
+# 全功能安裝
+all = [
+    "stocksx[ml,nlp,rl,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/iiooiioo888/StocksX_V0"
+Repository = "https://github.com/iiooiioo888/StocksX_V0"
+Documentation = "https://github.com/iiooiioo888/StocksX_V0#readme"
+Issues = "https://github.com/iiooiioo888/StocksX_V0/issues"
+Changelog = "https://github.com/iiooiioo888/StocksX_V0#-更新日誌"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+# ════════════════════════════════════════════════════════════
+# Ruff — Python linter & formatter
+# ════════════════════════════════════════════════════════════
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+    "TCH",  # flake8-type-checking
+    "PERF", # perflint
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",
+    "B008",
+    "SIM108",
+    "N806",
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "E402",
+    "SIM102",
+    "SIM105",
+    "RUF013",
+    "RUF059",
+    "B905",
+    "B006",
+    "B007",
+    "UP045",
+    "RUF005",
+    "RUF006",
+    "RUF022",
+    "RUF015",
+    "RUF012",
+    "E741",
+    "N812",
+    "N818",
+    "SIM222",
+    "SIM118",
+    "SIM103",
+    "B904",
+    "I001",
+    "F811",
+    "F841",
+    "PERF203",  # try-except in loop — 合理的錯誤處理模式
+    "PERF401",  # list comprehension 建議 — 可讀性優先
+    "PERF403",  # dict comprehension 建議
+    "TC001",    # move import to TYPE_CHECKING — 可能破壞運行時
+    "TC003",    # move stdlib to TYPE_CHECKING — 可能破壞運行時
+    "N802",     # function naming — ContextManager 慣例
+]
+
+[tool.ruff.lint.per-file-ignores]
+"pages/*" = ["E402"]
+"app.py" = ["E402"]
+"tests/*" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ════════════════════════════════════════════════════════════
+# pytest
+# ════════════════════════════════════════════════════════════
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+timeout = 60
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests",
+]
+
+# ════════════════════════════════════════════════════════════
+# mypy
+# ════════════════════════════════════════════════════════════
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = true
+
+# ════════════════════════════════════════════════════════════
+# bandit
+# ════════════════════════════════════════════════════════════
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]

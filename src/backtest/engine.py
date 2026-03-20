@@ -13,6 +13,7 @@ from . import strategies
 @dataclass
 class BacktestResult:
     """回測結果：權益曲線、交易明細、績效指標."""
+
     equity_curve: list[dict[str, Any]] = field(default_factory=list)
     trades: list[dict[str, Any]] = field(default_factory=list)
     metrics: dict[str, Any] = field(default_factory=dict)
@@ -167,7 +168,7 @@ def _run_backtest_on_rows(
 
     for i, r in enumerate(rows):
         ts = r["timestamp"]
-        o = r["open"]
+        _o = r["open"]
         h = r["high"]
         l = r["low"]
         close = r["close"]
@@ -217,18 +218,20 @@ def _run_backtest_on_rows(
                     profit = -equity_before
                     pnl_pct = -1.0
                     liquidated = True
-                trades.append({
-                    "entry_ts": entry_ts_prev,
-                    "exit_ts": ts,
-                    "side": direction,
-                    "entry_price": entry_price,
-                    "exit_price": exit_price,
-                    "pnl_pct": round(pnl_pct * 100, 4),
-                    "profit": round(profit, 2),
-                    "fee": round(fee_amount, 2),
-                    "liquidation": liquidated,
-                    "exit_reason": exit_reason,
-                })
+                trades.append(
+                    {
+                        "entry_ts": entry_ts_prev,
+                        "exit_ts": ts,
+                        "side": direction,
+                        "entry_price": entry_price,
+                        "exit_price": exit_price,
+                        "pnl_pct": round(pnl_pct * 100, 4),
+                        "profit": round(profit, 2),
+                        "fee": round(fee_amount, 2),
+                        "liquidation": liquidated,
+                        "exit_reason": exit_reason,
+                    }
+                )
                 position = 0
                 entry_price = 0.0
                 equity_curve.append({"timestamp": ts, "equity": round(equity, 2), "position": position})
@@ -250,17 +253,19 @@ def _run_backtest_on_rows(
                 profit = -equity_before
                 pnl_pct = -1.0
                 liquidated = True
-            trades.append({
-                "entry_ts": entry_ts_prev,
-                "exit_ts": ts,
-                "side": direction,
-                "entry_price": entry_price,
-                "exit_price": close,
-                "pnl_pct": round(pnl_pct * 100, 4),
-                "profit": round(profit, 2),
-                "fee": round(fee_amount, 2),
-                "liquidation": liquidated,
-            })
+            trades.append(
+                {
+                    "entry_ts": entry_ts_prev,
+                    "exit_ts": ts,
+                    "side": direction,
+                    "entry_price": entry_price,
+                    "exit_price": close,
+                    "pnl_pct": round(pnl_pct * 100, 4),
+                    "profit": round(profit, 2),
+                    "fee": round(fee_amount, 2),
+                    "liquidation": liquidated,
+                }
+            )
             position = 0
             entry_price = 0.0
 
@@ -293,17 +298,19 @@ def _run_backtest_on_rows(
             equity = 0.0
             profit = -equity_before
             pnl_pct = -1.0
-        trades.append({
-            "entry_ts": entry_ts_prev,
-            "exit_ts": rows[-1]["timestamp"],
-            "side": direction,
-            "entry_price": entry_price,
-            "fee": round(fee_amount, 2),
-            "exit_price": last_close,
-            "pnl_pct": round(pnl_pct * 100, 4),
-            "profit": round(profit, 2),
-            "liquidation": equity == 0,
-        })
+        trades.append(
+            {
+                "entry_ts": entry_ts_prev,
+                "exit_ts": rows[-1]["timestamp"],
+                "side": direction,
+                "entry_price": entry_price,
+                "fee": round(fee_amount, 2),
+                "exit_price": last_close,
+                "pnl_pct": round(pnl_pct * 100, 4),
+                "profit": round(profit, 2),
+                "liquidation": equity == 0,
+            }
+        )
         # 更新最後一筆權益曲線為平倉後的實際權益
         if equity_curve:
             equity_curve[-1]["equity"] = round(equity, 2)
@@ -340,7 +347,9 @@ def run_backtest(
     out = BacktestResult()
     try:
         fetcher = CryptoDataFetcher(exchange_id)
-        rows = fetcher.get_ohlcv(symbol, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers)
+        rows = fetcher.get_ohlcv(
+            symbol, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers
+        )
     except Exception as e:
         out.error = str(e)
         return out
@@ -359,3 +368,7 @@ def run_backtest(
         take_profit_pct=take_profit_pct,
         stop_loss_pct=stop_loss_pct,
     )
+
+
+# Public alias
+compute_metrics = _compute_metrics

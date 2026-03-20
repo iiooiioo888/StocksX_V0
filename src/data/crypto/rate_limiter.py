@@ -1,8 +1,8 @@
 # 限流保護：指數退避重試
 from __future__ import annotations
 
-import time
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 

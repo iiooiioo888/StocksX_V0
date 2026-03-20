@@ -1,0 +1,36 @@
+# ════════════════════════════════════════════════════════════
+# Prometheus 配置 — StocksX 監控
+# ════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # StocksX 主應用
+  - job_name: "stocksx-app"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["app:8501"]
+        labels:
+          service: "app"
+
+  # StocksX WebSocket 服務
+  - job_name: "stocksx-websocket"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["websocket:8001"]
+        labels:
+          service: "websocket"
+
+  # Redis 監控
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis:6379"]
+        labels:
+          service: "redis"
+
+  # Prometheus 自監控
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

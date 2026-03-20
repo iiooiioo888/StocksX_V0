@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import itertools
 import os
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any
 
-from .engine import BacktestResult, run_backtest, _run_backtest_on_rows
 from . import strategies as _strategies_mod
-
+from .engine import BacktestResult, _run_backtest_on_rows, run_backtest
 
 OBJECTIVES = {
-    "sharpe_ratio": ("夏普比率", True),   # 越大越好
+    "sharpe_ratio": ("夏普比率", True),  # 越大越好
     "total_return_pct": ("總報酬率 %", True),
     "annual_return_pct": ("年化報酬率 %", True),
     "calmar_ratio": ("Calmar 比率", True),
@@ -48,7 +48,8 @@ def find_optimal(
     on_progress: Callable[
         [int, int, dict[str, Any], BacktestResult | None, BacktestResult | None, list[dict[str, Any]]],
         None,
-    ] | None = None,
+    ]
+    | None = None,
 ) -> tuple[BacktestResult | None, list[dict[str, Any]]]:
     """
     在給定策略的參數網格上做網格搜尋，依 objective 回傳最優回測結果與全部結果列表。
@@ -112,12 +113,14 @@ def find_optimal(
                 on_progress(done, total, merged, res, best_result, results_list)
             continue
         compare_score = -score if objective == "max_drawdown_pct" else score
-        results_list.append({
-            "params": merged,
-            "result": res,
-            "metrics": res.metrics,
-            "score": res.metrics.get(objective),
-        })
+        results_list.append(
+            {
+                "params": merged,
+                "result": res,
+                "metrics": res.metrics,
+                "score": res.metrics.get(objective),
+            }
+        )
         if compare_score > best_score:
             best_score = compare_score
             best_result = res
@@ -153,7 +156,6 @@ def _run_single_backtest_worker(args: tuple) -> tuple[str, str, dict[str, Any], 
         stop_loss_pct,
         exclude_outliers,
     ) = args
-    from .engine import run_backtest
     res = run_backtest(
         exchange_id=exchange_id,
         symbol=symbol,
@@ -240,7 +242,20 @@ def find_optimal_global(
     # 組裝 worker 參數：(exchange_id, symbol, since_ms, until_ms, strategy, timeframe, merged_params,
     #                 initial_equity, leverage, take_profit_pct, stop_loss_pct, exclude_outliers)
     task_args = [
-        (exchange_id, symbol, since_ms, until_ms, s, tf, params, initial_equity, leverage, take_profit_pct, stop_loss_pct, exclude_outliers)
+        (
+            exchange_id,
+            symbol,
+            since_ms,
+            until_ms,
+            s,
+            tf,
+            params,
+            initial_equity,
+            leverage,
+            take_profit_pct,
+            stop_loss_pct,
+            exclude_outliers,
+        )
         for (s, tf, params) in full_grid
     ]
 
@@ -281,12 +296,21 @@ def find_optimal_global(
                     global_best_params = params
                 if on_global_progress and done % max(1, total_tasks // 20) == 0:
                     try:
-                        on_global_progress(strategy, timeframe, done, total_tasks, global_best_result, global_best_params)
+                        on_global_progress(
+                            strategy, timeframe, done, total_tasks, global_best_result, global_best_params
+                        )
                     except Exception:
                         pass
         if on_global_progress:
             try:
-                on_global_progress(global_best_strategy, global_best_timeframe, total_tasks, total_tasks, global_best_result, global_best_params)
+                on_global_progress(
+                    global_best_strategy,
+                    global_best_timeframe,
+                    total_tasks,
+                    total_tasks,
+                    global_best_result,
+                    global_best_params,
+                )
             except Exception:
                 pass
         results_by_combo = [
@@ -314,8 +338,12 @@ def find_optimal_global(
         if timeframe not in rows_cache:
             try:
                 rows_cache[timeframe] = fetcher.get_ohlcv(
-                    symbol, timeframe, since_ms, until_ms,
-                    fill_gaps=True, exclude_outliers=exclude_outliers,
+                    symbol,
+                    timeframe,
+                    since_ms,
+                    until_ms,
+                    fill_gaps=True,
+                    exclude_outliers=exclude_outliers,
                 )
             except Exception:
                 rows_cache[timeframe] = []
@@ -367,13 +395,15 @@ def find_optimal_global(
 
             if local_best is not None:
                 local_score = local_best.metrics.get(objective)
-                results_by_combo.append({
-                    "strategy": strategy,
-                    "timeframe": timeframe,
-                    "params": local_best_params,
-                    "result": local_best,
-                    "score": local_score,
-                })
+                results_by_combo.append(
+                    {
+                        "strategy": strategy,
+                        "timeframe": timeframe,
+                        "params": local_best_params,
+                        "result": local_best,
+                        "score": local_score,
+                    }
+                )
                 compare_score = -local_score if objective == "max_drawdown_pct" else local_score
                 if compare_score > global_best_score:
                     global_best_score = compare_score
@@ -384,7 +414,9 @@ def find_optimal_global(
 
             if on_global_progress:
                 try:
-                    on_global_progress(strategy, timeframe, done_combos, total_combos, global_best_result, global_best_params)
+                    on_global_progress(
+                        strategy, timeframe, done_combos, total_combos, global_best_result, global_best_params
+                    )
                 except Exception:
                     pass
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
 
 import ccxt
 
@@ -19,41 +18,42 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OrderResult:
     """訂單執行結果"""
+
     success: bool
-    order_id: Optional[str] = None
-    symbol: Optional[str] = None
-    side: Optional[str] = None  # 'buy' or 'sell'
-    type: Optional[str] = None  # 'market' or 'limit'
-    price: Optional[float] = None
-    amount: Optional[float] = None
-    filled: Optional[float] = None
-    remaining: Optional[float] = None
-    fee: Optional[float] = None
-    error: Optional[str] = None
+    order_id: str | None = None
+    symbol: str | None = None
+    side: str | None = None  # 'buy' or 'sell'
+    type: str | None = None  # 'market' or 'limit'
+    price: float | None = None
+    amount: float | None = None
+    filled: float | None = None
+    remaining: float | None = None
+    fee: float | None = None
+    error: str | None = None
 
 
 class TradeExecutor:
     """
     交易執行器
-    
+
     功能：
     - 連接多個交易所（透過 CCXT）
     - 執行市價單/限價單
     - 支援現貨和合約交易
     - 自動重試機制
     """
-    
+
     def __init__(
         self,
         exchange_id: str = "binance",
-        api_key: Optional[str] = None,
-        api_secret: Optional[str] = None,
+        api_key: str | None = None,
+        api_secret: str | None = None,
         sandbox: bool = True,
-        options: Optional[Dict] = None,
+        options: dict | None = None,
     ):
         """
         初始化交易執行器
-        
+
         Args:
             exchange_id: 交易所 ID (binance, okx, bybit, etc.)
             api_key: API Key
@@ -63,37 +63,37 @@ class TradeExecutor:
         """
         self.exchange_id = exchange_id
         self.sandbox = sandbox
-        self.exchange = self._create_exchange(
-            exchange_id, api_key, api_secret, sandbox, options
-        )
+        self.exchange = self._create_exchange(exchange_id, api_key, api_secret, sandbox, options)
         self._max_retries = 3
         self._retry_delay = 1.0  # 秒
-        
+
     def _create_exchange(
         self,
         exchange_id: str,
-        api_key: Optional[str],
-        api_secret: Optional[str],
+        api_key: str | None,
+        api_secret: str | None,
         sandbox: bool,
-        options: Optional[Dict],
+        options: dict | None,
     ) -> ccxt.Exchange:
         """創建交易所連接"""
         exchange_class = getattr(ccxt, exchange_id)
-        
+
         config = {
             "enableRateLimit": True,
             "timeout": 30000,
         }
-        
+
         if api_key and api_secret:
-            config.update({
-                "apiKey": api_key,
-                "secret": api_secret,
-            })
-        
+            config.update(
+                {
+                    "apiKey": api_key,
+                    "secret": api_secret,
+                }
+            )
+
         if options:
             config.setdefault("options", {}).update(options)
-        
+
         # 配置測試網絡
         if sandbox and exchange_id in ["binance", "okx", "bybit"]:
             if exchange_id == "binance":
@@ -103,22 +103,22 @@ class TradeExecutor:
                         "private": "https://testnet.binance.vision/api",
                     }
                 }
-        
+
         exchange = exchange_class(config)
         logger.info(f"✅ 交易所連接成功：{exchange_id} (sandbox={sandbox})")
         return exchange
-    
-    def load_markets(self) -> Dict:
+
+    def load_markets(self) -> dict:
         """載入交易市場資訊"""
         return self.exchange.load_markets()
-    
-    def get_balance(self, currency: Optional[str] = None) -> Dict:
+
+    def get_balance(self, currency: str | None = None) -> dict:
         """
         取得帳戶餘額
-        
+
         Args:
             currency: 指定幣種，None 返回全部
-            
+
         Returns:
             餘額字典 {free: 可用，used: 凍結，total: 總計}
         """
@@ -130,14 +130,14 @@ class TradeExecutor:
         except Exception as e:
             logger.error(f"取得餘額失敗：{e}")
             return {}
-    
-    def get_position(self, symbol: str) -> Optional[Dict]:
+
+    def get_position(self, symbol: str) -> dict | None:
         """
         取得持倉資訊（合約）
-        
+
         Args:
             symbol: 交易對 (e.g., "BTC/USDT:USDT")
-            
+
         Returns:
             持倉資訊 {side, size, entryPrice, unrealizedPnl, ...}
         """
@@ -150,59 +150,59 @@ class TradeExecutor:
         except Exception as e:
             logger.error(f"取得持倉失敗 {symbol}: {e}")
             return None
-    
+
     def create_market_order(
         self,
         symbol: str,
         side: str,
         amount: float,
-        params: Optional[Dict] = None,
+        params: dict | None = None,
     ) -> OrderResult:
         """
         創建市價單
-        
+
         Args:
             symbol: 交易對 (e.g., "BTC/USDT" 或 "BTC/USDT:USDT")
             side: 'buy' 或 'sell'
             amount: 數量
             params: 額外參數（如槓桿）
-            
+
         Returns:
             OrderResult 訂單結果
         """
         return self._create_order("market", symbol, side, amount, None, params)
-    
+
     def create_limit_order(
         self,
         symbol: str,
         side: str,
         amount: float,
         price: float,
-        params: Optional[Dict] = None,
+        params: dict | None = None,
     ) -> OrderResult:
         """
         創建限價單
-        
+
         Args:
             symbol: 交易對
             side: 'buy' 或 'sell'
             amount: 數量
             price: 價格
             params: 額外參數
-            
+
         Returns:
             OrderResult 訂單結果
         """
         return self._create_order("limit", symbol, side, amount, price, params)
-    
+
     def _create_order(
         self,
         order_type: str,
         symbol: str,
         side: str,
         amount: float,
-        price: Optional[float],
-        params: Optional[Dict],
+        price: float | None,
+        params: dict | None,
     ) -> OrderResult:
         """訂單執行核心邏輯（含重試機制）"""
         for attempt in range(self._max_retries):
@@ -216,17 +216,17 @@ class TradeExecutor:
                     price=price,
                     params=params or {},
                 )
-                
+
                 # 計算手續費
                 fee = None
-                if "fee" in order and order["fee"]:
+                if order.get("fee"):
                     fee = order["fee"].get("cost", 0)
-                
+
                 logger.info(
                     f"📝 訂單執行成功：{side.upper()} {amount} {symbol} "
                     f"@ {order.get('price', 'MARKET')} (ID: {order['id']})"
                 )
-                
+
                 return OrderResult(
                     success=True,
                     order_id=order["id"],
@@ -239,32 +239,32 @@ class TradeExecutor:
                     remaining=order.get("remaining", amount),
                     fee=fee,
                 )
-                
+
             except ccxt.InsufficientFunds as e:
-                error_msg = f"餘額不足：{str(e)}"
+                error_msg = f"餘額不足：{e!s}"
                 logger.error(error_msg)
                 return OrderResult(success=False, error=error_msg)
-                
+
             except ccxt.InvalidOrder as e:
-                error_msg = f"無效訂單：{str(e)}"
+                error_msg = f"無效訂單：{e!s}"
                 logger.error(error_msg)
                 return OrderResult(success=False, error=error_msg)
-                
+
             except (ccxt.NetworkError, ccxt.ExchangeError) as e:
-                error_msg = f"交易所錯誤：{str(e)}"
+                error_msg = f"交易所錯誤：{e!s}"
                 logger.warning(f"嘗試 {attempt + 1}/{self._max_retries}: {error_msg}")
                 if attempt < self._max_retries - 1:
                     time.sleep(self._retry_delay)
                 else:
                     return OrderResult(success=False, error=error_msg)
-                    
+
             except Exception as e:
-                error_msg = f"未知錯誤：{str(e)}"
+                error_msg = f"未知錯誤：{e!s}"
                 logger.error(error_msg)
                 return OrderResult(success=False, error=error_msg)
-        
+
         return OrderResult(success=False, error="未知錯誤")
-    
+
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         """取消訂單"""
         try:
@@ -274,11 +274,11 @@ class TradeExecutor:
         except Exception as e:
             logger.error(f"取消訂單失敗 {order_id}: {e}")
             return False
-    
+
     def cancel_all_orders(self, symbol: str) -> int:
         """
         取消所有掛單
-        
+
         Returns:
             取消的訂單數量
         """
@@ -292,23 +292,23 @@ class TradeExecutor:
         except Exception as e:
             logger.error(f"取消所有訂單失敗 {symbol}: {e}")
             return 0
-    
-    def get_ticker(self, symbol: str) -> Optional[Dict]:
+
+    def get_ticker(self, symbol: str) -> dict | None:
         """取得即時價格"""
         try:
             return self.exchange.fetch_ticker(symbol)
         except Exception as e:
             logger.error(f"取得價格失敗 {symbol}: {e}")
             return None
-    
+
     def set_leverage(self, symbol: str, leverage: int) -> bool:
         """
         設定槓桿（合約）
-        
+
         Args:
             symbol: 交易對
             leverage: 槓桿倍數
-            
+
         Returns:
             是否成功
         """
@@ -319,15 +319,15 @@ class TradeExecutor:
         except Exception as e:
             logger.error(f"設定槓桿失敗 {symbol}: {e}")
             return False
-    
+
     def set_margin_mode(self, symbol: str, mode: str = "cross") -> bool:
         """
         設定保證金模式（合約）
-        
+
         Args:
             symbol: 交易對
             mode: 'cross' 或 'isolated'
-            
+
         Returns:
             是否成功
         """
@@ -340,10 +340,10 @@ class TradeExecutor:
             return False
 
 
-def create_executor_from_config(user_id: int, exchange_config: Dict) -> TradeExecutor:
+def create_executor_from_config(user_id: int, exchange_config: dict) -> TradeExecutor:
     """
     從配置創建交易執行器
-    
+
     Args:
         user_id: 用戶 ID
         exchange_config: 交易所配置 {
@@ -353,7 +353,7 @@ def create_executor_from_config(user_id: int, exchange_config: Dict) -> TradeExe
             'sandbox': True,
             'options': {...}
         }
-        
+
     Returns:
         TradeExecutor 實例
     """
