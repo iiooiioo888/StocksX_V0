@@ -107,8 +107,42 @@ def ohlcv_clean_pipeline() -> Pipeline[list[dict[str, Any]]]:
     def _sort_by_time(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return sorted(rows, key=lambda r: r["timestamp"])
 
+    def _validate_ohlcv(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """驗證 OHLCV 數據完整性，過濾無效記錄."""
+        validated = []
+        for r in rows:
+            # 必要欄位檢查
+            if r.get("timestamp") is None:
+                continue
+            if r.get("close") is None or r.get("close") <= 0:
+                continue
+            # OHLC 邏輯檢查
+            o, h, l, c = r.get("open", 0), r.get("high", 0), r.get("low", 0), r.get("close", 0)
+            if h > 0 and l > 0 and h >= l and c > 0:
+                # 高低點合理性
+                h = max(h, o, c) if h < max(o, c) else h
+                l = min(l, o, c) if l > min(o, c) else l
+                r["high"] = h
+                r["low"] = l
+                validated.append(r)
+        return validated
+
+    def _fill_gaps(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """填充缺失值（前向填充 close 到 open/high/low）."""
+        for r in rows:
+            c = r.get("close", 0)
+            if r.get("open") is None or r.get("open") == 0:
+                r["open"] = c
+            if r.get("high") is None or r.get("high") == 0:
+                r["high"] = c
+            if r.get("low") is None or r.get("low") == 0:
+                r["low"] = c
+        return rows
+
     p.add(_remove_duplicates, name="deduplicate")
     p.add(_sort_by_time, name="sort")
+    p.add(_fill_gaps, name="fill_gaps", skip_on_error=True)
+    p.add(_validate_ohlcv, name="validate")
     p.add(_remove_zero_volume, name="remove_zero_volume")
     return p
 

@@ -24,7 +24,7 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 FROM python:3.12-slim
 
 LABEL maintainer="StocksX Team"
-LABEL description="StocksX - 機構級回測與交易監控平台 v6.0"
+LABEL description="StocksX - 機構級回測與交易監控平台 v8.0"
 LABEL org.opencontainers.image.source="https://github.com/iiooiioo888/StocksX_V0"
 LABEL org.opencontainers.image.licenses="MIT"
 

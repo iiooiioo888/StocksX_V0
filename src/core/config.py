@@ -62,6 +62,14 @@ class AppSettings:
 
     @classmethod
     def from_env(cls) -> AppSettings:
+        sk = _env("SECRET_KEY", "") or ""
+        if not sk:
+            import logging as _logging
+
+            _logging.getLogger(__name__).error(
+                "❌ SECRET_KEY 未設定！JWT 認證將無法正常工作。"
+                "請在 .env 中設定：python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
         return cls(
             env=_env("APP_ENV", "production") or "production",
             debug=_env_bool("APP_DEBUG", False),
@@ -69,7 +77,7 @@ class AppSettings:
             ws_port=_env_int("WS_PORT", 8001),
             tz=_env("TZ", "Asia/Shanghai") or "Asia/Shanghai",
             log_level=_env("LOG_LEVEL", "INFO") or "INFO",
-            secret_key=_env("SECRET_KEY", "") or "",
+            secret_key=sk,
         )
 
 
