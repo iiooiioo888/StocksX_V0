@@ -1,5 +1,9 @@
-"""AI/ML 策略模塊"""
+"""AI/ML 策略模塊 - 13/16 完成（81%）"""
 
 from .ai_strategies import AI_ML_STRATEGIES
+from .ai_complete import AI_ML_COMPLETE_STRATEGIES
 
-__all__ = ['AI_ML_STRATEGIES']
+# 合併所有 AI/ML 策略（13 個）
+ALL_AI_ML_STRATEGIES = {**AI_ML_STRATEGIES, **AI_ML_COMPLETE_STRATEGIES}
+
+__all__ = ['ALL_AI_ML_STRATEGIES', 'AI_ML_STRATEGIES', 'AI_ML_COMPLETE_STRATEGIES']

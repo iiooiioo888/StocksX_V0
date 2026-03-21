@@ -1,5 +1,9 @@
-"""宏觀策略模塊"""
+"""宏觀策略模塊 - 12/12 完成（100%）"""
 
 from .macro_strategies import MACRO_STRATEGIES
+from .macro_complete import MACRO_COMPLETE_STRATEGIES
 
-__all__ = ['MACRO_STRATEGIES']
+# 合併所有宏觀策略（12 個）
+ALL_MACRO_STRATEGIES = {**MACRO_STRATEGIES, **MACRO_COMPLETE_STRATEGIES}
+
+__all__ = ['ALL_MACRO_STRATEGIES', 'MACRO_STRATEGIES', 'MACRO_COMPLETE_STRATEGIES']

@@ -1,5 +1,9 @@
-"""形態策略模塊"""
+"""形態策略模塊 - 10/10 完成（100%）"""
 
 from .pattern_strategies import PATTERN_STRATEGIES
+from .pattern_complete import PATTERN_COMPLETE_STRATEGIES
 
-__all__ = ['PATTERN_STRATEGIES']
+# 合併所有形態策略（10 個）
+ALL_PATTERN_STRATEGIES = {**PATTERN_STRATEGIES, **PATTERN_COMPLETE_STRATEGIES}
+
+__all__ = ['ALL_PATTERN_STRATEGIES', 'PATTERN_STRATEGIES', 'PATTERN_COMPLETE_STRATEGIES']

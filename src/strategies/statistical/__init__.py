@@ -1,5 +1,9 @@
-"""統計策略模塊"""
+"""統計策略模塊 - 10/10 完成（100%）"""
 
 from .stat_strategies import STAT_STRATEGIES
+from .stat_complete import STAT_COMPLETE_STRATEGIES
 
-__all__ = ['STAT_STRATEGIES']
+# 合併所有統計策略（10 個）
+ALL_STAT_STRATEGIES = {**STAT_STRATEGIES, **STAT_COMPLETE_STRATEGIES}
+
+__all__ = ['ALL_STAT_STRATEGIES', 'STAT_STRATEGIES', 'STAT_COMPLETE_STRATEGIES']
