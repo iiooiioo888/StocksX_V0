@@ -192,16 +192,16 @@ for name, info in all_strategies.items():
 
 ## 📝 開發清單
 
-### 趨勢策略（9 個待開發）
-- [ ] 均線帶（Ribbon）
-- [ ] 海龜交易法
-- [ ] CCI 商品通道
-- [ ] Hull MA
-- [ ] T3 均線
-- [ ] KAMA 自適應均線
-- [ ] Tillson T3
-- [ ] ZLEMA 零滯後 EMA
-- [ ] TEMA 三重指數
+### 趨勢策略（✅ 全部完成）
+- [x] 均線帶（Ribbon）
+- [x] 海龜交易法
+- [x] CCI 商品通道
+- [x] Hull MA
+- [x] T3 均線
+- [x] KAMA 自適應均線
+- [x] Tillson T3
+- [x] ZLEMA 零滯後 EMA
+- [x] TEMA 三重指數
 
 ### 振盪器策略（12 個待開發）
 - [ ] 一目均衡表
@@ -234,14 +234,14 @@ for name, info in all_strategies.items():
 - [ ] W 底/M 頂突破
 - [ ] 橫盤均值回歸
 
-### AI/ML 策略（8 個待開發）
-- [ ] 遺傳演算法優化
-- [ ] 圖神經網路 GNN
+### AI/ML 策略（4 個已完成，5 個待開發）
+- [x] 遺傳演算法優化
+- [x] 圖神經網路 GNN（骨架）
 - [ ] GAN 價格生成
-- [ ] 異常偵測
+- [x] 異常偵測
 - [ ] 在線學習
 - [ ] 貝葉斯優化
-- [ ] NLP 事件驅動
+- [x] NLP 事件驅動（骨架）
 - [ ] 遷移學習
 - [ ] 對比學習
 

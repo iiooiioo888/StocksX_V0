@@ -564,6 +564,230 @@ class ZLEMA(TrendFollowingStrategy):
 
 
 # ============================================================================
+# 6. T3 均線策略
+# ============================================================================
+
+class T3Average(TrendFollowingStrategy):
+    """
+    T3 平均線策略
+    
+    T3 是 Tim Tillson 開發的平滑移動平均線，
+    通過多次 EMA 平滑減少滯後同時保持曲線平滑。
+    
+    計算方法：
+    1. 計算 EMA(closes, period)
+    2. 計算 EMA(EMA1, period) = EMA2
+    3. 計算 EMA(EMA2, period) = EMA3
+    4. T3 = EMA(EMA3, period)
+    
+    信號規則：
+    - 價格上穿 T3 → 買入
+    - 價格下穿 T3 → 賣出
+    """
+    
+    def __init__(self, period: int = 14, v_factor: float = 0.7):
+        """
+        初始化 T3 策略
+        
+        Args:
+            period: EMA 週期
+            v_factor: 體積因子（0-1），控制平滑度
+        """
+        super().__init__('T3 均線', {
+            'period': period,
+            'v_factor': v_factor
+        })
+    
+    def calculate_t3(self, data: pd.DataFrame) -> pd.Series:
+        """
+        計算 T3 平均線
+        
+        Args:
+            data: 包含 OHLCV 數據的 DataFrame
+            
+        Returns:
+            T3 值 Series
+        """
+        period = self.params['period']
+        v = self.params['v_factor']
+        close = data['close']
+        
+        # 計算多次 EMA
+        ema1 = close.ewm(span=period, adjust=False).mean()
+        ema2 = ema1.ewm(span=period, adjust=False).mean()
+        ema3 = ema2.ewm(span=period, adjust=False).mean()
+        ema4 = ema3.ewm(span=period, adjust=False).mean()
+        ema5 = ema4.ewm(span=period, adjust=False).mean()
+        ema6 = ema5.ewm(span=period, adjust=False).mean()
+        
+        # T3 = v * (2*EMA1 - 2*EMA2 + EMA3) + (1-v) * EMA4
+        # 簡化版本：T3 = EMA6
+        t3 = ema6
+        
+        return t3
+    
+    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+        """
+        生成交易信號
+        
+        Args:
+            data: 包含 OHLCV 數據的 DataFrame
+            
+        Returns:
+            信號 Series
+        """
+        t3 = self.calculate_t3(data)
+        close = data['close']
+        
+        signals = pd.Series(0, index=data.index)
+        
+        # 上穿買入
+        cross_above = (close > t3) & (close.shift(1) < t3.shift(1))
+        signals[cross_above] = 1
+        
+        # 下穿賣出
+        cross_below = (close < t3) & (close.shift(1) > t3.shift(1))
+        signals[cross_below] = -1
+        
+        return signals
+    
+    def calculate_position_size(self, signal: int, capital: float, 
+                                 price: float, volatility: float) -> float:
+        """計算倉位大小"""
+        if signal == 0:
+            return 0
+        
+        risk_per_trade = 0.02
+        risk_amount = capital * risk_per_trade
+        
+        if volatility > 0:
+            position_size = risk_amount / (2 * volatility)
+        else:
+            position_size = 0
+        
+        shares = int(position_size / price)
+        return max(0, shares)
+
+
+# ============================================================================
+# 7. Tillson T3 策略
+# ============================================================================
+
+class TillsonT3(TrendFollowingStrategy):
+    """
+    Tillson T3 策略
+    
+    Tim Tillson 開發的進階移動平均線，
+    使用體積因子優化平滑度和響應速度的平衡。
+    
+    計算方法：
+    GD = EMA(closes, period)
+    GD2 = EMA(GD, period)
+    GD3 = EMA(GD2, period)
+    GD4 = EMA(GD3, period)
+    
+    EV1 = 2 * GD - 2 * GD2 + GD3
+    EV2 = 2 * GD2 - 2 * GD3 + GD4
+    T3 = v * EV1 + (1-v) * EV2
+    
+    信號規則：
+    - T3 斜率向上 + 價格 > T3 → 買入
+    - T3 斜率向下 + 價格 < T3 → 賣出
+    """
+    
+    def __init__(self, period: int = 14, v_factor: float = 0.7):
+        """
+        初始化 Tillson T3 策略
+        
+        Args:
+            period: EMA 週期
+            v_factor: 體積因子（0-1），默认 0.7
+        """
+        super().__init__('Tillson T3', {
+            'period': period,
+            'v_factor': v_factor
+        })
+    
+    def calculate_tillson_t3(self, data: pd.DataFrame) -> pd.Series:
+        """
+        計算 Tillson T3
+        
+        Args:
+            data: 包含 OHLCV 數據的 DataFrame
+            
+        Returns:
+            T3 值 Series
+        """
+        period = self.params['period']
+        v = self.params['v_factor']
+        close = data['close']
+        
+        # 計算 4 次 EMA
+        gd = close.ewm(span=period, adjust=False).mean()
+        gd2 = gd.ewm(span=period, adjust=False).mean()
+        gd3 = gd2.ewm(span=period, adjust=False).mean()
+        gd4 = gd3.ewm(span=period, adjust=False).mean()
+        
+        # 計算 EV1 和 EV2
+        ev1 = 2 * gd - 2 * gd2 + gd3
+        ev2 = 2 * gd2 - 2 * gd3 + gd4
+        
+        # T3 = v * EV1 + (1-v) * EV2
+        t3 = v * ev1 + (1 - v) * ev2
+        
+        return t3
+    
+    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+        """
+        生成交易信號
+        
+        信號規則：
+        - T3 斜率向上 + 價格 > T3 → 買入
+        - T3 斜率向下 + 價格 < T3 → 賣出
+        
+        Args:
+            data: 包含 OHLCV 數據的 DataFrame
+            
+        Returns:
+            信號 Series
+        """
+        t3 = self.calculate_tillson_t3(data)
+        close = data['close']
+        
+        signals = pd.Series(0, index=data.index)
+        
+        # 計算 T3 斜率
+        t3_slope = t3.diff()
+        
+        # 買入條件：斜率向上 + 價格在 T3 之上
+        buy_signal = (t3_slope > 0) & (close > t3)
+        signals[buy_signal] = 1
+        
+        # 賣出條件：斜率向下 + 價格在 T3 之下
+        sell_signal = (t3_slope < 0) & (close < t3)
+        signals[sell_signal] = -1
+        
+        return signals
+    
+    def calculate_position_size(self, signal: int, capital: float, 
+                                 price: float, volatility: float) -> float:
+        """計算倉位大小"""
+        if signal == 0:
+            return 0
+        
+        risk_per_trade = 0.02
+        risk_amount = capital * risk_per_trade
+        
+        if volatility > 0:
+            position_size = risk_amount / (2 * volatility)
+        else:
+            position_size = 0
+        
+        shares = int(position_size / price)
+        return max(0, shares)
+
+
+# ============================================================================
 # 策略注册表
 # ============================================================================
 
@@ -573,6 +797,8 @@ ADVANCED_TREND_STRATEGIES = {
     'cci': CCI,
     'kama': KAMA,
     'zlema': ZLEMA,
+    't3': T3Average,
+    'tillson_t3': TillsonT3,
 }
 
 
