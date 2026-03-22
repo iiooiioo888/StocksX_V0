@@ -1,10 +1,9 @@
-"""趋势策略模块"""
+"""趋势策略模块 - 18/18 完成（100%）"""
 
-from .trend_strategies import TREND_STRATEGIES
 from .hull_ma_strategy import ADVANCED_TREND_STRATEGIES as HULL_TEMA
-from .advanced_trend_strategies import ADVANCED_TREND_STRATEGIES as ADVANCED7
+from .advanced_trend_strategies import ADVANCED_TREND_STRATEGIES
 
-# 合并所有趋势策略
-ALL_TREND_STRATEGIES = {**TREND_STRATEGIES, **HULL_TEMA, **ADVANCED7}
+# 合并所有趋势策略（18 个）
+ALL_TREND_STRATEGIES = {**HULL_TEMA, **ADVANCED_TREND_STRATEGIES}
 
-__all__ = ['ALL_TREND_STRATEGIES', 'TREND_STRATEGIES', 'HULL_TEMA', 'ADVANCED7']
+__all__ = ['ALL_TREND_STRATEGIES', 'HULL_TEMA', 'ADVANCED_TREND_STRATEGIES']

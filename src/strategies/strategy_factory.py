@@ -58,23 +58,25 @@ class StrategyFactory:
 # 導入所有策略模塊
 def load_all_strategies():
     """加載所有策略"""
-    from .trend.trend_strategies import TREND_STRATEGIES
-    from .oscillator.oscillator_strategies import OSCILLATOR_STRATEGIES
-    from .breakout.breakout_strategies import BREAKOUT_STRATEGIES
-    from .ai_ml.ai_strategies import AI_ML_STRATEGIES
-    from .risk_management.risk_strategies import RISK_STRATEGIES
-    from .microstructure.micro_strategies import MICRO_STRATEGIES
-    from .macro.macro_strategies import MACRO_STRATEGIES
-    from .statistical.stat_strategies import STAT_STRATEGIES
-    from .pattern.pattern_strategies import PATTERN_STRATEGIES
-    from .execution.execution_strategies import EXECUTION_STRATEGIES
+    from .trend import ALL_TREND_STRATEGIES
+    from .oscillator import ALL_OSCILLATOR_STRATEGIES
+    from .breakout import ALL_BREAKOUT_STRATEGIES
+    from .ai_ml import ALL_AI_ML_STRATEGIES
+    from .risk_management import ALL_RISK_STRATEGIES
+    from .microstructure import ALL_MICRO_STRATEGIES
+    from .macro import ALL_MACRO_STRATEGIES
+    from .statistical import ALL_STAT_STRATEGIES
+    from .pattern import ALL_PATTERN_STRATEGIES
+    from .execution import ALL_EXECUTION_STRATEGIES
     
     # 註冊所有策略
-    for name, cls in {**TREND_STRATEGIES, **OSCILLATOR_STRATEGIES, 
-                      **BREAKOUT_STRATEGIES, **AI_ML_STRATEGIES,
-                      **RISK_STRATEGIES, **MICRO_STRATEGIES,
-                      **MACRO_STRATEGIES, **STAT_STRATEGIES,
-                      **PATTERN_STRATEGIES, **EXECUTION_STRATEGIES}.items():
+    all_strategies = {**ALL_TREND_STRATEGIES, **ALL_OSCILLATOR_STRATEGIES, 
+                      **ALL_BREAKOUT_STRATEGIES, **ALL_AI_ML_STRATEGIES,
+                      **ALL_RISK_STRATEGIES, **ALL_MICRO_STRATEGIES,
+                      **ALL_MACRO_STRATEGIES, **ALL_STAT_STRATEGIES,
+                      **ALL_PATTERN_STRATEGIES, **ALL_EXECUTION_STRATEGIES}
+    
+    for name, cls in all_strategies.items():
         StrategyFactory.register(name, cls)
 
 
