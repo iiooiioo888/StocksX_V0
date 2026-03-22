@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StocksX - 130 策略量化系統</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .app { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* Header */
+        .header {
+            background: rgba(255,255,255,0.95);
+            padding: 20px 30px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            font-size: 32px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
+        }
+        .header p { color: #666; font-size: 14px; }
+        
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.95);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-5px); }
+        .stat-value {
+            font-size: 42px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-label { color: #666; margin-top: 5px; font-size: 14px; }
+        
+        /* Content Cards */
+        .card {
+            background: rgba(255,255,255,0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        /* Strategy Table */
+        .table-container { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover { background-color: #f8f9fa; }
+        
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-a-plus { background: #d4edda; color: #155724; }
+        .badge-a { background: #d4edda; color: #155724; }
+        .badge-b-plus { background: #d1ecf1; color: #0c5460; }
+        .badge-b { background: #d1ecf1; color: #0c5460; }
+        .badge-c { background: #fff3cd; color: #856404; }
+        .badge-d { background: #f8d7da; color: #721c24; }
+        .badge-f { background: #f8d7da; color: #721c24; }
+        
+        /* Signal Indicators */
+        .signal-buy { color: #27ae60; font-weight: bold; }
+        .signal-sell { color: #e74c3c; font-weight: bold; }
+        .signal-hold { color: #95a5a6; }
+        
+        /* WebSocket Status */
+        .ws-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .ws-connected { background: #27ae60; animation: pulse 2s infinite; }
+        .ws-disconnected { background: #e74c3c; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="app">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 StocksX</h1>
+            <p>130 策略量化交易系統 v1.1.0 | 
+               <span class="ws-status" :class="wsConnected ? 'ws-connected' : 'ws-disconnected'"></span>
+               WebSocket: {{ wsConnected ? '已連接' : '未連接' }}
+            </p>
+        </div>
+        
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">130</div>
+                <div class="stat-label">策略數量</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">100%</div>
+                <div class="stat-label">驗證通過</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ topScore }}</div>
+                <div class="stat-label">最高評分</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ signalsToday }}</div>
+                <div class="stat-label">今日信號</div>
+            </div>
+        </div>
+        
+        <!-- Real-time Signals -->
+        <div class="card">
+            <h2>📡 實時信號</h2>
+            <div class="table-container">
+                <table v-if="recentSignals.length > 0">
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>策略</th>
+                            <th>信號</th>
+                            <th>價格</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="signal in recentSignals" :key="signal.id">
+                            <td>{{ formatTime(signal.timestamp) }}</td>
+                            <td>{{ signal.strategy }}</td>
+                            <td :class="getSignalClass(signal.signal)">{{ signal.signal }}</td>
+                            <td>${{ signal.price.toFixed(2) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div v-else class="loading">等待實時信號...</div>
+            </div>
+        </div>
+        
+        <!-- Top Strategies -->
+        <div class="card">
+            <h2>🏆 Top 10 策略</h2>
+            <div class="table-container">
+                <table v-if="topStrategies.length > 0">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>策略名</th>
+                            <th>評分</th>
+                            <th>等級</th>
+                            <th>夏普比率</th>
+                            <th>總回報</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(strategy, index) in topStrategies" :key="strategy.id">
+                            <td><strong>#{{ index + 1 }}</strong></td>
+                            <td>{{ strategy.name }}</td>
+                            <td>{{ strategy.score.toFixed(1) }}</td>
+                            <td><span class="badge" :class="'badge-' + strategy.grade.toLowerCase()">{{ strategy.grade }}</span></td>
+                            <td>{{ strategy.sharpe_ratio?.toFixed(2) || 'N/A' }}</td>
+                            <td :class="strategy.total_return >= 0 ? 'signal-buy' : 'signal-sell'">{{ (strategy.total_return * 100).toFixed(2) }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div v-else class="loading">
+                    <div class="spinner"></div>
+                    加載中...
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            StocksX v1.1.0 | 前後端分離架構 | API: http://localhost:8000/docs
+        </div>
+    </div>
+    
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        
+        createApp({
+            setup() {
+                const wsConnected = ref(false);
+                const recentSignals = ref([]);
+                const topStrategies = ref([]);
+                const signalsToday = ref(0);
+                const topScore = ref(0);
+                
+                // WebSocket 連接
+                const connectWebSocket = () => {
+                    const ws = new WebSocket('ws://localhost:8000/ws/signals');
+                    
+                    ws.onopen = () => {
+                        wsConnected.value = true;
+                        console.log('✅ WebSocket 已連接');
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'signals') {
+                            data.data.forEach(signal => {
+                                recentSignals.value.unshift({
+                                    id: Date.now() + Math.random(),
+                                    ...signal
+                                });
+                            });
+                            signalsToday.value += data.count;
+                            
+                            // 只保留最近 20 條
+                            if (recentSignals.value.length > 20) {
+                                recentSignals.value = recentSignals.value.slice(0, 20);
+                            }
+                        }
+                    };
+                    
+                    ws.onclose = () => {
+                        wsConnected.value = false;
+                        console.log('❌ WebSocket 已斷開');
+                        setTimeout(connectWebSocket, 3000);
+                    };
+                };
+                
+                // 獲取策略評分
+                const fetchScores = async () => {
+                    try {
+                        const response = await fetch('http://localhost:8000/api/scores/ranking?top_n=10');
+                        const data = await response.json();
+                        topStrategies.value = data;
+                        if (data.length > 0) {
+                            topScore.value = data[0].score.toFixed(1);
+                        }
+                    } catch (error) {
+                        console.error('獲取評分失敗:', error);
+                    }
+                };
+                
+                const formatTime = (timestamp) => {
+                    return new Date(timestamp).toLocaleTimeString('zh-TW');
+                };
+                
+                const getSignalClass = (signal) => {
+                    if (signal === 'BUY') return 'signal-buy';
+                    if (signal === 'SELL') return 'signal-sell';
+                    return 'signal-hold';
+                };
+                
+                onMounted(() => {
+                    connectWebSocket();
+                    fetchScores();
+                    
+                    // 每 30 秒刷新評分
+                    setInterval(fetchScores, 30000);
+                });
+                
+                return {
+                    wsConnected,
+                    recentSignals,
+                    topStrategies,
+                    signalsToday,
+                    topScore,
+                    formatTime,
+                    getSignalClass
+                };
+            }
+        }).use(Vue).mount('#app');
+    </script>
+    <script src="https://unpkg.com/vue@3.4.0/dist/vue.global.js"></script>
+</body>
+</html>

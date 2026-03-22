@@ -1,0 +1,31 @@
+# StocksX API 後端依賴
+# 安裝：pip install -r requirements.txt
+
+# Web 框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# 數據庫
+sqlalchemy==2.0.25
+
+# 數據處理
+pandas==2.1.4
+numpy==1.26.3
+
+# WebSocket
+websockets==12.0
+
+# 認證
+pyjwt==2.8.0
+python-jose[cryptography]==3.3.0
+
+# 驗證
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# CORS
+python-multipart==0.0.6
+
+# 可選：生產環境
+# gunicorn==21.2.0
+# redis==5.0.1

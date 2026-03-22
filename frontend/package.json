@@ -1,0 +1,23 @@
+{
+  "name": "stocksx-frontend",
+  "version": "1.1.0",
+  "description": "StocksX 130 策略量化交易系統前端",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.0",
+    "pinia": "^2.1.0",
+    "axios": "^1.6.0",
+    "echarts": "^5.4.0",
+    "element-plus": "^2.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}
