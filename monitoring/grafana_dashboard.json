@@ -1,0 +1,203 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "stocksx-main",
+    "title": "StocksX 交易監控儀表板",
+    "tags": ["stocksx", "trading"],
+    "timezone": "Asia/Shanghai",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "當日盈虧",
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "stocksx_pnl_daily",
+            "legendFormat": "PnL"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "USD",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 0},
+                {"color": "green", "value": 500}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "總交易數",
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "stocksx_trades_total",
+            "legendFormat": "Trades"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "WebSocket 狀態",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "stocksx_websocket_status",
+            "legendFormat": "Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "options": {"0": {"text": "斷線"}, "1": {"text": "連接"}}}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "風險利用率",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "stocksx_risk_utilization",
+            "legendFormat": "Utilization"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 60},
+                {"color": "red", "value": 80}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "type": "timeseries",
+        "title": "每日盈虧趨勢",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "stocksx_pnl_daily",
+            "legendFormat": "Daily PnL"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "type": "timeseries",
+        "title": "策略夏普比率",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "stocksx_strategy_sharpe",
+            "legendFormat": "{{strategy}}"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "type": "table",
+        "title": "策略表現",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "stocksx_strategy_score",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true, "Value #A": false},
+              "renameByName": {
+                "strategy": "策略",
+                "grade": "等級",
+                "Value": "評分"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "type": "gauge",
+        "title": "系統運行時間",
+        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "stocksx_system_uptime",
+            "legendFormat": "Uptime"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 9,
+        "type": "gauge",
+        "title": "風險暴露",
+        "gridPos": {"h": 6, "w": 8, "x": 8, "y": 24},
+        "targets": [
+          {
+            "expr": "stocksx_risk_exposure",
+            "legendFormat": "Exposure"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "USD"
+          }
+        }
+      },
+      {
+        "id": 10,
+        "type": "gauge",
+        "title": "活躍信號",
+        "gridPos": {"h": 6, "w": 8, "x": 16, "y": 24},
+        "targets": [
+          {
+            "expr": "stocksx_signals_active",
+            "legendFormat": "Active"
+          }
+        ]
+      }
+    ]
+  }
+}

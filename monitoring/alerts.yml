@@ -1,0 +1,64 @@
+# StocksX 告警規則
+
+groups:
+  - name: stocksx_alerts
+    rules:
+      # 嚴重虧損告警
+      - alert: HighDailyLoss
+        expr: stocksx_pnl_daily < -1000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "嚴重每日虧損"
+          description: "當日虧損超過 $1000 (當前：${{ $value }})"
+      
+      # 策略回撤過大
+      - alert: HighDrawdown
+        expr: stocksx_strategy_drawdown > 15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "策略回撤過大"
+          description: "策略 {{ $labels.strategy }} 回撤超過 15% (當前：{{ $value }}%)"
+      
+      # WebSocket 斷線
+      - alert: WebSocketDisconnected
+        expr: stocksx_websocket_status == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket 連接斷開"
+          description: "交易信號 WebSocket 已斷開超過 2 分鐘"
+      
+      # 夏普比率過低
+      - alert: LowSharpeRatio
+        expr: stocksx_strategy_sharpe < 0.5
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "策略夏普比率過低"
+          description: "策略 {{ $labels.strategy }} 夏普比率低於 0.5 (當前：{{ $value }})"
+      
+      # 風險利用率過高
+      - alert: HighRiskUtilization
+        expr: stocksx_risk_utilization > 80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "風險利用率過高"
+          description: "風險利用率超過 80% (當前：{{ $value }}%)"
+      
+      # 系統離線
+      - alert: SystemDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "系統離線"
+          description: "{{ $labels.job }} 已離線超過 5 分鐘"

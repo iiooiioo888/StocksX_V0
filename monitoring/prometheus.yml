@@ -1,36 +1,34 @@
-# ════════════════════════════════════════════════════════════
-# Prometheus 配置 — StocksX 監控
-# ════════════════════════════════════════════════════════════
+# Prometheus 配置
+# 用於抓取 StocksX 指標
 
 global:
-  scrape_interval: 15s
+  scrape_interval: 15s  # 每 15 秒抓取一次
   evaluation_interval: 15s
 
 scrape_configs:
-  # StocksX 主應用
-  - job_name: "stocksx-app"
-    metrics_path: "/metrics"
+  # StocksX 指標
+  - job_name: 'stocksx'
     static_configs:
-      - targets: ["app:8501"]
-        labels:
-          service: "app"
+      - targets: ['localhost:8001']
+    metrics_path: '/metrics'
+    
+  # 系統指標
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+    
+  # 數據庫指標（如果使用了 PostgreSQL）
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['localhost:9187']
 
-  # StocksX WebSocket 服務
-  - job_name: "stocksx-websocket"
-    metrics_path: "/metrics"
-    static_configs:
-      - targets: ["websocket:8001"]
-        labels:
-          service: "websocket"
+# 告警規則
+rule_files:
+  - "alerts.yml"
 
-  # Redis 監控
-  - job_name: "redis"
-    static_configs:
-      - targets: ["redis:6379"]
-        labels:
-          service: "redis"
-
-  # Prometheus 自監控
-  - job_name: "prometheus"
-    static_configs:
-      - targets: ["localhost:9090"]
+# 告警管理器
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - localhost:9093

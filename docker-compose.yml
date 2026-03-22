@@ -1,164 +1,104 @@
+version: '3.8'
+
 services:
-  # ════════════════════════════════════════════════════════════
-  # 主應用 - Streamlit
-  # ════════════════════════════════════════════════════════════
-  app:
+  # StocksX API
+  stocksx-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stocksx-app
-    restart: unless-stopped
     ports:
-      - "${APP_PORT:-8501}:8501"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=sqlite:///app/data/stocksx.db
-      - TZ=${TZ:-Asia/Shanghai}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    env_file:
-      - .env
+      - "8000:8000"
     volumes:
-      - app_data:/app/data
-      - app_logs:/app/logs
-    depends_on:
-      redis:
-        condition: service_healthy
+      - ./data:/app/data
+    environment:
+      - PAPER_TRADING=true
+    restart: unless-stopped
     networks:
-      - stocksx-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - stocksx-net
 
-  # ════════════════════════════════════════════════════════════
-  # WebSocket 服務
-  # ════════════════════════════════════════════════════════════
-  websocket:
+  # 交易引擎
+  trading-engine:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stocksx-websocket
-    restart: unless-stopped
-    command: python -m src.websocket_server
-    ports:
-      - "${WS_PORT:-8001}:8001"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - TZ=${TZ:-Asia/Shanghai}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8501,http://localhost:3000}
-    env_file:
-      - .env
+    command: python3 trading/trading_engine.py
     depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - stocksx-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ════════════════════════════════════════════════════════════
-  # Redis 緩存
-  # ════════════════════════════════════════════════════════════
-  redis:
-    image: redis:7-alpine
-    container_name: stocksx-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: >
-      redis-server
-      --appendonly yes
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-    networks:
-      - stocksx-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # ════════════════════════════════════════════════════════════
-  # Celery Worker（可選）
-  # ════════════════════════════════════════════════════════════
-  celery-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: stocksx-celery
-    restart: unless-stopped
-    command: celery -A src.tasks worker --loglevel=info --concurrency=2
+      - stocksx-api
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - TZ=${TZ:-Asia/Shanghai}
-    env_file:
-      - .env
-    depends_on:
-      redis:
-        condition: service_healthy
+      - PAPER_TRADING=true
+    restart: unless-stopped
     networks:
-      - stocksx-network
-    volumes:
-      - app_logs:/app/logs
+      - stocksx-net
 
-  # ════════════════════════════════════════════════════════════
-  # 監控 - Prometheus（可選）
-  # ════════════════════════════════════════════════════════════
+  # Prometheus
   prometheus:
     image: prom/prometheus:latest
-    container_name: stocksx-prometheus
-    restart: unless-stopped
-    profiles:
-      - monitoring
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
     networks:
-      - stocksx-network
+      - stocksx-net
 
-  # ════════════════════════════════════════════════════════════
-  # 監控 - Grafana（可選）
-  # ════════════════════════════════════════════════════════════
+  # Grafana
   grafana:
     image: grafana/grafana:latest
-    container_name: stocksx-grafana
-    restart: unless-stopped
-    profiles:
-      - monitoring
     ports:
       - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
-      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana_dashboard.json:/etc/grafana/provisioning/dashboards/stocksx.json
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    networks:
+      - stocksx-net
     depends_on:
       - prometheus
-    networks:
-      - stocksx-network
 
-networks:
-  stocksx-network:
-    driver: bridge
+  # Alertmanager
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    restart: unless-stopped
+    networks:
+      - stocksx-net
+
+  # Node Exporter (系統監控)
+  node-exporter:
+    image: prom/node-exporter:latest
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points="^/(sys|proc|dev|host|etc)($$|/)"'
+    restart: unless-stopped
+    networks:
+      - stocksx-net
 
 volumes:
-  app_data:
-  app_logs:
-  redis_data:
   prometheus_data:
   grafana_data:
+  alertmanager_data:
+
+networks:
+  stocksx-net:
+    driver: bridge

@@ -1,0 +1,23 @@
+# 自動化交易依賴
+# 安裝：pip install -r trading/requirements.txt
+
+# 核心
+aiohttp==3.9.1
+websockets==12.0
+pyyaml==6.0.1
+
+# 券商 API（可選）
+# alpaca-py==0.23.0  # 美股
+# ccxt==4.2.0        # 加密貨幣
+# ib_insync==0.9.86  # Interactive Brokers
+
+# 技術分析
+ta-lib==0.4.28
+pandas-ta==0.3.14b
+
+# 日誌
+python-json-logger==2.0.7
+
+# 測試
+pytest==7.4.4
+pytest-asyncio==0.23.3
