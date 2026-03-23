@@ -20,7 +20,7 @@ pyjwt==2.8.0
 python-jose[cryptography]==3.3.0
 
 # 驗證
-pydantic==2.5.3
+pydantic==2.12.5
 pydantic-settings==2.1.0
 
 # CORS
