@@ -44,8 +44,14 @@ class SeasonalStrategy(BaseStrategy):
         """生成交易信號"""
         signals = pd.Series(0, index=data.index)
         
-        # 獲取月份
-        month = data.index.month
+        # 獲取月份（支援 DatetimeIndex 和 RangeIndex）
+        if hasattr(data.index, 'month'):
+            month = data.index.month
+        elif 'date' in data.columns:
+            month = pd.to_datetime(data['date']).dt.month
+        else:
+            # 無日期時回退到月度模式模擬
+            month = pd.Series([(i % 12) + 1 for i in range(len(data))], index=data.index)
         
         # 季節性模式（簡化）
         # 1 月、4 月、11 月、12 月通常表現較好
