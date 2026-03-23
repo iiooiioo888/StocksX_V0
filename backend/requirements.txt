@@ -21,7 +21,7 @@ python-jose[cryptography]==3.3.0
 
 # 驗證
 pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic-settings==2.13.1
 
 # CORS
 python-multipart==0.0.6
