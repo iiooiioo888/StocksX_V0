@@ -3,10 +3,15 @@
 使用 GitHub API 批量關閉 Issues
 """
 
+import os
 import requests
 import time
 
-GITHUB_TOKEN = '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'
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+if not GITHUB_TOKEN:
+    print("ERROR: GITHUB_TOKEN environment variable is not set.")
+    print("Usage: GITHUB_TOKEN=ghp_xxx python scripts/github_close_issues.py")
+    exit(1)
 REPO = 'iiooiioo888/StocksX_V0'
 
 HEADERS = {
@@ -89,7 +94,7 @@ def main():
     print("GitHub Issues 批量關閉工具")
     print("=" * 60)
     print(f"Repo: {REPO}")
-    print(f"Token: {GITHUB_TOKEN[:10]}...{GITHUB_TOKEN[-5:]}")
+    print(f"Token: {GITHUB_TOKEN[:10]}...")
     print("=" * 60)
     
     # 獲取開放的 Issues

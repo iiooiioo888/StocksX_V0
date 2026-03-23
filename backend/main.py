@@ -19,6 +19,8 @@ from datetime import datetime
 import sys
 from pathlib import Path
 
+import os
+
 # 添加父目錄到路徑
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
@@ -33,15 +35,16 @@ from api.scores import router as scores_router
 app = FastAPI(
     title="StocksX API",
     description="130 策略量化交易系統 API",
-    version="1.1.0",
+    version="8.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
 # CORS 配置
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8501,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生產環境應限制域名
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,7 +79,7 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-            except:
+            except Exception:
                 pass
     
     async def send_personal(self, message: dict, websocket: WebSocket):
@@ -140,7 +143,18 @@ async def startup_event():
 # WebSocket 端點
 @app.websocket("/ws/signals")
 async def websocket_signals(websocket: WebSocket):
-    """實時信號推送 WebSocket"""
+    """實時信號推送 WebSocket（需認證）"""
+    # 從 query param 或 header 獲取 token
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    if not token or not _verify_ws_token(token):
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
     await manager.connect(websocket)
     try:
         while True:
@@ -160,7 +174,17 @@ async def websocket_signals(websocket: WebSocket):
 
 @app.websocket("/ws/quotes")
 async def websocket_quotes(websocket: WebSocket):
-    """實時行情推送 WebSocket"""
+    """實時行情推送 WebSocket（需認證）"""
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    if not token or not _verify_ws_token(token):
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
     await manager.connect(websocket)
     try:
         while True:
@@ -169,6 +193,15 @@ async def websocket_quotes(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+def _verify_ws_token(token: str) -> bool:
+    """驗證 WebSocket 連接 token"""
+    import hashlib
+    expected_token = os.getenv("WS_AUTH_TOKEN", "")
+    if not expected_token:
+        # 未配置 WS_AUTH_TOKEN 時，開發模式允許所有連接
+        return os.getenv("ENVIRONMENT", "development") == "development"
+    return hashlib.compare_digest(token, expected_token)
+
 # 健康檢查
 @app.get("/api/health")
 async def health_check():
@@ -176,7 +209,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "1.1.0",
+        "version": "8.0.0",
         "strategies": 130
     }
 
@@ -248,7 +281,7 @@ async def root():
     <body>
         <div class="container">
             <h1>🚀 StocksX</h1>
-            <div class="subtitle">130 策略量化交易系統 v1.1.0</div>
+            <div class="subtitle">130 策略量化交易系統 v8.0.0</div>
             
             <div class="stats">
                 <div class="stat">
@@ -260,7 +293,7 @@ async def root():
                     <div class="stat-label">驗證通過</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-value">v1.1.0</div>
+                    <div class="stat-value">v8.0.0</div>
                     <div class="stat-label">版本</div>
                 </div>
             </div>

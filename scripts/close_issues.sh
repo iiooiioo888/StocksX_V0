@@ -1,7 +1,12 @@
 #!/bin/bash
 # 批量關閉 GitHub Issues
+# Usage: GITHUB_TOKEN=ghp_xxx ./scripts/close_issues.sh
 
-GITHUB_TOKEN="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"
+if [ -z "$GITHUB_TOKEN" ]; then
+  echo "ERROR: GITHUB_TOKEN environment variable is not set."
+  echo "Usage: GITHUB_TOKEN=ghp_xxx ./scripts/close_issues.sh"
+  exit 1
+fi
 REPO="iiooiioo888/StocksX_V0"
 
 echo "============================================================"

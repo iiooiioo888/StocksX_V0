@@ -10,8 +10,11 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+    depends_on:
+      - redis
     environment:
       - PAPER_TRADING=true
+      - REDIS_URL=redis://redis:6379/0
     restart: unless-stopped
     networks:
       - stocksx-net
@@ -24,8 +27,10 @@ services:
     command: python3 trading/trading_engine.py
     depends_on:
       - stocksx-api
+      - redis
     environment:
       - PAPER_TRADING=true
+      - REDIS_URL=redis://redis:6379/0
     restart: unless-stopped
     networks:
       - stocksx-net
@@ -57,13 +62,40 @@ services:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana_dashboard.json:/etc/grafana/provisioning/dashboards/stocksx.json
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
       - GF_USERS_ALLOW_SIGN_UP=false
     restart: unless-stopped
     networks:
       - stocksx-net
     depends_on:
       - prometheus
+
+  # Redis（Celery 任務隊列）
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - stocksx-net
+
+  # Streamlit 主應用
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    depends_on:
+      - stocksx-api
+    environment:
+      - API_URL=http://stocksx-api:8000
+    restart: unless-stopped
+    networks:
+      - stocksx-net
 
   # Alertmanager
   alertmanager:
@@ -98,6 +130,7 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  redis_data:
 
 networks:
   stocksx-net:

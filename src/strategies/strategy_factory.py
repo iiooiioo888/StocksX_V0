@@ -46,7 +46,7 @@ class StrategyFactory:
                 'params': instance.get_params(),
                 'class': strategy_class.__name__
             }
-        except:
+        except Exception:
             return {
                 'name': name,
                 'category': 'unknown',

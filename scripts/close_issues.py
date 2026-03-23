@@ -7,7 +7,11 @@ import requests
 import time
 import os
 
-GITHUB_TOKEN = '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'
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+if not GITHUB_TOKEN:
+    print("ERROR: GITHUB_TOKEN environment variable is not set.")
+    print("Usage: GITHUB_TOKEN=ghp_xxx python scripts/close_issues.py")
+    exit(1)
 REPO = 'iiooiioo888/StocksX_V0'
 
 HEADERS = {
