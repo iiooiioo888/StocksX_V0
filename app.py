@@ -69,15 +69,10 @@ def get_yahoo_trending():
     return fetch_yahoo_reference_trending()
 
 
-if "market_data_loaded" not in st.session_state:
-    st.session_state["market_data_loaded"] = True
-    market_data = get_market_data()
-    yahoo_futures = get_yahoo_futures()
-    yahoo_trending = get_yahoo_trending()
-else:
-    market_data = get_market_data()
-    yahoo_futures = get_yahoo_futures()
-    yahoo_trending = get_yahoo_trending()
+market_data = get_market_data()
+yahoo_futures = get_yahoo_futures()
+yahoo_trending = get_yahoo_trending()
+st.session_state["market_data_loaded"] = True
 
 # 已登入用戶才載入績效數據
 if user:

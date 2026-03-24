@@ -35,6 +35,8 @@ class DataService:
         self.kline_cache: dict[str, pd.DataFrame] = {}
         self.depth_cache: dict[str, dict] = {}
         self.last_update: dict[str, float] = {}
+        # 緩存最大條目數（防止無限增長）
+        self._max_cache_size = 200
 
     def _get_exchange(self, symbol: str):
         """根據 symbol 類型選擇正確的交易所實例（現貨/永續）."""
@@ -70,6 +72,34 @@ class DataService:
         return self._binance_futures
 
     # ════════════════════════════════════════════════════════════
+    # 緩存管理
+    # ════════════════════════════════════════════════════════════
+
+    def _evict_stale_cache(self, cache: dict, max_age: float) -> None:
+        """驅逐過期的緩存條目，防止記憶體洩漏。"""
+        now = time.time()
+        stale_keys = [k for k, ts in self.last_update.items() if k in cache and now - ts > max_age]
+        for k in stale_keys:
+            cache.pop(k, None)
+            self.last_update.pop(k, None)
+        # 如果緩存仍然過大，移除最舊的條目
+        if len(cache) > self._max_cache_size:
+            sorted_keys = sorted(
+                [k for k in cache if k in self.last_update],
+                key=lambda k: self.last_update.get(k, 0),
+            )
+            for k in sorted_keys[: len(cache) - self._max_cache_size]:
+                cache.pop(k, None)
+                self.last_update.pop(k, None)
+
+    def _update_cache(self, cache: dict, key: str, value) -> None:
+        """更新緩存並在必要時驅逐過期條目。"""
+        cache[key] = value
+        self.last_update[key] = time.time()
+        if len(cache) > self._max_cache_size * 1.2:
+            self._evict_stale_cache(cache, max_age=300)
+
+    # ════════════════════════════════════════════════════════════
     # 價格數據
     # ════════════════════════════════════════════════════════════
 
@@ -100,8 +130,7 @@ class DataService:
                 }
 
                 # 更新緩存
-                self.price_cache[symbol] = data
-                self.last_update[symbol] = time.time()
+                self._update_cache(self.price_cache, symbol, data)
 
                 return data
 
@@ -145,8 +174,7 @@ class DataService:
                 df["symbol"] = symbol
 
                 # 更新緩存
-                self.kline_cache[cache_key] = df
-                self.last_update[cache_key] = time.time()
+                self._update_cache(self.kline_cache, cache_key, df)
 
                 return df
 
@@ -182,8 +210,7 @@ class DataService:
                 }
 
                 # 更新緩存
-                self.depth_cache[symbol] = data
-                self.last_update[symbol] = time.time()
+                self._update_cache(self.depth_cache, symbol, data)
 
                 return data
 

@@ -1,13 +1,15 @@
 """
 StocksX 簡易記憶體快取
-取代 functools.lru_cache，提供 TTL 支援。
+取代 functools.lru_cache，提供 TTL 支援與自動清理。
 """
 
 from __future__ import annotations
 
 import functools
 import hashlib
+import threading
 import time
+from collections import OrderedDict
 from typing import Any, TypeVar
 from collections.abc import Callable
 
@@ -16,10 +18,135 @@ F = TypeVar("F", bound=Callable[..., Any])
 # 全域快取存儲
 _cache: dict[str, tuple[float, Any]] = {}
 
+# 快取最大條目數（防止無限增長）
+_MAX_CACHE_SIZE = 1000
+
+
+# ─── 快取容量管理 ───
+
+
+def _evict_expired() -> int:
+    """移除所有過期的快取條目。"""
+    now = time.time()
+    expired = [k for k, (ts, _) in _cache.items() if now - ts >= 0]
+    for k in expired:
+        del _cache[k]
+    return len(expired)
+
+
+def _evict_oldest(count: int) -> int:
+    """移除最舊的 count 個條目。"""
+    if count <= 0:
+        return 0
+    sorted_items = sorted(_cache.items(), key=lambda x: x[1][0])
+    for k, _ in sorted_items[:count]:
+        del _cache[k]
+    return min(count, len(sorted_items))
+
+
+def _ensure_capacity(max_size: int = _MAX_CACHE_SIZE) -> None:
+    """如果快取超過容量限制，先清理過期再清理最舊的。"""
+    if len(_cache) <= max_size:
+        return
+    _evict_expired()
+    if len(_cache) > max_size:
+        _evict_oldest(len(_cache) - max_size)
+
+
+# ─── LRU / TTL Cache 類別 ───
+
+
+class LRUCache:
+    """線程安全的 LRU 快取。"""
+
+    def __init__(self, maxsize: int = 128) -> None:
+        self._cache: OrderedDict[str, Any] = OrderedDict()
+        self._maxsize = maxsize
+        self._lock = threading.Lock()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            return default
+
+    def set(self, key: str, value: Any) -> None:
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            self._cache[key] = value
+            if len(self._cache) > self._maxsize:
+                self._cache.popitem(last=False)
+
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._cache.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+
+class TTLCache:
+    """線程安全的 TTL 快取（自動過期）。"""
+
+    def __init__(self, ttl: float = 300, maxsize: int = 128) -> None:
+        self._cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._ttl = ttl
+        self._maxsize = maxsize
+        self._lock = threading.Lock()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        now = time.time()
+        with self._lock:
+            if key in self._cache:
+                ts, value = self._cache[key]
+                if now - ts < self._ttl:
+                    self._cache.move_to_end(key)
+                    return value
+                else:
+                    del self._cache[key]
+            return default
+
+    def set(self, key: str, value: Any) -> None:
+        now = time.time()
+        with self._lock:
+            self._cache[key] = (now, value)
+            self._cache.move_to_end(key)
+            if len(self._cache) > self._maxsize:
+                self._cache.popitem(last=False)
+
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._cache.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+    def cleanup(self) -> int:
+        """移除所有過期條目。"""
+        now = time.time()
+        with self._lock:
+            expired = [k for k, (ts, _) in self._cache.items() if now - ts >= self._ttl]
+            for k in expired:
+                del self._cache[k]
+            return len(expired)
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+
+# ─── 函式快取裝飾器 ───
+
 
 def cached(ttl: float = 300, key_prefix: str = ""):
     """
-    記憶體快取裝飾器，支援 TTL。
+    記憶體快取裝飾器，支援 TTL 與自動容量管理。
 
     Args:
         ttl: 快取存活時間（秒）
@@ -50,6 +177,9 @@ def cached(ttl: float = 300, key_prefix: str = ""):
             # 執行並快取
             result = func(*args, **kwargs)
             _cache[cache_key] = (now, result)
+            # 定期清理
+            if len(_cache) > _MAX_CACHE_SIZE:
+                _ensure_capacity()
             return result
 
         return wrapper
@@ -78,4 +208,5 @@ def cache_stats() -> dict[str, Any]:
         "total_entries": len(_cache),
         "valid_entries": valid,
         "expired_entries": len(_cache) - valid,
+        "max_capacity": _MAX_CACHE_SIZE,
     }

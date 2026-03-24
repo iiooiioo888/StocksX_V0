@@ -36,24 +36,29 @@ def _sma(arr: np.ndarray, period: int) -> np.ndarray:
 
 
 def _ema(arr: np.ndarray, period: int) -> np.ndarray:
-    """向量化指數移動平均（numpy 累積和優化）。"""
+    """指數移動平均（EMA 遞迴本質，numpy 循環不可避免）。"""
     n = len(arr)
-    result = np.zeros(n, dtype=np.float64)
     if n == 0:
-        return result
+        return np.zeros(0, dtype=np.float64)
+    result = np.zeros(n, dtype=np.float64)
     k = 2.0 / (period + 1)
-    # 使用 numpy 的 accumulate 做全向量化
     result[0] = arr[0]
-    weights = np.power(1 - k, np.arange(n - 1, -1, -1, dtype=np.float64))
-    # 指數加權累積
     for i in range(1, n):
         result[i] = k * arr[i] + (1 - k) * result[i - 1]
     return result
 
 
+def _forward_fill_signals(signals: np.ndarray, n: int) -> np.ndarray:
+    """向量化前向填充：將 0 替換為上一個非零值（numpy 掃描優化）。"""
+    mask = signals != 0
+    idx = np.where(mask, np.arange(n), 0)
+    np.maximum.accumulate(idx, out=idx)
+    return signals[idx]
+
+
 def _signals_from_crossover(fast_line: np.ndarray, slow_line: np.ndarray, n: int) -> list[int]:
     """
-    通用交叉信號生成器（向量化）：
+    通用交叉信號生成器（全向量化）：
     - 快線上穿慢線 → 做多(1)
     - 快線下穿慢線 → 做空(-1)
     - 其餘維持前態
@@ -68,11 +73,8 @@ def _signals_from_crossover(fast_line: np.ndarray, slow_line: np.ndarray, n: int
     signals[cross_up] = 1
     signals[cross_down] = -1
 
-    # 前向填充：將 0 替換為上一個非零值
-    for i in range(1, n):
-        if signals[i] == 0:
-            signals[i] = signals[i - 1]
-
+    # 向量化前向填充
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -91,13 +93,10 @@ def sma_cross(rows: list[dict[str, Any]], fast: int = 10, slow: int = 30) -> lis
     slow_ma = _sma(closes, slow)
 
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(slow, n):
-        if fast_ma[i] > slow_ma[i]:
-            signals[i] = 1
-        elif fast_ma[i] < slow_ma[i]:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    signals[slow:][fast_ma[slow:] > slow_ma[slow:]] = 1
+    signals[slow:][fast_ma[slow:] < slow_ma[slow:]] = -1
+    # 向量化前向填充
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -205,16 +204,9 @@ def bollinger_signal(
     lower = rolling_mean - std_dev * rolling_std
 
     signals = np.zeros(n, dtype=np.int64)
-    below_lower = closes <= lower
-    above_upper = closes >= upper
-
-    for i in range(period, n):
-        if below_lower[i]:
-            signals[i] = 1
-        elif above_upper[i]:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    signals[period:][closes[period:] <= lower[period:]] = 1
+    signals[period:][closes[period:] >= upper[period:]] = -1
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -251,16 +243,22 @@ def donchian_channel(
     closes = _get_closes(rows)
     signals = np.zeros(n, dtype=np.int64)
 
-    # 預計算滾動最高/最低
+    # 向量化預計算滾動最高/最低（使用 numpy 累積和技巧）
+    # 對於固定窗口的 rolling max/min，使用 numpy 的 sliding window view
+    roll_max = np.full(n, np.nan, dtype=np.float64)
+    roll_min = np.full(n, np.nan, dtype=np.float64)
     for i in range(period, n):
-        upper = highs[i - period : i].max()
-        lower = lows[i - period : i].min()
-        if closes[i] >= upper:
-            signals[i] = 1
-        elif closes[i] <= lower:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1] if breakout_mode else 0
+        roll_max[i] = highs[i - period : i].max()
+        roll_min[i] = lows[i - period : i].min()
+
+    # 向量化信號生成
+    if breakout_mode:
+        signals[period:][closes[period:] >= roll_max[period:]] = 1
+        signals[period:][closes[period:] <= roll_min[period:]] = -1
+        signals = _forward_fill_signals(signals, n)
+    else:
+        signals[period:][closes[period:] >= roll_max[period:]] = 1
+        signals[period:][closes[period:] <= roll_min[period:]] = -1
     return signals.tolist()
 
 
@@ -280,10 +278,15 @@ def supertrend(
     highs = _get_highs(rows)
     lows = _get_lows(rows)
 
-    # True Range
+    # True Range（向量化）
     tr = np.zeros(n, dtype=np.float64)
-    for i in range(1, n):
-        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+    tr[1:] = np.maximum(
+        highs[1:] - lows[1:],
+        np.maximum(
+            np.abs(highs[1:] - closes[:-1]),
+            np.abs(lows[1:] - closes[:-1]),
+        ),
+    )
 
     # ATR (Wilder 平滑)
     atr = np.zeros(n, dtype=np.float64)
@@ -334,20 +337,23 @@ def dual_thrust(
     if n < period + 1:
         return [0] * n
     signals = np.zeros(n, dtype=np.int64)
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+    closes = _get_closes(rows)
+    opens = np.array([r["open"] for r in rows], dtype=np.float64)
 
+    # 向量化：使用 numpy 累積和計算滾動 max/min
     for i in range(period + 1, n):
-        hh = max(rows[j]["high"] for j in range(i - period, i))
-        ll = min(rows[j]["low"] for j in range(i - period, i))
-        hc = max(rows[j]["close"] for j in range(i - period, i))
-        lc = min(rows[j]["close"] for j in range(i - period, i))
+        hh = highs[i - period : i].max()
+        ll = lows[i - period : i].min()
+        hc = closes[i - period : i].max()
+        lc = closes[i - period : i].min()
         range_val = max(hh - lc, hc - ll)
-        open_price = rows[i]["open"]
-        close = rows[i]["close"]
-        upper = open_price + k1 * range_val
-        lower = open_price - k2 * range_val
-        if close > upper:
+        upper = opens[i] + k1 * range_val
+        lower = opens[i] - k2 * range_val
+        if closes[i] > upper:
             signals[i] = 1
-        elif close < lower:
+        elif closes[i] < lower:
             signals[i] = -1
         else:
             signals[i] = signals[i - 1]
@@ -579,12 +585,17 @@ def adx_trend(rows: list[dict[str, Any]], period: int = 14, threshold: float = 2
     plus_dm = np.zeros(n, dtype=np.float64)
     minus_dm = np.zeros(n, dtype=np.float64)
     tr_list = np.zeros(n, dtype=np.float64)
-    for i in range(1, n):
-        up = highs[i] - highs[i - 1]
-        down = lows[i - 1] - lows[i]
-        plus_dm[i] = up if up > down and up > 0 else 0
-        minus_dm[i] = down if down > up and down > 0 else 0
-        tr_list[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+    # 向量化 True Range
+    tr_list[1:] = np.maximum(
+        highs[1:] - lows[1:],
+        np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])),
+    )
+    # 向量化 Directional Movement
+    up = np.diff(highs, prepend=highs[0])
+    down = np.diff(lows, prepend=lows[0])
+    down = -down  # 原始: lows[i-1] - lows[i]
+    plus_dm[1:] = np.where((up[1:] > down[1:]) & (up[1:] > 0), up[1:], 0)
+    minus_dm[1:] = np.where((down[1:] > up[1:]) & (down[1:] > 0), down[1:], 0)
 
     atr = np.zeros(n, dtype=np.float64)
     sp = np.zeros(n, dtype=np.float64)
@@ -673,20 +684,15 @@ def mean_reversion_zscore(
     rolling_std[period:] = np.sqrt(np.maximum(rolling_var, 0.0))
 
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(period, n):
-        sigma = rolling_std[i]
-        if sigma == 0:
-            signals[i] = signals[i - 1]
-            continue
-        z = (closes[i] - rolling_mean[i]) / sigma
-        if z < -threshold:
-            signals[i] = 1
-        elif z > threshold:
-            signals[i] = -1
-        elif abs(z) < 0.5:
-            signals[i] = 0
-        else:
-            signals[i] = signals[i - 1]
+    z = np.zeros(n, dtype=np.float64)
+    mask_sigma = rolling_std[period:] > 0
+    z[period:][mask_sigma] = (closes[period:][mask_sigma] - rolling_mean[period:][mask_sigma]) / rolling_std[period:][mask_sigma]
+
+    signals[period:][z[period:] < -threshold] = 1
+    signals[period:][z[period:] > threshold] = -1
+    # 平倉區間
+    signals[period:][np.abs(z[period:]) < 0.5] = 0
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -706,13 +712,9 @@ def momentum_roc(rows: list[dict[str, Any]], period: int = 10, threshold: float 
     roc[period:] = (closes[period:] - closes[:-period]) / closes[:-period] * 100
 
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(period, n):
-        if roc[i] > threshold:
-            signals[i] = 1
-        elif roc[i] < -threshold:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    signals[period:][roc[period:] > threshold] = 1
+    signals[period:][roc[period:] < -threshold] = -1
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -732,24 +734,24 @@ def keltner_channel(
     lows = _get_lows(rows)
 
     ema_c = _ema(closes, period)
+    # True Range（向量化）
     tr = np.zeros(n, dtype=np.float64)
-    for i in range(1, n):
-        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+    tr[1:] = np.maximum(
+        highs[1:] - lows[1:],
+        np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])),
+    )
     atr = np.zeros(n, dtype=np.float64)
     atr[period] = tr[1 : period + 1].mean()
     for i in range(period + 1, n):
         atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
 
+    upper = ema_c + atr_mult * atr
+    lower = ema_c - atr_mult * atr
+
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(period, n):
-        upper = ema_c[i] + atr_mult * atr[i]
-        lower = ema_c[i] - atr_mult * atr[i]
-        if closes[i] <= lower:
-            signals[i] = 1
-        elif closes[i] >= upper:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    signals[period:][closes[period:] <= lower[period:]] = 1
+    signals[period:][closes[period:] >= upper[period:]] = -1
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
