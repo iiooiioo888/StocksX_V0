@@ -21,8 +21,13 @@ numpy==1.26.3
 websockets==12.0
 
 # 認證
+<<<<<<< HEAD
 pyjwt==2.12.1
 python-jose[cryptography]==3.3.0
+=======
+pyjwt==2.8.0
+python-jose[cryptography]==3.5.0
+>>>>>>> origin/dependabot/pip/python-jose-cryptography--3.5.0
 
 # 驗證
 <<<<<<< HEAD
