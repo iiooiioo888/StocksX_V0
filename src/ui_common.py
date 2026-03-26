@@ -59,7 +59,7 @@ def sidebar_user_nav(user: dict | None = None):
         _c1.page_link("pages/2_₿_加密回測.py", label="₿", use_container_width=True)
         _c2.page_link("pages/2_🏛️_傳統回測.py", label="🏛️", use_container_width=True)
         _c3.page_link("pages/3_📜_歷史.py", label="📜", use_container_width=True)
-        _c4.page_link("pages/5_📡_監控.py", label="📡", use_container_width=True)
+        _c4.page_link("pages/5_📡_交易監控.py", label="📡", use_container_width=True)
         if st.sidebar.button("🚪 登出", use_container_width=True, key=f"logout_{id(user)}"):
             st.session_state.pop("user", None)
             st.switch_page("pages/1_🔐_登入.py")
