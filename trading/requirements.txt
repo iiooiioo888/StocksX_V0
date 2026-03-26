@@ -16,7 +16,7 @@ ta-lib==0.4.28
 pandas-ta==0.3.14b
 
 # 日誌
-python-json-logger==2.0.7
+python-json-logger==4.0.0
 
 # 測試
 pytest==9.0.2
