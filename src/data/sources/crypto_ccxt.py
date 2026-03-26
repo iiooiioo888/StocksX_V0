@@ -78,7 +78,6 @@ class CcxtOhlcvSource:
         since: int | None = None,
         limit: int = 500,
     ) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
         retries = 0
         while True:
             try:
@@ -92,23 +91,24 @@ class CcxtOhlcvSource:
                 logger.warning("CCXT rate limit/network error, retry in %ds: %s", wait, e)
                 time.sleep(wait)
 
-        for c in candles:
-            rows.append(
-                {
-                    "exchange": self._exchange_id,
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "timestamp": c[0],
-                    "open": c[1],
-                    "high": c[2],
-                    "low": c[3],
-                    "close": c[4],
-                    "volume": c[5],
-                    "filled": 0,
-                    "is_outlier": 0,
-                }
-            )
-        return rows
+        # 使用列表推導式代替 for 循環（更快）
+        return [
+            {
+                "exchange": self._exchange_id,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "timestamp": c[0],
+                "open": c[1],
+                "high": c[2],
+                "low": c[3],
+                "close": c[4],
+                "volume": c[5],
+                "filled": 0,
+                "is_outlier": 0,
+            }
+            for c in candles
+            if len(c) >= 6
+        ]
 
     def fetch_range(
         self,
@@ -162,16 +162,14 @@ class CcxtFundingSource:
             except Exception:
                 return []
 
-        rows: list[dict[str, Any]] = []
-        for r in rates:
-            rows.append(
-                {
-                    "exchange": self._exchange_id,
-                    "symbol": symbol,
-                    "timestamp": r.get("timestamp", 0),
-                    "funding_rate": r.get("fundingRate", 0.0),
-                    "open_interest": r.get("openInterest"),
-                    "mark_price": r.get("markPrice"),
-                }
-            )
-        return rows
+        return [
+            {
+                "exchange": self._exchange_id,
+                "symbol": symbol,
+                "timestamp": r.get("timestamp", 0),
+                "funding_rate": r.get("fundingRate", 0.0),
+                "open_interest": r.get("openInterest"),
+                "mark_price": r.get("markPrice"),
+            }
+            for r in rates
+        ]

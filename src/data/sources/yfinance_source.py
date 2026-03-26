@@ -73,9 +73,16 @@ class YfinanceOhlcvSource:
                 .dropna()
             )
 
+        # 向量化構建 rows（比 iterrows 快 10x+）
+        timestamps = (df.index.astype("int64") // 1_000_000).tolist()  # ns → ms
+        opens = df["Open"].tolist()
+        highs = df["High"].tolist()
+        lows = df["Low"].tolist()
+        closes = df["Close"].tolist()
+        volumes = df["Volume"].tolist()
+
         rows: list[dict[str, Any]] = []
-        for idx, row in df.iterrows():
-            ts = int(idx.timestamp() * 1000) if hasattr(idx, "timestamp") else 0
+        for i, ts in enumerate(timestamps):
             if ts < since or ts > until:
                 continue
             rows.append(
@@ -84,11 +91,11 @@ class YfinanceOhlcvSource:
                     "symbol": symbol,
                     "timeframe": timeframe,
                     "timestamp": ts,
-                    "open": float(row.get("Open", 0)),
-                    "high": float(row.get("High", 0)),
-                    "low": float(row.get("Low", 0)),
-                    "close": float(row.get("Close", 0)),
-                    "volume": float(row.get("Volume", 0)),
+                    "open": float(opens[i]),
+                    "high": float(highs[i]),
+                    "low": float(lows[i]),
+                    "close": float(closes[i]),
+                    "volume": float(volumes[i]),
                     "filled": 0,
                     "is_outlier": 0,
                 }

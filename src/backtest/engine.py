@@ -5,6 +5,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
+
 from src.data.crypto import CryptoDataFetcher
 
 from . import strategies
@@ -29,19 +31,19 @@ def _compute_metrics(
     until_ms: int,
     leverage: float = 1.0,
 ) -> dict[str, Any]:
+    """向量化績效指標計算（NumPy 加速）。"""
     if not equity_curve:
         return {}
-    equity = equity_curve[-1]["equity"]
+
+    equities = np.array([e["equity"] for e in equity_curve], dtype=np.float64)
+    equity = float(equities[-1])
     total_return = (equity - initial_equity) / initial_equity if initial_equity else 0
-    equities = [e["equity"] for e in equity_curve]
-    peak = equities[0]
-    max_dd = 0.0
-    for e in equities:
-        if e > peak:
-            peak = e
-        dd = (peak - e) / peak if peak else 0
-        if dd > max_dd:
-            max_dd = dd
+
+    # 向量化最大回撤
+    peak = np.maximum.accumulate(equities)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        drawdowns = np.where(peak > 0, (peak - equities) / peak, 0.0)
+    max_dd = float(np.max(drawdowns)) if len(drawdowns) > 0 else 0.0
 
     n_bars = len(equity_curve)
     period_years = (until_ms - since_ms) / (1000 * 86400 * 365.25) if since_ms < until_ms else 0
@@ -54,59 +56,74 @@ def _compute_metrics(
         except (ValueError, ZeroDivisionError):
             annual_return = 0.0
 
-    bar_returns = []
-    for j in range(1, len(equities)):
-        r = (equities[j] - equities[j - 1]) / equities[j - 1] if equities[j - 1] else 0
-        bar_returns.append(r)
-    if bar_returns:
-        mean_r = sum(bar_returns) / len(bar_returns)
-        var_r = sum((x - mean_r) ** 2 for x in bar_returns) / len(bar_returns)
-        std_r = math.sqrt(var_r) if var_r > 0 else 0
-        sharpe = (mean_r / std_r * math.sqrt(252)) if std_r else 0.0
-        # Sortino: 只考慮負報酬的標準差
-        neg_returns = [x for x in bar_returns if x < 0]
-        std_neg = math.sqrt(sum(x * x for x in neg_returns) / len(neg_returns)) if neg_returns else 0
-        sortino = (mean_r / std_neg * math.sqrt(252)) if std_neg else 0.0
-        # Calmar = 年化報酬 / 最大回撤
+    # 向量化報酬率計算
+    if len(equities) > 1:
+        prev_eq = equities[:-1]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            bar_returns = np.where(prev_eq > 0, (equities[1:] - prev_eq) / prev_eq, 0.0)
+    else:
+        bar_returns = np.array([], dtype=np.float64)
+
+    if len(bar_returns) > 0:
+        mean_r = float(np.mean(bar_returns))
+        std_r = float(np.std(bar_returns))
+        sharpe = (mean_r / std_r * math.sqrt(252)) if std_r > 0 else 0.0
+        # Sortino：只考慮負報酬
+        neg = bar_returns[bar_returns < 0]
+        std_neg = float(np.sqrt(np.mean(neg ** 2))) if len(neg) > 0 else 0.0
+        sortino = (mean_r / std_neg * math.sqrt(252)) if std_neg > 0 else 0.0
         calmar = (annual_return / max_dd) if max_dd > 0 else 0.0
     else:
         sharpe = sortino = calmar = 0.0
 
-    win_trades = [t for t in trades if t.get("pnl_pct", 0) > 0]
-    loss_trades = [t for t in trades if t.get("pnl_pct", 0) < 0]
+    # 交易統計
+    pnl_arr = np.array([t.get("pnl_pct", 0) for t in trades], dtype=np.float64) if trades else np.array([])
+    profit_arr = np.array([t.get("profit", 0) for t in trades], dtype=np.float64) if trades else np.array([])
 
-    # Profit Factor = 總盈利 / 總虧損
-    gross_profit = sum(t.get("profit", 0) for t in win_trades)
-    gross_loss = abs(sum(t.get("profit", 0) for t in loss_trades))
+    win_mask = pnl_arr > 0
+    loss_mask = pnl_arr < 0
+    win_trades_count = int(np.sum(win_mask))
+    loss_trades_count = int(np.sum(loss_mask))
+
+    gross_profit = float(np.sum(profit_arr[win_mask])) if win_trades_count > 0 else 0.0
+    gross_loss = abs(float(np.sum(profit_arr[loss_mask]))) if loss_trades_count > 0 else 0.0
     profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else 0.0
 
-    # Omega Ratio = Σ(正報酬) / Σ(負報酬的絕對值)
-    pos_returns = [r for r in bar_returns if r > 0] if bar_returns else []
-    neg_returns_abs = [abs(r) for r in bar_returns if r < 0] if bar_returns else []
-    omega = round(sum(pos_returns) / sum(neg_returns_abs), 2) if neg_returns_abs and sum(neg_returns_abs) > 0 else 0.0
+    # Omega Ratio
+    if len(bar_returns) > 0:
+        pos_sum = float(np.sum(bar_returns[bar_returns > 0]))
+        neg_sum = float(np.sum(np.abs(bar_returns[bar_returns < 0])))
+        omega = round(pos_sum / neg_sum, 2) if neg_sum > 0 else 0.0
+    else:
+        omega = 0.0
 
-    # Tail Ratio = 95th percentile / abs(5th percentile)
-    if bar_returns and len(bar_returns) >= 20:
-        sorted_r = sorted(bar_returns)
+    # Tail Ratio
+    if len(bar_returns) >= 20:
+        sorted_r = np.sort(bar_returns)
         p95 = sorted_r[int(len(sorted_r) * 0.95)]
         p5 = sorted_r[int(len(sorted_r) * 0.05)]
-        tail_ratio = round(p95 / abs(p5), 2) if p5 != 0 else 0.0
+        tail_ratio = round(float(p95 / abs(p5)), 2) if p5 != 0 else 0.0
     else:
         tail_ratio = 0.0
 
     # 平均盈虧
-    avg_win = round(sum(t.get("profit", 0) for t in win_trades) / len(win_trades), 2) if win_trades else 0
-    avg_loss = round(sum(t.get("profit", 0) for t in loss_trades) / len(loss_trades), 2) if loss_trades else 0
+    avg_win = round(float(np.mean(profit_arr[win_mask])), 2) if win_trades_count > 0 else 0
+    avg_loss = round(float(np.mean(profit_arr[loss_mask])), 2) if loss_trades_count > 0 else 0
 
-    # 最大連續虧損
-    max_consec_loss = 0
-    cur_consec = 0
-    for t in trades:
-        if t.get("profit", 0) < 0:
-            cur_consec += 1
-            max_consec_loss = max(max_consec_loss, cur_consec)
-        else:
-            cur_consec = 0
+    # 最大連續虧損（向量化）
+    if len(profit_arr) > 0:
+        is_loss = (profit_arr < 0).astype(np.int32)
+        # 找到連續虧損的最大長度
+        max_consec_loss = 0
+        cur = 0
+        for v in is_loss:
+            if v:
+                cur += 1
+                max_consec_loss = max(max_consec_loss, cur)
+            else:
+                cur = 0
+    else:
+        max_consec_loss = 0
 
     return {
         "leverage": leverage,

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import statistics
 from typing import Any
 
 from src.data.sources.crypto_ccxt import CcxtFundingSource, CcxtOhlcvSource
@@ -145,18 +144,28 @@ class CryptoMarketDataService:
         return filled
 
     def _mark_outliers(self, rows: list[dict[str, Any]]) -> None:
-        """插針標記：偏離均價超過 5% 的 K 線。"""
+        """插針標記：偏離均價超過 5% 的 K 線（向量化）。"""
         if len(rows) < 5:
             return
-        closes = [r["close"] for r in rows if r["close"]]
+        closes = [r["close"] for r in rows if r.get("close")]
         if not closes:
             return
         try:
-            mean_price = statistics.mean(closes)
-        except statistics.StatisticsError:
-            return
-        for r in rows:
-            if r["close"] and mean_price > 0:
-                deviation = abs(r["close"] - mean_price) / mean_price
-                if deviation > _OUTLIER_THRESHOLD:
-                    r["is_outlier"] = 1
+            import numpy as np
+
+            arr = np.array(closes, dtype=np.float64)
+            mean_price = float(np.mean(arr))
+            if mean_price <= 0:
+                return
+            # 向量化偏差計算
+            deviations = np.abs(arr - mean_price) / mean_price
+            outlier_mask = deviations > _OUTLIER_THRESHOLD
+            # 回寫到 rows（只處理 close 非零的行）
+            idx = 0
+            for r in rows:
+                if r.get("close"):
+                    if outlier_mask[idx]:
+                        r["is_outlier"] = 1
+                    idx += 1
+        except Exception:
+            pass
