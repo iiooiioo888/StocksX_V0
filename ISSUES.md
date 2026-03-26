@@ -1,10 +1,10 @@
 # 📋 StocksX_V0 問題追蹤
 
-**最後更新**: 2026-03-26  
-**策略總數**: 130  
-**已實作**: 130 (100%) ✅  
-**有真實回測結果**: 3 (order_flow, stat_arb, bollinger_squeeze)  
-**待真實驗證**: 84  
+**最後更新**: 2026-03-26 (第二次審查)
+**策略總數**: 130
+**已實作**: 130 (100%) ✅
+**有真實回測結果**: 3 (order_flow, stat_arb, bollinger_squeeze)
+**待真實驗證**: 84
 
 ---
 
@@ -61,13 +61,34 @@
   5. README 說「主應用 → :8501」，但 docker-compose.yml 只暴露 :8000
 - **影響**: `docker compose up -d` 無法啟動 Streamlit 主應用，README 快速開始指引失效
 - **建議修復**: 重寫 Dockerfile，以 Streamlit 主應用為核心；同步修正 docker-compose.yml
-- **狀態**: ⏳ 待處理
+- **狀態**: ✅ 已修復 (2026-03-26) — Dockerfile 已改為 Streamlit 主應用，docker-compose.yml 新增 app service（端口 8501）
 
 ### ISSUE-011: Streamlit 頁面前綴重複 `11_` 🟡 中等 (已修復)
 - **檔案**: `pages/11_📊_數據源管理.py`, `pages/11_🤖_自動交易.py`
 - **問題**: 兩個頁面使用相同的數字前綴 `11_`，Streamlit 多頁應用依賴前綴排序
 - **影響**: 其中一個頁面可能無法在側邊欄正常導航
 - **狀態**: ✅ 已修復 (2026-03-26) — 自動交易頁改為 `14_🤖_自動交易.py`
+
+### ISSUE-012: 大量 `sys.path` 相對路徑 hack 🟡 中等
+- **檔案**: 31 個檔案（`src/strategies/ai_ml/`, `src/strategies/execution/`, `src/strategies/trend/`, `src/strategies/breakout/`, `src/strategies/pattern/`, `src/strategies/macro/`, `src/strategies/statistical/`, `src/strategies/risk_management/`, `src/strategies/oscillator/`, `src/strategies/microstructure/`, `src/analytics/`）
+- **問題**: 使用 `sys.path.insert(0, str(Path(__file__).parent.parent))` 來解決匯入問題，而非依賴 pyproject.toml 的正確安裝
+- **影響**: 套件安裝後（`pip install -e .`）這些 hack 不應存在，且在不同部署環境（Docker、CI）可能導致路徑不一致
+- **建議修復**: 確保 pyproject.toml 的 `[tool.setuptools.packages.find]` 正確配置，移除所有 `sys.path` hack
+- **狀態**: ⏳ 待處理
+
+### ISSUE-013: `backend/main.py` FastAPI 服務未被使用 🟢 低
+- **檔案**: `backend/main.py`, `Dockerfile`
+- **問題**: `backend/` 目錄含完整 FastAPI 後端（main.py、models.py、schemas.py），但 Dockerfile 啟動的是 Streamlit（`app.py`），docker-compose.yml 也無 backend 服務
+- **影響**: backend 代碼實際上未被部署，與 `src/websocket_server.py` 功能重疊（兩者都是 FastAPI+WebSocket）
+- **建議修復**: 明確選用 `backend/main.py` 或 `src/websocket_server.py` 作為 API 層，合併或移除冗餘代碼
+- **狀態**: ⏳ 待處理
+
+### ISSUE-014: `src/core/alerts.py` AlertChannel 為空殼實現 🟢 低
+- **檔案**: `src/core/alerts.py`（line 79-82）
+- **問題**: `AlertChannel` 類別及其 `send` 方法為空 stub（僅 `pass`），無任何警報邏輯
+- **影響**: 依賴此模組的告警功能實際上不會發送任何通知
+- **建議修復**: 實現基本告警通道（Email、Webhook）或暫時移除未完成的代碼
+- **狀態**: ⏳ 待處理
 
 ---
 
@@ -76,6 +97,8 @@
 | Issue | 描述 | 解決日期 | 解決方案 |
 |:------|------|:--------:|----------|
 | ISSUE-001 | app.py 頁面路徑錯誤 `5_📡_監控.py` | 2026-03-26 | 改為 `5_📡_交易監控.py` |
+| ISSUE-008 | Streamlit 頁面前綴重複 `11_` | 2026-03-26 | 自動交易頁改為 `14_🤖_自動交易.py`，僅保留一個 `11_` 頁面 |
+| ISSUE-010 | Dockerfile 與項目結構不匹配 | 2026-03-26 | Dockerfile 改為 Streamlit 主應用，docker-compose.yml 新增 app service（8501）|
 | ISSUE-002 | ui_common.py 側邊欄同路徑錯誤 | 2026-03-26 | 同步修正路徑 |
 | ISSUE-006 | `src/ui_modern.py` 缺失被引用 | 2026-03-26 | 確認檔案存在，從未缺失 |
 | ISSUE-007 | `src/trading` 缺少 `ccxt` 依賴 | 2026-03-26 | 確認 `ccxt>=4.2.0` 已在 requirements.txt |

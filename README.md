@@ -518,6 +518,15 @@ docker compose --profile monitoring up -d
 
 ## 📝 更新日誌
 
+### v8.0.3 — 2026-03-26 (第二次審查)
+
+#### 🔍 代碼審查
+- 確認 ISSUE-008（頁面前綴重複 `11_`）已修復，從活躍問題中移除
+- 確認 ISSUE-010（Dockerfile 不匹配）已修復，Docker 配置正確
+- 新增 ISSUE-012: 大量 `sys.path` hack（31 個檔案），需改為標準套件安裝
+- 新增 ISSUE-013: `backend/main.py` FastAPI 與 `src/websocket_server.py` 功能重疊
+- 新增 ISSUE-014: `src/core/alerts.py` AlertChannel 為空殼實現
+
 ### v8.0.2 — 2026-03-26
 
 #### 🔍 代碼審查
