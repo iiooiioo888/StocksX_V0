@@ -9,8 +9,13 @@ uvicorn[standard]==0.27.0
 sqlalchemy==2.0.25
 
 # 數據處理
+<<<<<<< HEAD
 pandas==2.1.4
 numpy==2.2.6
+=======
+pandas==2.3.3
+numpy==1.26.3
+>>>>>>> origin/dependabot/pip/pandas-2.3.3
 
 # WebSocket
 websockets==12.0
