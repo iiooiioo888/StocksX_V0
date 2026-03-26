@@ -319,7 +319,7 @@ class MarkowitzOptimizer:
                         'sharpe': result['sharpe_ratio'],
                         'weights': result['weights']
                     })
-            except Exception:
+            except (ValueError, KeyError):
                 continue
         
         return pd.DataFrame(frontier_data)

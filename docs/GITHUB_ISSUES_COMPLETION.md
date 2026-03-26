@@ -64,7 +64,7 @@
 
 ```bash
 # 檢查開放的 Issues
-curl -H "Authorization: token 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" \
+curl -H "Authorization: token <REDACTED>" \
   "https://api.github.com/repos/iiooiioo888/StocksX_V0/issues?state=open"
 
 # 返回：[] (空數組，表示沒有開放的 Issues)

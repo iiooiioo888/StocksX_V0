@@ -22,3 +22,11 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: check-ast
+
+  - repo: local
+    hooks:
+      - id: detect-github-token
+        name: Detect GitHub Token
+        entry: bash -c 'grep -rnE "ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{82}" "$@" && exit 1 || exit 0' --
+        language: system
+        types: [text]
