@@ -265,6 +265,7 @@ render_auto_refresh_market_data()
 
 if yahoo_futures or yahoo_trending:
     tab1, tab2, tab3 = st.tabs(["📊 期貨報價", "🔥 熱門標的", "📰 加密貨幣"])
+    fg = None  # 複用到情緒儀表板
 
     with tab1:
         if yahoo_futures:
@@ -297,7 +298,7 @@ if yahoo_futures or yahoo_trending:
     with tab3:
         # 加密貨幣快速預覽
         try:
-            from src.data.sources.api_hub import get_current_fear_greed
+            from src.data.sources.api_hub import get_current_fear_greed, fetch_coingecko
 
             fg = get_current_fear_greed()
             if fg:
@@ -306,7 +307,6 @@ if yahoo_futures or yahoo_trending:
 
             # 主流幣簡易報價（真實 API）
             st.caption("💰 主流幣簡易報價（24h）")
-            from src.data.sources.api_hub import fetch_coingecko
 
             crypto_data = fetch_coingecko(
                 "/simple/price",
@@ -341,11 +341,8 @@ st.markdown("#### 🌡️ 市場情緒儀表板")
 
 sentiment_cols = st.columns(4)
 
-# 恐懼貪婪指數
+# 恐懼貪婪指數（複用已有數據，避免重複 API 調用）
 try:
-    from src.data.sources.api_hub import get_current_fear_greed
-
-    fg = get_current_fear_greed()
     if fg:
         fg_val = fg["value"]
         fg_color = "#00cc96" if fg_val >= 50 else "#ef553b"

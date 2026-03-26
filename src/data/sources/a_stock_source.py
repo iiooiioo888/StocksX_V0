@@ -204,7 +204,7 @@ class SinaAShareSource:
                 # 日期格式：2023-03-19
                 try:
                     timestamp = int(datetime.strptime(item['day'], '%Y-%m-%d').timestamp() * 1000)
-                except:
+                except Exception:
                     continue
                 
                 ohlcv = {

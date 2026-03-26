@@ -24,6 +24,8 @@ import time
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from src.config_secrets import (
     ALPACA_API_KEY,
@@ -42,6 +44,23 @@ from src.utils.cache import cached
 
 from .crypto_ccxt import CcxtOhlcvSource
 from .yfinance_source import YfinanceOhlcvSource
+
+
+# ─── HTTP 連接池（共享 Session，避免重複 TCP 握手）─────────────────────────────────
+
+_session: requests.Session | None = None
+
+
+def _get_session() -> requests.Session:
+    """取得全局 HTTP Session（連接池 + 自動重試）。"""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        retry = Retry(total=2, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=retry)
+        _session.mount("https://", adapter)
+        _session.mount("http://", adapter)
+    return _session
 
 # 引入限流器與日誌
 # 限流器開關（供外部檢查）
@@ -135,7 +154,7 @@ def fetch_polymarket_markets(
     start_time = time.time()
     status = "success"
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = _get_session().get(url, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
@@ -228,7 +247,7 @@ def fetch_fred_series(
     start_time = time.time()
     status = "success"
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = _get_session().get(url, params=params, timeout=10)
         resp.raise_for_status()
         response_time = (time.time() - start_time) * 1000
         log_api_call(
@@ -297,7 +316,7 @@ def fetch_alpha_vantage(
     start_time = time.time()
     status = "success"
     try:
-        resp = requests.get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=10)
+        resp = _get_session().get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=10)
         resp.raise_for_status()
         response_time = (time.time() - start_time) * 1000
         log_api_call(
@@ -347,7 +366,7 @@ def fetch_polygon(
     params.setdefault("apiKey", api_key)
 
     url = f"{POLYGON_BASE_URL}{path}"
-    resp = requests.get(url, params=params, timeout=10)
+    resp = _get_session().get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -375,7 +394,7 @@ def fetch_coingecko(
         params.setdefault("x_cg_pro_api_key", COINGECKO_API_KEY)
 
     url = f"{COINGECKO_BASE_URL}{path}"
-    resp = requests.get(url, params=params, timeout=10)
+    resp = _get_session().get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -400,7 +419,7 @@ def fetch_coinmarketcap(
 
     url = f"{COINMARKETCAP_BASE_URL}{path}"
     headers = {"X-CMC_PRO_API_KEY": api_key}
-    resp = requests.get(url, params=params, headers=headers, timeout=10)
+    resp = _get_session().get(url, params=params, headers=headers, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -425,7 +444,7 @@ def fetch_glassnode(
     params.setdefault("api_key", api_key)
 
     url = f"{GLASSNODE_BASE_URL}{path}"
-    resp = requests.get(url, params=params, timeout=10)
+    resp = _get_session().get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -451,7 +470,7 @@ def fetch_trading_economics(
     params.setdefault("client", api_key)
 
     url = f"{TRADING_ECONOMICS_BASE_URL}{path}"
-    resp = requests.get(url, params=params, timeout=10)
+    resp = _get_session().get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -478,7 +497,7 @@ def fetch_fmp(
     params.setdefault("apikey", api_key)
 
     url = f"{FMP_BASE_URL}{path}"
-    resp = requests.get(url, params=params, timeout=10)
+    resp = _get_session().get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -531,7 +550,7 @@ def fetch_alpaca(
         "APCA-API-KEY-ID": api_key,
         "APCA-API-SECRET-KEY": api_secret,
     }
-    resp = requests.get(url, params=params, headers=headers, timeout=10)
+    resp = _get_session().get(url, params=params, headers=headers, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -597,7 +616,7 @@ def fetch_fear_greed_index(
     """
     url = f"{ALTERNATIVE_ME_BASE_URL}/"
     params = {"limit": limit, "format": "json"}
-    resp = requests.get(url, params=params, timeout=10)
+    resp = _get_session().get(url, params=params, timeout=10)
     resp.raise_for_status()
     return resp.json()
 

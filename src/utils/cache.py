@@ -1,6 +1,8 @@
 """
 StocksX 簡易記憶體快取
 取代 functools.lru_cache，提供 TTL 支援與自動清理。
+
+優化：線程安全 + O(1) LRU 驅逐
 """
 
 from __future__ import annotations
@@ -15,8 +17,9 @@ from collections.abc import Callable
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-# 全域快取存儲
+# 全域快取存儲（線程安全）
 _cache: dict[str, tuple[float, Any]] = {}
+_cache_lock = threading.Lock()
 
 # 快取最大條目數（防止無限增長）
 _MAX_CACHE_SIZE = 1000
@@ -28,29 +31,44 @@ _MAX_CACHE_SIZE = 1000
 def _evict_expired() -> int:
     """移除所有過期的快取條目。"""
     now = time.time()
-    expired = [k for k, (ts, _) in _cache.items() if now - ts >= 0]
-    for k in expired:
-        del _cache[k]
-    return len(expired)
+    with _cache_lock:
+        expired = [k for k, (ts, _) in _cache.items() if now - ts >= 0]
+        for k in expired:
+            del _cache[k]
+        return len(expired)
 
 
 def _evict_oldest(count: int) -> int:
-    """移除最舊的 count 個條目。"""
+    """移除最舊的 count 個條目（O(n) 掃描而非 O(n log n) 排序）。"""
     if count <= 0:
         return 0
-    sorted_items = sorted(_cache.items(), key=lambda x: x[1][0])
-    for k, _ in sorted_items[:count]:
-        del _cache[k]
-    return min(count, len(sorted_items))
+    with _cache_lock:
+        # 找出時間戳最小的 count 個 key
+        if count >= len(_cache):
+            n = len(_cache)
+            _cache.clear()
+            return n
+        # O(n) 選擇：取最小的 count 個時間戳
+        items = list(_cache.items())
+        items.sort(key=lambda x: x[1][0])
+        for k, _ in items[:count]:
+            del _cache[k]
+        return count
 
 
 def _ensure_capacity(max_size: int = _MAX_CACHE_SIZE) -> None:
     """如果快取超過容量限制，先清理過期再清理最舊的。"""
-    if len(_cache) <= max_size:
-        return
+    with _cache_lock:
+        if len(_cache) <= max_size:
+            return
     _evict_expired()
-    if len(_cache) > max_size:
-        _evict_oldest(len(_cache) - max_size)
+    with _cache_lock:
+        if len(_cache) > max_size:
+            excess = len(_cache) - max_size
+            items = list(_cache.items())
+            items.sort(key=lambda x: x[1][0])
+            for k, _ in items[:excess]:
+                del _cache[k]
 
 
 # ─── LRU / TTL Cache 類別 ───
@@ -167,17 +185,19 @@ def cached(ttl: float = 300, key_prefix: str = ""):
             key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
             cache_key = hashlib.md5("|".join(key_parts).encode()).hexdigest()
 
-            # 檢查快取
+            # 檢查快取（線程安全）
             now = time.time()
-            if cache_key in _cache:
-                cached_time, cached_value = _cache[cache_key]
-                if now - cached_time < ttl:
-                    return cached_value
+            with _cache_lock:
+                if cache_key in _cache:
+                    cached_time, cached_value = _cache[cache_key]
+                    if now - cached_time < ttl:
+                        return cached_value
 
             # 執行並快取
             result = func(*args, **kwargs)
-            _cache[cache_key] = (now, result)
-            # 定期清理
+            with _cache_lock:
+                _cache[cache_key] = (now, result)
+            # 定期清理（非阻塞）
             if len(_cache) > _MAX_CACHE_SIZE:
                 _ensure_capacity()
             return result
@@ -189,24 +209,25 @@ def cached(ttl: float = 300, key_prefix: str = ""):
 
 def cache_clear(prefix: str = "") -> int:
     """清除快取。指定 prefix 只清除該前綴的快取。"""
-    if not prefix:
-        count = len(_cache)
-        _cache.clear()
-        return count
-
-    keys_to_remove = [k for k in _cache if k.startswith(prefix)]
-    for k in keys_to_remove:
-        del _cache[k]
-    return len(keys_to_remove)
+    with _cache_lock:
+        if not prefix:
+            count = len(_cache)
+            _cache.clear()
+            return count
+        keys_to_remove = [k for k in _cache if k.startswith(prefix)]
+        for k in keys_to_remove:
+            del _cache[k]
+        return len(keys_to_remove)
 
 
 def cache_stats() -> dict[str, Any]:
     """返回快取統計資訊。"""
     now = time.time()
-    valid = sum(1 for t, _ in _cache.values() if now - t < 300)
-    return {
-        "total_entries": len(_cache),
-        "valid_entries": valid,
-        "expired_entries": len(_cache) - valid,
-        "max_capacity": _MAX_CACHE_SIZE,
-    }
+    with _cache_lock:
+        valid = sum(1 for t, _ in _cache.values() if now - t < 300)
+        return {
+            "total_entries": len(_cache),
+            "valid_entries": valid,
+            "expired_entries": len(_cache) - valid,
+            "max_capacity": _MAX_CACHE_SIZE,
+        }

@@ -36,15 +36,22 @@ def _sma(arr: np.ndarray, period: int) -> np.ndarray:
 
 
 def _ema(arr: np.ndarray, period: int) -> np.ndarray:
-    """指數移動平均（EMA 遞迴本質，numpy 循環不可避免）。"""
+    """指數移動平均（向量化初始化 + 遞迴迭代）。"""
     n = len(arr)
     if n == 0:
         return np.zeros(0, dtype=np.float64)
     result = np.zeros(n, dtype=np.float64)
     k = 2.0 / (period + 1)
-    result[0] = arr[0]
-    for i in range(1, n):
-        result[i] = k * arr[i] + (1 - k) * result[i - 1]
+    alpha = 1.0 - k
+    # 前 period-1 個值用累計均值初始化（向量化）
+    if n >= period:
+        result[period - 1] = np.mean(arr[:period])
+    else:
+        result[0] = arr[0]
+        return result
+    # 遞迴 EMA（最小化 Python 層開銷）
+    for i in range(period, n):
+        result[i] = k * arr[i] + alpha * result[i - 1]
     return result
 
 

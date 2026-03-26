@@ -18,6 +18,8 @@ except ImportError:
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 
     REQUESTS_AVAILABLE = True
 except ImportError:
@@ -30,6 +32,7 @@ class DataService:
     def __init__(self) -> None:
         self._binance = None
         self._binance_futures = None
+        self._session = None
         # 緩存
         self.price_cache: dict[str, dict] = {}
         self.kline_cache: dict[str, pd.DataFrame] = {}
@@ -37,6 +40,17 @@ class DataService:
         self.last_update: dict[str, float] = {}
         # 緩存最大條目數（防止無限增長）
         self._max_cache_size = 200
+
+    @property
+    def session(self):
+        """取得 HTTP Session（連接池複用）。"""
+        if self._session is None and REQUESTS_AVAILABLE:
+            self._session = requests.Session()
+            retry = Retry(total=2, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504])
+            adapter = HTTPAdapter(pool_connections=5, pool_maxsize=10, max_retries=retry)
+            self._session.mount("https://", adapter)
+            self._session.mount("http://", adapter)
+        return self._session
 
     def _get_exchange(self, symbol: str):
         """根據 symbol 類型選擇正確的交易所實例（現貨/永續）."""
@@ -140,12 +154,46 @@ class DataService:
             return None
 
     def get_tickers_batch(self, symbols: list[str]) -> dict[str, dict]:
-        """批量取得 Ticker 數據"""
+        """批量取得 Ticker 數據（優先使用 exchange.fetch_tickers 批量接口）"""
         result = {}
-        for symbol in symbols:
-            data = self.get_ticker(symbol)
-            if data:
-                result[symbol] = data
+        if not symbols:
+            return result
+
+        # 按現貨/永續分組，盡量批量請求
+        spot_symbols = [s for s in symbols if ":" not in s]
+        futures_symbols = [s for s in symbols if ":" in s]
+
+        def _batch_fetch(exchange, syms: list[str]):
+            if not exchange or not syms:
+                return
+            try:
+                binance_syms = [self._to_binance_symbol(s) for s in syms]
+                tickers = exchange.fetch_tickers(binance_syms)
+                sym_map = {self._to_binance_symbol(s): s for s in syms}
+                for bkey, ticker in tickers.items():
+                    orig_sym = sym_map.get(bkey)
+                    if orig_sym:
+                        data = {
+                            "symbol": orig_sym,
+                            "price": ticker.get("last", 0),
+                            "change_pct": ticker.get("percentage", 0),
+                            "high_24h": ticker.get("high", 0),
+                            "low_24h": ticker.get("low", 0),
+                            "volume_24h": ticker.get("baseVolume", 0),
+                            "quote_volume_24h": ticker.get("quoteVolume", 0),
+                            "timestamp": int(time.time() * 1000),
+                        }
+                        result[orig_sym] = data
+                        self._update_cache(self.price_cache, orig_sym, data)
+            except Exception:
+                # 批量接口不可用時，回退到逐個請求
+                for s in syms:
+                    data = self.get_ticker(s)
+                    if data:
+                        result[s] = data
+
+        _batch_fetch(self.binance, spot_symbols)
+        _batch_fetch(self.binance_futures, futures_symbols)
         return result
 
     # ════════════════════════════════════════════════════════════
@@ -231,7 +279,7 @@ class DataService:
 
             # 使用 Blockchain.com API（比特幣）
             if "BTC" in symbol:
-                response = requests.get("https://blockchain.info/ticker", timeout=5)
+                response = self.session.get("https://blockchain.info/ticker", timeout=5)
                 if response.status_code == 200:
                     data = response.json()
                     usd_data = data.get("USD", {})
@@ -284,7 +332,7 @@ class DataService:
             if not REQUESTS_AVAILABLE:
                 return None
 
-            response = requests.get("https://api.alternative.me/fng/?limit=1", timeout=5)
+            response = self.session.get("https://api.alternative.me/fng/?limit=1", timeout=5)
 
             if response.status_code == 200:
                 data = response.json()
