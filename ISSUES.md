@@ -49,7 +49,25 @@
 - **問題**: `.gitignore` 已配置 `*.log`，但上述 5 個 log 檔案已被 Git 追蹤（commit 之前未 ignore）
 - **影響**: repo 中包含空的/過期的日誌檔案，增加 repo 體積
 - **建議修復**: `git rm --cached *.log` 並重新提交
+- **狀態**: ✅ 已修復 (2026-03-26)
+
+### ISSUE-010: Dockerfile 與項目結構不匹配 🔴 嚴重
+- **檔案**: `Dockerfile`, `docker-compose.yml`
+- **問題**:
+  1. Dockerfile 使用 `COPY backend/requirements.txt` 而非根目錄 `requirements.txt`
+  2. Dockerfile **不複製** `app.py`、`pages/`、`pyproject.toml`（Streamlit 主應用）
+  3. CMD 執行 `python3 backend/main.py`（FastAPI 後端），而非 Streamlit 主應用
+  4. `docker-compose.yml` 沒有 Streamlit 服務，只有 `stocksx-api` + `trading-engine`
+  5. README 說「主應用 → :8501」，但 docker-compose.yml 只暴露 :8000
+- **影響**: `docker compose up -d` 無法啟動 Streamlit 主應用，README 快速開始指引失效
+- **建議修復**: 重寫 Dockerfile，以 Streamlit 主應用為核心；同步修正 docker-compose.yml
 - **狀態**: ⏳ 待處理
+
+### ISSUE-011: Streamlit 頁面前綴重複 `11_` 🟡 中等 (已修復)
+- **檔案**: `pages/11_📊_數據源管理.py`, `pages/11_🤖_自動交易.py`
+- **問題**: 兩個頁面使用相同的數字前綴 `11_`，Streamlit 多頁應用依賴前綴排序
+- **影響**: 其中一個頁面可能無法在側邊欄正常導航
+- **狀態**: ✅ 已修復 (2026-03-26) — 自動交易頁改為 `14_🤖_自動交易.py`
 
 ---
 
@@ -61,6 +79,8 @@
 | ISSUE-002 | ui_common.py 側邊欄同路徑錯誤 | 2026-03-26 | 同步修正路徑 |
 | ISSUE-006 | `src/ui_modern.py` 缺失被引用 | 2026-03-26 | 確認檔案存在，從未缺失 |
 | ISSUE-007 | `src/trading` 缺少 `ccxt` 依賴 | 2026-03-26 | 確認 `ccxt>=4.2.0` 已在 requirements.txt |
+| ISSUE-009 | .log 檔案被 Git 追蹤 | 2026-03-26 | `git rm --cached` 清理 |
+| ISSUE-011 | Streamlit 頁面前綴重複 `11_` | 2026-03-26 | 自動交易頁改為 `14_🤖_自動交易.py` |
 | #34 | 訂單流分析優化 | 2026-03-23 | Sharpe 1.832→2.033 |
 | #41 | 統計套利優化 | 2026-03-23 | Sharpe -0.264→1.029 |
 | #15 | 布林帶擠壓優化 | 2026-03-23 | Sharpe 1.299 |
