@@ -1,31 +1,12 @@
 # ════════════════════════════════════════════════════════════
-# StocksX — 開發依賴
+# StocksX — 開發依賴安裝指引
+#
+# 開發依賴統一定義在 pyproject.toml [project.optional-dependencies.dev]
 # ════════════════════════════════════════════════════════════
 
-# Linting & Formatting
-ruff>=0.3.0
-mypy>=1.8.0
-
-# Testing
-pytest>=8.0.0
-pytest-cov>=4.1.0
-pytest-asyncio>=0.23.0
-pytest-timeout>=2.2.0
-pytest-xdist>=3.5.0
-httpx>=0.27.0
-
-# Security
-bandit[toml]>=1.7.0
-safety>=3.0.0
-
-# Pre-commit
-pre-commit>=3.6.0
-
-# Documentation
-mkdocs-material>=9.5.0
-mkdocstrings[python]>=0.24.0
-
-# Development utilities
-ipython>=8.20.0
-ipdb>=0.13.0
-rich>=13.7.0
+# 推薦安裝方式：
+#   pip install -e ".[dev]"
+#
+# 全功能安裝（含 ML/NLP/RL/Dev）：
+#   pip install -e ".[all]"
+# ════════════════════════════════════════════════════════════

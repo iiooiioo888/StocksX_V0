@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BreakoutStrategy
-
+from src.strategies.base_strategy import BreakoutStrategy
 
 # ============================================================================
 # 1. 雙推力突破策略
@@ -89,7 +85,6 @@ class DualThrustBreakout(BreakoutStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. 開盤區間突破 (ORB)
 # ============================================================================
@@ -146,7 +141,6 @@ class OpeningRangeBreakout(BreakoutStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 3. 樞軸點突破
@@ -210,7 +204,6 @@ class PivotBreakout(BreakoutStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 4. 布林帶擠壓
@@ -287,7 +280,6 @@ class BollingerSqueeze(BreakoutStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 5. 成交量突破
 # ============================================================================
@@ -354,7 +346,6 @@ class VolumeBreakout(BreakoutStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 6. 斐波那契回撤突破
@@ -424,7 +415,6 @@ class FibonacciBreakout(BreakoutStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 7. 杯柄形態
 # ============================================================================
@@ -486,7 +476,6 @@ class CupAndHandle(BreakoutStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 8. 三重頂/底突破
@@ -550,7 +539,6 @@ class TripleTopBottom(BreakoutStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 9. 橫盤均值回歸
@@ -616,7 +604,6 @@ class SidewaysReversion(BreakoutStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -632,7 +619,6 @@ BREAKOUT_STRATEGIES = {
     'triple_top_bottom': TripleTopBottom,
     'sideways_reversion': SidewaysReversion,
 }
-
 
 # ============================================================================
 # 測試代碼

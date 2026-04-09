@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 小波分析
@@ -62,7 +58,6 @@ class WaveletAnalysis(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 2. ARFIMA (分數差分)
@@ -111,7 +106,6 @@ class ARFIMA(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 3. Copula 相依結構
 # ============================================================================
@@ -156,7 +150,6 @@ class CopulaDependence(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.015 / (2.5 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 4. SDE 均值回歸
 # ============================================================================
@@ -198,7 +191,6 @@ class SDEMeanReversion(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 5. Bootstrap 信心區間
@@ -247,7 +239,6 @@ class BootstrapConfidence(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -259,7 +250,6 @@ STAT_COMPLETE_STRATEGIES = {
     'sde_mean': SDEMeanReversion,
     'bootstrap': BootstrapConfidence,
 }
-
 
 # ============================================================================
 # 測試代碼

@@ -25,10 +25,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 導入策略基類
-import sys
-sys.path.append('..')
-from base_strategy import RiskManagementStrategy
-
+from src.strategies.base_strategy import RiskManagementStrategy
 
 class KellyCriterionOptimized(RiskManagementStrategy):
     """
@@ -232,7 +229,6 @@ class KellyCriterionOptimized(RiskManagementStrategy):
             'volatility': volatility
         }
 
-
 class KellyBacktester:
     """
     凱利公式回測引擎
@@ -380,7 +376,6 @@ class KellyBacktester:
         
         return df_results
 
-
 def load_data(start_date: str = '2020-01-01', 
               end_date: str = '2023-12-31',
               symbol: str = '000001.SZ') -> pd.DataFrame:
@@ -429,7 +424,6 @@ def load_data(start_date: str = '2020-01-01',
         df.index.name = 'date'
         
         return df
-
 
 def generate_report(results: pd.DataFrame, output_file: str = 'kelly_optimization_report.md'):
     """
@@ -527,7 +521,6 @@ f* = W - (1-W)/R
     
     print(f"\n✅ 報告已生成：{output_file}")
 
-
 def main():
     """主函數"""
     print("=" * 60)
@@ -575,7 +568,6 @@ def main():
     print("\n" + "=" * 60)
     print("優化完成！")
     print("=" * 60)
-
 
 if __name__ == '__main__':
     main()

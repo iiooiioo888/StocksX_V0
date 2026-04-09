@@ -12,12 +12,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BreakoutStrategy
-
+from src.strategies.base_strategy import BreakoutStrategy
 
 # ============================================================================
 # 1. Inside Bar Breakout 內包線突破策略
@@ -75,7 +71,6 @@ class InsideBarBreakout(BreakoutStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 2. Triangle Pattern 三角形整理突破策略
@@ -153,7 +148,6 @@ class TrianglePattern(BreakoutStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 註冊所有突破最終策略

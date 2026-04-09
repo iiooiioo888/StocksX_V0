@@ -11,10 +11,6 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
 from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 
 class StrategyScorer:
     """策略評分器"""
@@ -387,7 +383,6 @@ class StrategyScorer:
         
         print(f"✅ 評分報告已保存：{output_path}")
 
-
 def main():
     """主函數"""
     print("=" * 80)
@@ -464,7 +459,6 @@ def main():
     print("\n" + "=" * 80)
     print("✅ 策略評分完成！")
     print("=" * 80)
-
 
 if __name__ == '__main__':
     main()

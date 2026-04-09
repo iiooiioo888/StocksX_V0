@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 安裝 Python 依賴
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# 安裝 Python 依賴（from pyproject.toml）
+COPY pyproject.toml .
+COPY src/ ./src/
+RUN pip install --no-cache-dir --prefix=/install .
 
 # ════════════════════════════════════════════════════════════
 # Runtime 階段
@@ -30,14 +31,9 @@ COPY --from=builder /install /usr/local
 RUN apt-get update && apt-get install -y --no-install-recommends curl tini \
     && rm -rf /var/lib/apt/lists/*
 
-# 複製應用程式
+# 複製應用程式（src/ 已由 builder 安裝到 site-packages）
 COPY app.py .
-COPY pyproject.toml .
-COPY src/ ./src/
 COPY pages/ ./pages/
-COPY backend/ ./backend/
-COPY trading/ ./trading/
-COPY monitoring/ ./monitoring/
 
 # 創建必要目錄
 RUN mkdir -p /app/data /app/logs

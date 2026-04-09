@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 季節性策略
@@ -83,7 +79,6 @@ class SeasonalStrategy(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. 美元指數聯動
 # ============================================================================
@@ -144,7 +139,6 @@ class DXYCorrelation(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 3. 收益率曲線策略
 # ============================================================================
@@ -204,7 +198,6 @@ class YieldCurve(BaseStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 4. VIX 期貨交易
@@ -270,7 +263,6 @@ class VIXTrading(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 5. 跨國權益輪動
 # ============================================================================
@@ -329,7 +321,6 @@ class CountryRotation(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -341,7 +332,6 @@ MACRO_STRATEGIES = {
     'vix': VIXTrading,
     'country_rotation': CountryRotation,
 }
-
 
 # ============================================================================
 # 測試代碼

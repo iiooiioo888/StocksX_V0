@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 訂單流分析
@@ -90,7 +86,6 @@ class OrderFlowAnalysis(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. Delta 累積
 # ============================================================================
@@ -161,7 +156,6 @@ class CumulativeDelta(BaseStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 3. POC / Value Area
@@ -234,7 +228,6 @@ class POCValueArea(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 4. VPIN (Volume-Synchronized Probability of Informed Trading)
 # ============================================================================
@@ -300,7 +293,6 @@ class VPIN(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 5. Amihud 非流動性
 # ============================================================================
@@ -365,7 +357,6 @@ class AmihudIlliquidity(BaseStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 6. 冰山訂單偵測
@@ -436,7 +427,6 @@ class IcebergDetection(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 7-12. 其他微結構策略（簡化版）
 # ============================================================================
@@ -465,7 +455,6 @@ class KyleLambda(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 class TickRule(BaseStrategy):
     """Lee-Ready Tick Rule 策略"""
     
@@ -493,7 +482,6 @@ class TickRule(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 class QuoteStuffing(BaseStrategy):
     """Quote Stuffing 偵測策略"""
     
@@ -515,7 +503,6 @@ class QuoteStuffing(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.01 / (3 * volatility * price + 1e-10))
 
-
 class Level2Analysis(BaseStrategy):
     """Level 2 深度分析策略"""
     
@@ -535,7 +522,6 @@ class Level2Analysis(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 class MicroPrice(BaseStrategy):
     """微價格偏移策略"""
@@ -559,7 +545,6 @@ class MicroPrice(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 class TWAPSignal(BaseStrategy):
     """TWAP 執行信號策略"""
@@ -587,7 +572,6 @@ class TWAPSignal(BaseStrategy):
         intervals = self.params['intervals']
         return int(capital * 0.02 / intervals / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -606,7 +590,6 @@ MICRO_STRATEGIES = {
     'micro_price': MicroPrice,
     'twap_signal': TWAPSignal,
 }
-
 
 # ============================================================================
 # 測試代碼

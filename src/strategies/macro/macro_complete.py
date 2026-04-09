@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 利差交易 (Carry Trade)
@@ -58,7 +54,6 @@ class CarryTrade(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 2. 跨品種價差
 # ============================================================================
@@ -99,7 +94,6 @@ class CrossCommoditySpread(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.015 / (2.5 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 3. 動態避險比率
@@ -143,7 +137,6 @@ class DynamicHedgeRatio(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 4. 商品超級週期
 # ============================================================================
@@ -185,7 +178,6 @@ class CommoditySuperCycle(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 5. 信用利差交易
@@ -229,7 +221,6 @@ class CreditSpread(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.015 / (2.5 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 6. 黃金/實際利率
 # ============================================================================
@@ -267,7 +258,6 @@ class GoldRealRate(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 7. 跨資產風險平價
@@ -313,7 +303,6 @@ class CrossAssetRiskParity(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -327,7 +316,6 @@ MACRO_COMPLETE_STRATEGIES = {
     'gold_real_rate': GoldRealRate,
     'cross_asset_parity': CrossAssetRiskParity,
 }
-
 
 # ============================================================================
 # 測試代碼

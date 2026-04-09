@@ -14,13 +14,9 @@ AI/ML 策略包
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any
-import sys
-from pathlib import Path
 
 # 添加父目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 遺傳演算法優化策略
@@ -299,7 +295,6 @@ class GeneticOptimization(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. 異常偵測策略
 # ============================================================================
@@ -423,7 +418,6 @@ class AnomalyDetection(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 3. 圖神經網路 GNN 策略（骨架）
 # ============================================================================
@@ -539,7 +533,6 @@ class GraphNeuralNetwork(BaseStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 4. NLP 事件驅動策略（骨架）
@@ -661,7 +654,6 @@ class NLPEventDriven(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -672,7 +664,6 @@ AI_ML_STRATEGIES = {
     'gnn': GraphNeuralNetwork,
     'nlp_event': NLPEventDriven,
 }
-
 
 # ============================================================================
 # 測試代碼

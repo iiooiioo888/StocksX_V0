@@ -10,12 +10,8 @@ AI/ML 策略最終補全 - Batch 3
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 遷移學習策略
@@ -83,7 +79,6 @@ class TransferLearning(BaseStrategy):
         risk = capital * 0.02
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 2. 對比學習策略
 # ============================================================================
@@ -142,7 +137,6 @@ class ContrastiveLearning(BaseStrategy):
             return 0
         risk = capital * 0.015
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 3. LSTM 預測策略
@@ -207,7 +201,6 @@ class LSTMPredictor(BaseStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 4. 強化學習 DQN 策略
@@ -283,7 +276,6 @@ class DQNAgent(BaseStrategy):
         risk = capital * 0.025
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 5. 多因子模型策略
 # ============================================================================
@@ -351,7 +343,6 @@ class MultiFactorModel(BaseStrategy):
         risk = capital * 0.02
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 6. 配對交易策略
 # ============================================================================
@@ -415,7 +406,6 @@ class PairTrading(BaseStrategy):
             return 0
         risk = capital * 0.015  # 配對交易風險較低
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 7. 集成投票策略
@@ -507,7 +497,6 @@ class EnsembleVotingFinal(BaseStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 註冊所有 AI/ML 最終策略

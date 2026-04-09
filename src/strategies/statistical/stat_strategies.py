@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 協整配對
@@ -79,7 +75,6 @@ class CointegrationPair(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. Kalman 濾波
 # ============================================================================
@@ -141,7 +136,6 @@ class KalmanFilter(BaseStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 3. GARCH 波動率模型
@@ -210,7 +204,6 @@ class GARCHVolatility(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 4. 馬可夫體制轉換
 # ============================================================================
@@ -275,7 +268,6 @@ class MarkovRegime(BaseStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 5. 變點偵測
@@ -344,7 +336,6 @@ class ChangePointDetection(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -356,7 +347,6 @@ STAT_STRATEGIES = {
     'markov': MarkovRegime,
     'changepoint': ChangePointDetection,
 }
-
 
 # ============================================================================
 # 測試代碼

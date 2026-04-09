@@ -11,10 +11,6 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
 from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 
 def generate_strategy_signals(all_strategies: Dict, data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -39,7 +35,6 @@ def generate_strategy_signals(all_strategies: Dict, data: pd.DataFrame) -> pd.Da
             signals_df[name] = 0
     
     return signals_df
-
 
 def calculate_signal_statistics(signals_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -76,7 +71,6 @@ def calculate_signal_statistics(signals_df: pd.DataFrame) -> pd.DataFrame:
         })
     
     return pd.DataFrame(stats)
-
 
 def generate_heatmap_html(signals_df: pd.DataFrame, output_path: str):
     """
@@ -176,7 +170,6 @@ def generate_heatmap_html(signals_df: pd.DataFrame, output_path: str):
     
     print(f"✅ 熱力圖已保存：{output_path}")
 
-
 def main():
     """主函數"""
     print("=" * 80)
@@ -184,7 +177,6 @@ def main():
     print("=" * 80)
     
     # 導入策略
-    sys.path.insert(0, str(Path(__file__).parent.parent))
     from strategies.trend import ALL_TREND_STRATEGIES
     from strategies.oscillator import ALL_OSCILLATOR_STRATEGIES
     from strategies.breakout import ALL_BREAKOUT_STRATEGIES
@@ -266,7 +258,6 @@ def main():
     print("\n" + "=" * 80)
     print("✅ 策略信號熱力圖生成完成！")
     print("=" * 80)
-
 
 if __name__ == '__main__':
     main()

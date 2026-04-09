@@ -24,10 +24,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 導入策略基類
-import sys
-sys.path.append('..')
-from base_strategy import TrendFollowingStrategy
-
+from src.strategies.base_strategy import TrendFollowingStrategy
 
 class TurtleTradingOptimized(TrendFollowingStrategy):
     """
@@ -250,7 +247,6 @@ class TurtleTradingOptimized(TrendFollowingStrategy):
         
         return position
 
-
 class TurtleTradingBacktester:
     """
     海龜交易法回測引擎
@@ -398,7 +394,6 @@ class TurtleTradingBacktester:
         
         return df_results
 
-
 def load_data(start_date: str = '2020-01-01', 
               end_date: str = '2023-12-31',
               symbol: str = '000001.SZ') -> pd.DataFrame:
@@ -458,7 +453,6 @@ def load_data(start_date: str = '2020-01-01',
         df.index.name = 'date'
         
         return df
-
 
 def generate_report(results: pd.DataFrame, output_file: str = 'turtle_trading_optimization_report.md'):
     """
@@ -561,7 +555,6 @@ def generate_report(results: pd.DataFrame, output_file: str = 'turtle_trading_op
     
     print(f"\n✅ 報告已生成：{output_file}")
 
-
 def main():
     """主函數"""
     print("=" * 60)
@@ -611,7 +604,6 @@ def main():
     print("\n" + "=" * 60)
     print("優化完成！")
     print("=" * 60)
-
 
 if __name__ == '__main__':
     main()

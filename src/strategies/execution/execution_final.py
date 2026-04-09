@@ -15,12 +15,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. Sniper Strategy 狙擊手策略
@@ -77,7 +73,6 @@ class SniperStrategy(BaseStrategy):
         # 狙擊策略使用較小倉位
         risk = capital * 0.01
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 2. Iceberg Orders 冰山訂單策略
@@ -138,7 +133,6 @@ class IcebergOrders(BaseStrategy):
         risk = capital * 0.03
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 3. POV Strategy 參與率策略
 # ============================================================================
@@ -192,7 +186,6 @@ class POVStrategy(BaseStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 4. Arrival Price 到達價策略
@@ -249,7 +242,6 @@ class ArrivalPrice(BaseStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 5. Implementation Shortfall Enhanced 增強版執行落差策略
@@ -312,7 +304,6 @@ class ImplementationShortfallEnhanced(BaseStrategy):
             return 0
         risk = capital * 0.025
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 註冊所有執行最終策略

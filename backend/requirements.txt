@@ -6,7 +6,7 @@ fastapi==0.135.2
 uvicorn[standard]==0.27.0
 
 # 數據庫
-sqlalchemy==2.0.25
+sqlalchemy==2.0.48
 
 # 數據處理
 <<<<<<< HEAD

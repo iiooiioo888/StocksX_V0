@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BreakoutStrategy
-
+from src.strategies.base_strategy import BreakoutStrategy
 
 # ============================================================================
 # 1. NR7/NR4 窄幅K線突破
@@ -70,7 +66,6 @@ class NR7NR4(BreakoutStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 2. 旗形/三角旗形
 # ============================================================================
@@ -114,7 +109,6 @@ class FlagPennant(BreakoutStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 3. 水平通道突破
@@ -163,7 +157,6 @@ class HorizontalChannel(BreakoutStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 4. W 底/M 頂突破
 # ============================================================================
@@ -207,7 +200,6 @@ class WMPattern(BreakoutStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 5. TTO Opening Range
@@ -256,7 +248,6 @@ class TTOOpeningRange(BreakoutStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2.5 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -268,7 +259,6 @@ BREAKOUT_COMPLETE_STRATEGIES = {
     'w_m_pattern': WMPattern,
     'tto_or': TTOOpeningRange,
 }
-
 
 # ============================================================================
 # 測試代碼

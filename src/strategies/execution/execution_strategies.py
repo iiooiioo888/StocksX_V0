@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. VWAP 執行
@@ -78,7 +74,6 @@ class VWAPExecution(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. TWAP 執行
 # ============================================================================
@@ -139,7 +134,6 @@ class TWAPExecution(BaseStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 3. 做市策略
 # ============================================================================
@@ -199,7 +193,6 @@ class MarketMaking(BaseStrategy):
         shares = int(position_value / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 4. Implementation Shortfall
 # ============================================================================
@@ -257,7 +250,6 @@ class ImplementationShortfall(BaseStrategy):
         shares = int(position_value / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -268,7 +260,6 @@ EXECUTION_STRATEGIES = {
     'market_making': MarketMaking,
     'implementation_shortfall': ImplementationShortfall,
 }
-
 
 # ============================================================================
 # 測試代碼

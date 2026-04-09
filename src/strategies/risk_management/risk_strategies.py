@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import RiskManagementStrategy
-
+from src.strategies.base_strategy import RiskManagementStrategy
 
 # ============================================================================
 # 1. 凱利公式倉位
@@ -93,7 +89,6 @@ class KellyCriterion(RiskManagementStrategy):
         shares = int(position_value / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 2. 固定分數法
 # ============================================================================
@@ -155,7 +150,6 @@ class FixedFractional(RiskManagementStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 3. 固定比率法
@@ -233,7 +227,6 @@ class FixedRatio(RiskManagementStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 4. Anti-Martingale（反馬丁格爾）
 # ============================================================================
@@ -302,7 +295,6 @@ class AntiMartingale(RiskManagementStrategy):
         
         shares = int(position_size / price)
         return max(0, shares)
-
 
 # ============================================================================
 # 5. CVaR/ES 倉位控制
@@ -380,7 +372,6 @@ class CVaRPosition(RiskManagementStrategy):
         
         return max(0, shares)
 
-
 # ============================================================================
 # 6. 最優停損
 # ============================================================================
@@ -452,7 +443,6 @@ class OptimalStop(RiskManagementStrategy):
         shares = int(position_size / price)
         return max(0, shares)
 
-
 # ============================================================================
 # 7. 尾部風險對沖
 # ============================================================================
@@ -519,7 +509,6 @@ class TailRiskHedge(RiskManagementStrategy):
         
         return max(0, shares)
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -533,7 +522,6 @@ RISK_STRATEGIES = {
     'optimal_stop': OptimalStop,
     'tail_hedge': TailRiskHedge,
 }
-
 
 # ============================================================================
 # 測試代碼

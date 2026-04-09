@@ -10,12 +10,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. 鑽石頂/底
@@ -63,7 +59,6 @@ class DiamondPattern(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 2. Elliott 波浪計數
 # ============================================================================
@@ -105,7 +100,6 @@ class ElliottWave(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 3. 諧波模式
@@ -150,7 +144,6 @@ class HarmonicPatterns(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 4. Wyckoff 方法
 # ============================================================================
@@ -194,7 +187,6 @@ class WyckoffMethod(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 5. Volume Profile 形態
@@ -244,7 +236,6 @@ class VolumeProfileShape(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -256,7 +247,6 @@ PATTERN_COMPLETE_STRATEGIES = {
     'wyckoff': WyckoffMethod,
     'volume_profile': VolumeProfileShape,
 }
-
 
 # ============================================================================
 # 測試代碼

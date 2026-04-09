@@ -11,11 +11,8 @@ import numpy as np
 from typing import Dict
 from datetime import datetime
 import warnings
+from src.strategies.base_strategy import BaseStrategy
 warnings.filterwarnings('ignore')
-
-import sys
-sys.path.append('..')
-from base_strategy import BaseStrategy
 
 
 # ============================================================================
@@ -70,7 +67,6 @@ class CointegrationPairOptimized(BaseStrategy):
             shares = 0
         
         return round(shares, 2)
-
 
 # ============================================================================
 # 2. Kalman 濾波優化
@@ -131,7 +127,6 @@ class KalmanFilterOptimized(BaseStrategy):
         
         return round(shares, 2)
 
-
 # ============================================================================
 # 3. 做市策略優化
 # ============================================================================
@@ -184,7 +179,6 @@ class MarketMakingOptimized(BaseStrategy):
         shares = position_value / price
         
         return round(shares, 2)
-
 
 # ============================================================================
 # 回測引擎
@@ -249,7 +243,6 @@ class StrategyBacktester:
             'final_value': portfolio_values.iloc[-1]
         }
 
-
 def load_data(start_date: str = '2020-01-01', end_date: str = '2023-12-31') -> pd.DataFrame:
     """加載歷史數據"""
     try:
@@ -288,7 +281,6 @@ def load_data(start_date: str = '2020-01-01', end_date: str = '2023-12-31') -> p
         
         return df
 
-
 def optimize_strategy(data: pd.DataFrame, strategy_class, param_grid: Dict, strategy_name: str):
     """優化單一策略"""
     from itertools import product
@@ -321,7 +313,6 @@ def optimize_strategy(data: pd.DataFrame, strategy_class, param_grid: Dict, stra
     print(f"  最大回撤：{best['max_drawdown']*100:.2f}%")
     
     return best, df_results
-
 
 def main():
     """主函數"""
@@ -424,7 +415,6 @@ def main():
     print("\n" + "=" * 60)
     print("批量優化完成！")
     print("=" * 60)
-
 
 if __name__ == '__main__':
     main()

@@ -16,11 +16,8 @@ import numpy as np
 from typing import Dict, List
 from datetime import datetime
 import warnings
+from src.strategies.base_strategy import RiskManagementStrategy
 warnings.filterwarnings('ignore')
-
-import sys
-sys.path.append('..')
-from base_strategy import RiskManagementStrategy
 
 
 # ============================================================================
@@ -85,7 +82,6 @@ class CVaRPositionOptimized(RiskManagementStrategy):
         
         return round(shares, 2)
 
-
 # ============================================================================
 # 2. 最優停損優化
 # ============================================================================
@@ -147,7 +143,6 @@ class OptimalStopOptimized(RiskManagementStrategy):
         
         return round(shares, 2)
 
-
 # ============================================================================
 # 3. Delta 對沖優化（簡化版）
 # ============================================================================
@@ -196,7 +191,6 @@ class DynamicDeltaHedgeOptimized(RiskManagementStrategy):
         shares = position_value / price
         
         return round(shares, 2)
-
 
 # ============================================================================
 # 回測引擎
@@ -261,7 +255,6 @@ class RiskStrategyBacktester:
             'final_value': portfolio_values.iloc[-1]
         }
 
-
 def load_data(start_date: str = '2020-01-01', end_date: str = '2023-12-31') -> pd.DataFrame:
     """加載歷史數據"""
     try:
@@ -300,7 +293,6 @@ def load_data(start_date: str = '2020-01-01', end_date: str = '2023-12-31') -> p
         
         return df
 
-
 def optimize_strategy(data: pd.DataFrame, strategy_class, param_grid: Dict, strategy_name: str):
     """優化單一策略"""
     from itertools import product
@@ -333,7 +325,6 @@ def optimize_strategy(data: pd.DataFrame, strategy_class, param_grid: Dict, stra
     print(f"  最大回撤：{best['max_drawdown']*100:.2f}%")
     
     return best, df_results
-
 
 def main():
     """主函數"""
@@ -434,7 +425,6 @@ def main():
     print("\n" + "=" * 60)
     print("批量優化完成！")
     print("=" * 60)
-
 
 if __name__ == '__main__':
     main()

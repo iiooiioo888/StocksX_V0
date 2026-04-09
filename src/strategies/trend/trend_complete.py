@@ -19,12 +19,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import TrendFollowingStrategy
-
+from src.strategies.base_strategy import TrendFollowingStrategy
 
 # ============================================================================
 # 1. SMA Cross 均線交叉策略
@@ -72,7 +68,6 @@ class SMACross(TrendFollowingStrategy):
         risk = capital * 0.02
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 2. EMA Cross 指數均線交叉策略
 # ============================================================================
@@ -118,7 +113,6 @@ class EMACross(TrendFollowingStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 3. MACD Cross 策略
@@ -177,7 +171,6 @@ class MACDCross(TrendFollowingStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 4. ADX 趨勢強度策略
@@ -247,7 +240,6 @@ class ADXStrategy(TrendFollowingStrategy):
         risk = capital * 0.02
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 5. Supertrend 策略
 # ============================================================================
@@ -316,7 +308,6 @@ class Supertrend(TrendFollowingStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 6. Parabolic SAR 策略
@@ -403,7 +394,6 @@ class ParabolicSAR(TrendFollowingStrategy):
         risk = capital * 0.02
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 7. Donchian Channel 策略
 # ============================================================================
@@ -452,7 +442,6 @@ class DonchianChannel(TrendFollowingStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 8. Dual Thrust 策略
@@ -513,7 +502,6 @@ class DualThrust(TrendFollowingStrategy):
         risk = capital * 0.02
         return risk / (price * volatility)
 
-
 # ============================================================================
 # 9. VWAP Reversion 策略
 # ============================================================================
@@ -565,7 +553,6 @@ class VWAPReversion(TrendFollowingStrategy):
             return 0
         risk = capital * 0.02
         return risk / (price * volatility)
-
 
 # ============================================================================
 # 註冊所有趨勢補全策略

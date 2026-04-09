@@ -10,12 +10,8 @@ AI/ML 策略補全 - Batch 2
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from base_strategy import BaseStrategy
-
+from src.strategies.base_strategy import BaseStrategy
 
 # ============================================================================
 # 1. Transformer 預測
@@ -67,7 +63,6 @@ class TransformerPredict(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 2. 集成學習投票
@@ -124,7 +119,6 @@ class EnsembleVoting(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 3. GAN 價格生成
 # ============================================================================
@@ -175,7 +169,6 @@ class GANPriceGeneration(BaseStrategy):
     def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
         if signal == 0: return 0
         return int(capital * 0.015 / (2.5 * volatility * price + 1e-10))
-
 
 # ============================================================================
 # 4. 在線學習
@@ -232,7 +225,6 @@ class OnlineLearning(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 5. 貝葉斯優化
 # ============================================================================
@@ -284,7 +276,6 @@ class BayesianOptimization(BaseStrategy):
         if signal == 0: return 0
         return int(capital * 0.02 / (2 * volatility * price + 1e-10))
 
-
 # ============================================================================
 # 策略註冊表
 # ============================================================================
@@ -296,7 +287,6 @@ AI_ML_COMPLETE_STRATEGIES = {
     'online_learning': OnlineLearning,
     'bayesian': BayesianOptimization,
 }
-
 
 # ============================================================================
 # 測試代碼
