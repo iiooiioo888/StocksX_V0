@@ -6,14 +6,10 @@ StocksX 基礎測試
 from __future__ import annotations
 
 import os
-import sys
 
 import pytest
 
 # 確保可以 import 專案模組
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
 # ════════════════════════════════════════════════════════════
 # 快取測試
 # ════════════════════════════════════════════════════════════
@@ -50,7 +46,6 @@ class TestCache:
 
         stats = cache_stats()
         assert stats["total_entries"] == 0
-
 
 # ════════════════════════════════════════════════════════════
 # 用戶資料庫測試
@@ -134,7 +129,6 @@ class TestUserDB:
         assert watchlist[0]["symbol"] == "ETH/USDT"
         assert "account_id" in watchlist[0]
 
-
 # ════════════════════════════════════════════════════════════
 # 回測策略測試
 # ════════════════════════════════════════════════════════════
@@ -174,7 +168,6 @@ class TestStrategies:
 
         signals = buy_and_hold(sample_rows)
         assert all(s == 1 for s in signals)
-
 
 # ════════════════════════════════════════════════════════════
 # 工具函數測試

@@ -1,10 +1,7 @@
 """registry.py 單元測試 — StrategyRegistry, register_strategy 裝飾器."""
 
 import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.registry import (
     StrategyEntry,
@@ -14,17 +11,13 @@ from src.core.registry import (
     registry,
 )
 
-
 # ─── 輔助：建立新註冊表以隔離測試 ───
-
 
 def _make_reg():
     """建立獨立的 StrategyRegistry 避免互相污染."""
     return StrategyRegistry()
 
-
 # ─── StrategyMeta 測試 ───
-
 
 class TestStrategyMeta:
     """測試 StrategyMeta 資料類別."""
@@ -37,9 +30,7 @@ class TestStrategyMeta:
         assert m.defaults == {}
         assert m.param_grid == {}
 
-
 # ─── StrategyRegistry 測試 ───
-
 
 class TestStrategyRegistry:
     """測試 StrategyRegistry 註冊與查詢."""
@@ -152,9 +143,7 @@ class TestStrategyRegistry:
         assert entry.meta.defaults == {"window": 20}
         assert entry.meta.param_grid == {"window": [10, 20, 30]}
 
-
 # ─── register_strategy 裝飾器測試 ───
-
 
 class TestRegisterStrategyDecorator:
     """測試 @register_strategy 裝飾器."""

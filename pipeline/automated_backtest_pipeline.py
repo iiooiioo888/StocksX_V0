@@ -17,7 +17,6 @@ StocksX 自動化回測 Pipeline
 """
 
 import os
-import sys
 import json
 import argparse
 import pandas as pd
@@ -29,11 +28,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 添加策略路徑
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'strategies'))
-
 from base_strategy import BaseStrategy
-
 
 class AutomatedBacktestPipeline:
     """自動化回測 Pipeline"""
@@ -367,7 +362,6 @@ class AutomatedBacktestPipeline:
         
         return md_file
 
-
 def main():
     """主函數"""
     parser = argparse.ArgumentParser(description='StocksX 自動化回測 Pipeline')
@@ -414,7 +408,6 @@ def main():
     print("\n" + "=" * 60)
     print("回測完成！")
     print("=" * 60)
-
 
 if __name__ == '__main__':
     main()

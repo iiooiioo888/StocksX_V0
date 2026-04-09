@@ -5,11 +5,9 @@ from __future__ import annotations
 import math
 import time
 
-
 # ════════════════════════════════════════════════════════════
 # Decorators
 # ════════════════════════════════════════════════════════════
-
 
 class TestRetry:
     def test_retry_succeeds_on_second_attempt(self):
@@ -41,7 +39,6 @@ class TestRetry:
         except RuntimeError:
             pass
 
-
 class TestTimed:
     def test_timed_returns_result(self):
         from src.utils.decorators import timed
@@ -51,7 +48,6 @@ class TestTimed:
             return a + b
 
         assert add(2, 3) == 5
-
 
 class TestCached:
     def test_cached_returns_same_value(self):
@@ -69,7 +65,6 @@ class TestCached:
         assert compute(5) == 10
         assert call_count == 1  # cached
 
-
 class TestSuppressErrors:
     def test_suppress_returns_default(self):
         from src.utils.decorators import suppress_errors
@@ -80,11 +75,9 @@ class TestSuppressErrors:
 
         assert fail() == 42
 
-
 # ════════════════════════════════════════════════════════════
 # Risk Analyzer
 # ════════════════════════════════════════════════════════════
-
 
 class TestRiskAnalyzer:
     def test_basic_metrics(self):
@@ -124,11 +117,9 @@ class TestRiskAnalyzer:
         corr = compute_correlation(a, b)
         assert -1 <= corr <= 1
 
-
 # ════════════════════════════════════════════════════════════
 # Config Validator
 # ════════════════════════════════════════════════════════════
-
 
 class TestConfigValidator:
     def test_validate_config_returns_report(self):

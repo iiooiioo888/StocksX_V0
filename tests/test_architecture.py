@@ -13,9 +13,6 @@ import os
 import time
 
 # 添加專案根目錄到路徑
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-
 def test_logger():
     """測試日誌系統"""
     print("\n" + "=" * 60)
@@ -83,7 +80,6 @@ def test_logger():
         traceback.print_exc()
         return False
 
-
 def test_rate_limiter():
     """測試 API 限流器"""
     print("\n" + "=" * 60)
@@ -142,7 +138,6 @@ def test_rate_limiter():
         traceback.print_exc()
         return False
 
-
 def test_health_check():
     """測試健康檢查"""
     print("\n" + "=" * 60)
@@ -195,7 +190,6 @@ def test_health_check():
         traceback.print_exc()
         return False
 
-
 def test_api_hub_integration():
     """測試 api_hub.py 整合"""
     print("\n" + "=" * 60)
@@ -235,7 +229,6 @@ def test_api_hub_integration():
         traceback.print_exc()
         return False
 
-
 def main():
     """執行所有測試"""
     print("\n" + "=" * 60)
@@ -269,7 +262,6 @@ def main():
     else:
         print(f"\n[WARNING] {total - passed} 個測試失敗，請檢查錯誤訊息。")
         return 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

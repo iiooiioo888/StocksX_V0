@@ -1,11 +1,8 @@
 """middleware.py 單元測試 — MiddlewarePipeline, LoggingMiddleware, TimingMiddleware, RateLimitMiddleware."""
 
 import os
-import sys
 import time
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.middleware import (
     LoggingMiddleware,
@@ -17,9 +14,7 @@ from src.core.middleware import (
     with_middleware,
 )
 
-
 # ─── Middleware 基類測試 ───
-
 
 class TestMiddleware:
     """測試 Middleware 基類預設行為."""
@@ -39,9 +34,7 @@ class TestMiddleware:
         mw = Middleware()
         assert mw.error({}, RuntimeError()) is None
 
-
 # ─── MiddlewarePipeline 測試 ───
-
 
 class TestMiddlewarePipeline:
     """測試 MiddlewarePipeline 管道."""
@@ -127,9 +120,7 @@ class TestMiddlewarePipeline:
         pipe.execute(lambda: None, custom_key="hello")
         assert received == ["hello"]
 
-
 # ─── LoggingMiddleware 測試 ───
-
 
 class TestLoggingMiddleware:
     """測試 LoggingMiddleware."""
@@ -154,9 +145,7 @@ class TestLoggingMiddleware:
         ctx = {"_start_time": time.monotonic()}
         assert mw.error(ctx, RuntimeError()) is None
 
-
 # ─── TimingMiddleware 測試 ───
-
 
 class TestTimingMiddleware:
     """測試 TimingMiddleware."""
@@ -172,9 +161,7 @@ class TestTimingMiddleware:
         assert "elapsed_ms" in ctx
         assert ctx["elapsed_ms"] >= 10  # 至少 10ms
 
-
 # ─── RateLimitMiddleware 測試 ───
-
 
 class TestRateLimitMiddleware:
     """測試 RateLimitMiddleware."""
@@ -199,9 +186,7 @@ class TestRateLimitMiddleware:
         # 應等待接近 0.1 秒
         assert elapsed >= 0.05  # 允許一些誤差
 
-
 # ─── with_middleware 裝飾器測試 ───
-
 
 class TestWithMiddleware:
     """測試 with_middleware 裝飾器."""
@@ -227,9 +212,7 @@ class TestWithMiddleware:
         assert "before" in called
         assert "after" in called
 
-
 # ─── RetryMiddleware 測試 ───
-
 
 class TestRetryMiddleware:
     """測試 RetryMiddleware 重試邏輯."""
@@ -367,9 +350,7 @@ class TestRetryMiddleware:
             pipe.execute(always_fail)
         assert call_count == 1
 
-
 # ─── MiddlewarePipeline 整合測試 ───
-
 
 class TestPipelineIntegration:
     """中間件管道組合測試."""

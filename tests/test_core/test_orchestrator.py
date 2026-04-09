@@ -1,20 +1,15 @@
 """test_orchestrator.py — Orchestrator 整合測試 (v5.1 增強版)."""
 
 import os
-import sys
 
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.orchestrator import Orchestrator, get_orchestrator
 from src.core.registry import StrategyRegistry, registry
 from src.core.backtest import BacktestConfig, BacktestReport
 from src.core.provider import DictCache
 
-
 # ─── Orchestrator 初始化測試 ───
-
 
 class TestOrchestratorInit:
     """測試 Orchestrator 初始化."""
@@ -60,9 +55,7 @@ class TestOrchestratorInit:
         b = get_orchestrator()
         assert a is b
 
-
 # ─── Orchestrator 數據獲取測試 ───
-
 
 class TestOrchestratorData:
     """測試數據獲取方法."""
@@ -92,9 +85,7 @@ class TestOrchestratorData:
         ob = orch.get_orderbook("NONEXISTENT/PAIR")
         assert ob is None
 
-
 # ─── Orchestrator 信號計算測試 ───
-
 
 class TestOrchestratorSignals:
     """測試信號計算."""
@@ -111,9 +102,7 @@ class TestOrchestratorSignals:
         signals = orch.compute_signals("BTC/USDT", "totally_fake_strategy")
         assert isinstance(signals, list)
 
-
 # ─── Orchestrator 回測測試 ───
-
 
 class TestOrchestratorBacktest:
     """測試回測方法."""
@@ -146,9 +135,7 @@ class TestOrchestratorBacktest:
         )
         assert isinstance(report, BacktestReport)
 
-
 # ─── BacktestConfig 測試 ───
-
 
 class TestBacktestConfig:
     """測試 BacktestConfig."""

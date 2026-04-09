@@ -5,12 +5,8 @@ Pytest 共用 fixtures
 from __future__ import annotations
 
 import os
-import sys
 
 import pytest
-
-# 確保可以 import 專案模組
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture(scope="session")

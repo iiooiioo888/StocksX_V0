@@ -1,17 +1,12 @@
 """test_container.py — DI Container 單元測試."""
 
 import os
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
 from src.core.container import Container
 
-
 # ─── Register / Get 測試 ───
-
 
 class TestRegisterAndGet:
     """測試基本註冊與獲取."""
@@ -59,9 +54,7 @@ class TestRegisterAndGet:
         b = c.get(MyService)
         assert a is b
 
-
 # ─── Has 測試 ───
-
 
 class TestHas:
     """測試 has 方法."""
@@ -95,9 +88,7 @@ class TestHas:
 
         assert c.has(Svc) is False
 
-
 # ─── Remove 測試 ───
-
 
 class TestRemove:
     """測試 remove 方法."""
@@ -125,9 +116,7 @@ class TestRemove:
         c.remove(Svc)
         assert c.has(Svc) is False
 
-
 # ─── Error 測試 ───
-
 
 class TestErrors:
     """測試錯誤處理."""

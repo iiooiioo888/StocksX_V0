@@ -1,16 +1,11 @@
 """signals.py 單元測試 — Signal, SignalBus, Direction."""
 
 import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.signals import Direction, Signal, SignalBus, get_signal_bus
 
-
 # ─── Direction 測試 ───
-
 
 class TestDirection:
     """測試 Direction 枚舉."""
@@ -26,9 +21,7 @@ class TestDirection:
         assert Direction.LONG == 1
         assert Direction.SHORT == -1
 
-
 # ─── Signal 測試 ───
-
 
 class TestSignal:
     """測試 Signal 資料類別."""
@@ -88,9 +81,7 @@ class TestSignal:
         s = Signal(symbol="X", strategy="Y", direction=Direction.FLAT)
         assert s.metadata == {}
 
-
 # ─── SignalBus 測試 ───
-
 
 class TestSignalBus:
     """測試 SignalBus 發布/訂閱."""
@@ -180,9 +171,7 @@ class TestSignalBus:
         bus.publish(sig)
         assert len(results) == 1
 
-
 # ─── get_signal_bus 單例測試 ───
-
 
 class TestGetSignalBus:
     """測試 get_signal_bus 單例."""

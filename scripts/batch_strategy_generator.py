@@ -161,7 +161,6 @@ STRATEGIES = {
     ],
 }
 
-
 def generate_strategy_file(category: str, batch: int = 1):
     """生成策略文件"""
     
@@ -238,7 +237,6 @@ from ..base_strategy import BaseStrategy, OscillatorStrategy, BreakoutStrategy, 
     print(f"   包含 {len(strategies[start_idx:start_idx+5])} 個策略")
     
     return output_file
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='批量生成策略')

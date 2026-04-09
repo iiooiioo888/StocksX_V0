@@ -18,8 +18,6 @@ import numpy as np
 from datetime import datetime
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 # 颜色输出
 class Colors:
     GREEN = '\033[0;32m'
@@ -42,7 +40,6 @@ def print_warning(text):
 def print_error(text):
     print(f"{Colors.RED}✗ {text}{Colors.NC}")
 
-
 # ════════════════════════════════════════════════════════════
 # 创建测试数据
 # ════════════════════════════════════════════════════════════
@@ -62,7 +59,6 @@ def create_test_data(n=500):
     }, index=dates)
     
     return df
-
 
 # ════════════════════════════════════════════════════════════
 # 测试 1: 特征工程
@@ -108,7 +104,6 @@ def test_feature_engineering():
         traceback.print_exc()
         return False
 
-
 # ════════════════════════════════════════════════════════════
 # 测试 2: LSTM 预测器
 # ════════════════════════════════════════════════════════════
@@ -151,7 +146,6 @@ def test_lstm_predictor():
     except Exception as e:
         print_warning(f"LSTM 测试跳过（可能需要安装 TensorFlow）: {e}")
         return False
-
 
 # ════════════════════════════════════════════════════════════
 # 测试 3: NLP 情绪分析
@@ -218,7 +212,6 @@ def test_sentiment_analyzer():
         print_warning(f"NLP 测试跳过（需要安装 transformers）: {e}")
         return False
 
-
 # ════════════════════════════════════════════════════════════
 # 测试 4: 配对交易
 # ════════════════════════════════════════════════════════════
@@ -277,7 +270,6 @@ def test_pairs_trading():
         import traceback
         traceback.print_exc()
         return False
-
 
 # ════════════════════════════════════════════════════════════
 # 测试 5: 多因子策略
@@ -341,7 +333,6 @@ def test_multi_factor():
         traceback.print_exc()
         return False
 
-
 # ════════════════════════════════════════════════════════════
 # 测试 6: 强化学习环境
 # ════════════════════════════════════════════════════════════
@@ -400,7 +391,6 @@ def test_rl_env():
         traceback.print_exc()
         return False
 
-
 # ════════════════════════════════════════════════════════════
 # 测试 7: 策略集成管理器
 # ════════════════════════════════════════════════════════════
@@ -428,7 +418,6 @@ def test_advanced_strategies():
     except Exception as e:
         print_warning(f"策略集成测试跳过（部分依赖可能未安装）: {e}")
         return False
-
 
 # ════════════════════════════════════════════════════════════
 # 主函数
@@ -469,7 +458,6 @@ def main():
         print_warning("⚠ 部分测试失败，请检查依赖安装")
     
     return passed == total
-
 
 if __name__ == "__main__":
     success = main()

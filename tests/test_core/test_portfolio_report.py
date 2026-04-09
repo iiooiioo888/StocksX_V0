@@ -6,11 +6,9 @@ import math
 import os
 import tempfile
 
-
 # ════════════════════════════════════════════════════════════
 # Portfolio Analyzer
 # ════════════════════════════════════════════════════════════
-
 
 class TestPortfolioAnalyzer:
     def _make_returns(self):
@@ -85,11 +83,9 @@ class TestPortfolioAnalyzer:
         assert len(frontier) == 10
         assert all("return" in p and "volatility" in p for p in frontier)
 
-
 # ════════════════════════════════════════════════════════════
 # Report Generator
 # ════════════════════════════════════════════════════════════
-
 
 class TestReportGenerator:
     def test_html_generation(self):

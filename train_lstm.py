@@ -4,19 +4,15 @@ LSTM 模型训练脚本
 
 使用历史数据训练 LSTM 价格预测模型
 """
-import sys
 import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from src.strategies.ml_strategies.lstm_predictor import LSTMPredictor
 from src.strategies.ml_strategies.feature_engineering import FeatureEngineer
 from src.data.service import DataService  # 假设存在数据服务
-
 
 def load_data(symbol: str = "BTC/USDT", days: int = 365) -> pd.DataFrame:
     """
@@ -78,7 +74,6 @@ def load_data(symbol: str = "BTC/USDT", days: int = 365) -> pd.DataFrame:
     }, index=dates)
     
     return df
-
 
 def train_model(
     symbol: str = "BTC/USDT",
@@ -166,7 +161,6 @@ def train_model(
         traceback.print_exc()
         return None
 
-
 def main():
     """主函数"""
     import argparse
@@ -191,7 +185,6 @@ def main():
         batch_size=args.batch_size,
         output_path=args.output
     )
-
 
 if __name__ == "__main__":
     main()

@@ -1,17 +1,12 @@
 """cache_manager.py 單元測試 — CacheNamespace, CacheManager, CacheStats."""
 
 import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.provider import DictCache
 from src.core.cache_manager import CacheManager, CacheNamespace, CacheStats, get_cache_manager
 
-
 # ─── CacheStats 測試 ───
-
 
 class TestCacheStats:
     """測試 CacheStats 統計."""
@@ -50,9 +45,7 @@ class TestCacheStats:
         assert d["evictions"] == 2
         assert d["hit_rate"] == pytest.approx(0.6667, abs=0.001)
 
-
 # ─── CacheNamespace 測試 ───
-
 
 class TestCacheNamespace:
     """測試 CacheNamespace 命名空間快取."""
@@ -126,9 +119,7 @@ class TestCacheNamespace:
         assert ns1.get("key") == "value1"
         assert ns2.get("key") == "value2"
 
-
 # ─── CacheManager 測試 ───
-
 
 class TestCacheManager:
     """測試 CacheManager 統一快取管理."""
@@ -173,9 +164,7 @@ class TestCacheManager:
         assert cm.price.get("BTC") is None
         assert cm.kline.get("ETH:1h") is None
 
-
 # ─── get_cache_manager 單例測試 ───
-
 
 class TestGetCacheManager:
     """測試 get_cache_manager 單例."""

@@ -1,15 +1,11 @@
 """test_compat.py — compat 模組測試（新舊架構橋接）."""
 
 import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
 
 from src.compat import BacktestResult, report_to_result, run_single_strategy_new
 from src.core.backtest import BacktestEngine, BacktestConfig, BacktestReport
-
 
 class TestBacktestResult:
     """BacktestResult 數據類測試."""
@@ -28,7 +24,6 @@ class TestBacktestResult:
         )
         assert len(result.equity_curve) == 1
         assert result.metrics["total_return_pct"] == 5.0
-
 
 class TestReportToResult:
     """report_to_result 轉換測試."""
@@ -63,7 +58,6 @@ class TestReportToResult:
         assert len(result.trades) == 1
         assert result.trades[0]["side"] == 1
         assert result.metrics["total_return_pct"] == 10.0
-
 
 class TestRunSingleStrategyNew:
     """run_single_strategy_new 整合測試."""

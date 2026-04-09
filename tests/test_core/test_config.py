@@ -1,10 +1,7 @@
 """config.py 單元測試 — Settings, AppSettings, CacheSettings, BacktestDefaults."""
 
 import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.config import (
     AppSettings,
@@ -20,9 +17,7 @@ from src.core.config import (
     get_settings,
 )
 
-
 # ─── 環境變數讀取輔助函式測試 ───
-
 
 class TestEnvHelpers:
     """測試 _env, _env_bool, _env_int, _env_float 輔助函式."""
@@ -90,9 +85,7 @@ class TestEnvHelpers:
         os.environ.pop("__TEST_FLOAT__", None)
         assert _env_float("__TEST_FLOAT__", 2.5) == pytest.approx(2.5)
 
-
 # ─── AppSettings 測試 ───
-
 
 class TestAppSettings:
     """測試 AppSettings 資料類別."""
@@ -128,9 +121,7 @@ class TestAppSettings:
         with pytest.raises(AttributeError):
             s.env = "test"
 
-
 # ─── CacheSettings 測試 ───
-
 
 class TestCacheSettings:
     """測試 CacheSettings 資料類別."""
@@ -152,9 +143,7 @@ class TestCacheSettings:
         assert s.price_ttl == 5
         assert s.kline_ttl == 600
 
-
 # ─── BacktestDefaults 測試 ───
-
 
 class TestBacktestDefaults:
     """測試 BacktestDefaults 資料類別."""
@@ -175,9 +164,7 @@ class TestBacktestDefaults:
         assert b.initial_equity == pytest.approx(50000.0)
         assert b.leverage == pytest.approx(5.0)
 
-
 # ─── Settings 整合測試 ───
-
 
 class TestSettings:
     """測試統一 Settings 入口."""
@@ -201,9 +188,7 @@ class TestSettings:
         s = Settings()
         assert str(s.cache_dir) == "cache"
 
-
 # ─── get_settings 單例測試 ───
-
 
 class TestGetSettings:
     """測試 get_settings 單例模式."""

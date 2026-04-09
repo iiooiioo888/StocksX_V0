@@ -77,11 +77,11 @@
 - **狀態**: ⏳ 待處理
 
 ### ISSUE-013: `backend/main.py` FastAPI 服務未被使用 🟢 低
-- **檔案**: `backend/main.py`, `Dockerfile`
+- **檔案**: ~~`backend/main.py`~~ (已刪除)
 - **問題**: `backend/` 目錄含完整 FastAPI 後端（main.py、models.py、schemas.py），但 Dockerfile 啟動的是 Streamlit（`app.py`），docker-compose.yml 也無 backend 服務
 - **影響**: backend 代碼實際上未被部署，與 `src/websocket_server.py` 功能重疊（兩者都是 FastAPI+WebSocket）
-- **建議修復**: 明確選用 `backend/main.py` 或 `src/websocket_server.py` 作為 API 層，合併或移除冗餘代碼
-- **狀態**: ⏳ 待處理
+- **解決方案**: 整個 `backend/` 目錄已刪除（含未解決的 merge conflicts），WebSocket 服務統一由 `src/websocket_server.py` 提供
+- **狀態**: ✅ 已修復 (2026-04-10) — 刪除 `backend/` 死代碼（8 文件，1655 行），含未解決 git merge conflicts 的 requirements.txt
 
 ### ISSUE-014: `src/core/alerts.py` AlertChannel 為空殼實現 🟢 低
 - **檔案**: `src/core/alerts.py`（line 79-82）

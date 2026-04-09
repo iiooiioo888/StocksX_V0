@@ -1,14 +1,10 @@
 """test_repository.py — SqliteBacktestRepository CRUD 單元測試."""
 
 import os
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
 from src.core.repository import BacktestRecord, SqliteBacktestRepository
-
 
 def _make_record(**overrides) -> BacktestRecord:
     """建立測試用 BacktestRecord."""
@@ -30,9 +26,7 @@ def _make_record(**overrides) -> BacktestRecord:
     defaults.update(overrides)
     return BacktestRecord(**defaults)
 
-
 # ─── Save / Create 測試 ───
-
 
 class TestSave:
     """測試 save (建立記錄)."""
@@ -51,9 +45,7 @@ class TestSave:
         assert record is not None
         assert record.created_at != ""
 
-
 # ─── Read / Find 測試 ───
-
 
 class TestFind:
     """測試查詢方法."""
@@ -102,9 +94,7 @@ class TestFind:
         records = repo.find_by_symbol("BTC/USDT:USDT")
         assert len(records) == 2
 
-
 # ─── Delete 測試 ───
-
 
 class TestDelete:
     """測試刪除方法."""
@@ -121,9 +111,7 @@ class TestDelete:
         repo = SqliteBacktestRepository(tmp_db)
         assert repo.delete(99999) is False
 
-
 # ─── Count 測試 ───
-
 
 class TestCount:
     """測試 count 方法."""
@@ -143,9 +131,7 @@ class TestCount:
         repo.save(_make_record(user_id=2))
         assert repo.count(user_id=1) == 2
 
-
 # ─── BacktestRecord 測試 ───
-
 
 class TestBacktestRecord:
     """測試 BacktestRecord 資料類別."""

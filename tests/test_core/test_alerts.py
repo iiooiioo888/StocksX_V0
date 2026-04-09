@@ -1,12 +1,9 @@
 """test_alerts.py — AlertManager 單元測試."""
 
 import os
-import sys
 import time
 
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.alerts import (
     Alert,
@@ -18,9 +15,7 @@ from src.core.alerts import (
     create_default_rules,
 )
 
-
 # ─── Alert 測試 ───
-
 
 class TestAlert:
     """測試 Alert 資料類別."""
@@ -43,9 +38,7 @@ class TestAlert:
         assert d["severity"] == "warning"
         assert "time" in d
 
-
 # ─── AlertRule 測試 ───
-
 
 class TestAlertRule:
     """測試 AlertRule."""
@@ -60,9 +53,7 @@ class TestAlertRule:
         rule = AlertRule(name="test", condition=lambda m: True)
         assert rule.enabled is True
 
-
 # ─── AlertManager 測試 ───
-
 
 class TestAlertManager:
     """測試 AlertManager."""
@@ -171,9 +162,7 @@ class TestAlertManager:
         history = mgr.history(limit=3)
         assert len(history) == 3
 
-
 # ─── AlertChannel 測試 ───
-
 
 class TestAlertChannel:
     """測試通知渠道."""
@@ -201,9 +190,7 @@ class TestAlertChannel:
         assert len(sent) == 1
         assert sent[0].rule_name == "t"
 
-
 # ─── 預設規則測試 ───
-
 
 class TestDefaultRules:
     """測試預設告警規則."""

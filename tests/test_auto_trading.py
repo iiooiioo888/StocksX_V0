@@ -38,7 +38,6 @@ TEST_CONFIG = {
     "initial_equity": 10000,
 }
 
-
 def test_executor():
     """測試交易執行器"""
     print("\n" + "=" * 60)
@@ -92,7 +91,6 @@ def test_executor():
     except Exception as e:
         print(f"❌ 測試失敗：{e}")
         return False
-
 
 def test_risk_manager():
     """測試風險管理器"""
@@ -156,7 +154,6 @@ def test_risk_manager():
         print(f"❌ 測試失敗：{e}")
         return False
 
-
 def test_auto_trader():
     """測試自動交易器"""
     print("\n" + "=" * 60)
@@ -194,7 +191,6 @@ def test_auto_trader():
         print(f"❌ 測試失敗：{e}")
         return False
 
-
 def test_worker():
     """測試 Celery 任務"""
     print("\n" + "=" * 60)
@@ -230,7 +226,6 @@ def test_worker():
     except Exception as e:
         print(f"❌ 測試失敗：{e}")
         return False
-
 
 def main():
     """主測試函數"""
@@ -283,7 +278,6 @@ def main():
         print("\n⚠️ 部分測試失敗，請檢查錯誤訊息")
 
     return passed == total
-
 
 if __name__ == "__main__":
     success = main()

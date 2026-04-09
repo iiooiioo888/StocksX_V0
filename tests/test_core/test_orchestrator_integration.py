@@ -1,16 +1,12 @@
 """test_orchestrator_integration.py — Orchestrator 與 DI Container 整合測試."""
 
 import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
 
 from src.core.config import Settings
 from src.core.container import Container
 from src.core.provider import CacheBackend, DictCache
-
 
 class TestDIContainerIntegration:
     """DI Container 與核心組件的整合測試."""
@@ -62,7 +58,6 @@ class TestDIContainerIntegration:
         c.register_factory(Settings, Settings)
         assert c.has(Settings)
 
-
 class TestOrchestratorMocked:
     """使用 mock 測試 Orchestrator 邏輯."""
 
@@ -84,7 +79,6 @@ class TestOrchestratorMocked:
         orch = Orchestrator(cache=DictCache())
         result = orch.fetch_ohlcv("NONEXISTENT/PAIR", "1h", limit=10)
         assert isinstance(result, list)
-
 
 class TestBacktestEngineEdgeCases:
     """回測引擎邊界條件測試."""

@@ -4,18 +4,14 @@
 並示範緩存優先讀取。
 """
 import logging
-import sys
 import time
 from pathlib import Path
 
 # 專案根目錄加入 path
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
 from src.data.crypto import CryptoDataFetcher
 
 logging.basicConfig(level=logging.INFO)
-
 
 def main():
 
@@ -35,7 +31,6 @@ def main():
     print("從緩存讀取並補齊缺口...")
     rows = fetcher.get_ohlcv(symbol, "1h", since_ms, until_ms, fill_gaps=True, exclude_outliers=False)
     print(f"共取得 {len(rows)} 根 K 線（含 FFill）")
-
 
 if __name__ == "__main__":
     main()

@@ -1,15 +1,11 @@
 """test_tasks.py — ThreadTaskQueue 單元測試."""
 
 import os
-import sys
 import time
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
 from src.core.tasks import TaskInfo, TaskStatus, ThreadTaskQueue
-
 
 @pytest.fixture
 def queue():
@@ -18,9 +14,7 @@ def queue():
     yield q
     q.shutdown(wait=True)
 
-
 # ─── Submit 測試 ───
-
 
 class TestSubmit:
     """測試任務提交."""
@@ -41,9 +35,7 @@ class TestSubmit:
         result = queue.result(task_id, timeout=5)
         assert result == 7
 
-
 # ─── Status 測試 ───
-
 
 class TestStatus:
     """測試任務狀態查詢."""
@@ -89,9 +81,7 @@ class TestStatus:
         """查詢不存在的任務應返回 None."""
         assert queue.status("nonexistent") is None
 
-
 # ─── Result 測試 ───
-
 
 class TestResult:
     """測試結果取得."""
@@ -108,9 +98,7 @@ class TestResult:
         with pytest.raises((TimeoutError, Exception)):
             queue.result(task_id, timeout=0.1)
 
-
 # ─── Cancel 測試 ───
-
 
 class TestCancel:
     """測試取消任務."""
@@ -127,9 +115,7 @@ class TestCancel:
         # cancel 返回 True/False 取決於是否已開始執行
         queue.cancel(last.task_id)
 
-
 # ─── List Tasks 測試 ───
-
 
 class TestListTasks:
     """測試任務列表."""
@@ -151,9 +137,7 @@ class TestListTasks:
         tasks = queue.list_tasks(limit=2)
         assert len(tasks) == 2
 
-
 # ─── TaskInfo 測試 ───
-
 
 class TestTaskInfo:
     """測試 TaskInfo 資料類別."""

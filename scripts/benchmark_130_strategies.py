@@ -7,15 +7,11 @@
 創建日期：2026-03-22
 """
 
-import sys
 import time
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-
 
 def generate_test_data(n=300):
     """生成測試數據"""
@@ -30,7 +26,6 @@ def generate_test_data(n=300):
         'close': price,
         'volume': np.random.uniform(1e6, 1e7, n)
     }, index=pd.date_range('2025-01-01', periods=n, freq='D'))
-
 
 def benchmark_strategies(strategies, data, iterations=3):
     """基準測試"""
@@ -59,7 +54,6 @@ def benchmark_strategies(strategies, data, iterations=3):
             })
     
     return results
-
 
 def main():
     print("=" * 80)
@@ -200,7 +194,6 @@ def main():
     print("\n" + "=" * 80)
     print("✅ 性能基準測試完成！")
     print("=" * 80)
-
 
 if __name__ == '__main__':
     main()

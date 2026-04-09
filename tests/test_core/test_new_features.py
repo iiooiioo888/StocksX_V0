@@ -9,11 +9,9 @@ import math
 import numpy as np
 import pytest
 
-
 # ════════════════════════════════════════════════════════════
 # 向量化策略測試
 # ════════════════════════════════════════════════════════════
-
 
 class TestVectorizedStrategies:
     """測試向量化策略引擎."""
@@ -112,11 +110,9 @@ class TestVectorizedStrategies:
         unknown = get_vectorized_signal("unknown_strategy", sample_rows)
         assert unknown == [0] * len(sample_rows)
 
-
 # ════════════════════════════════════════════════════════════
 # 投資組合優化測試
 # ════════════════════════════════════════════════════════════
-
 
 class TestPortfolioOptimizer:
     """測試投資組合優化器."""
@@ -212,11 +208,9 @@ class TestPortfolioOptimizer:
         result = opt.equal_weight()
         assert result.weights["SPY"] == 1.0
 
-
 # ════════════════════════════════════════════════════════════
 # 因子模型測試
 # ════════════════════════════════════════════════════════════
-
 
 class TestFactorModel:
     """測試因子模型."""
@@ -301,11 +295,9 @@ class TestFactorModel:
         assert "volatility_20d" in features
         assert len(features["momentum_5d"]) == 100
 
-
 # ════════════════════════════════════════════════════════════
 # 市場狀態檢測測試
 # ════════════════════════════════════════════════════════════
-
 
 class TestRegimeDetection:
     """測試市場狀態檢測."""
@@ -376,11 +368,9 @@ class TestRegimeDetection:
         result = RegimeDetector(returns).detect()
         assert result.current_regime is not None
 
-
 # ════════════════════════════════════════════════════════════
 # 風險分析測試
 # ════════════════════════════════════════════════════════════
-
 
 class TestRiskAnalyzer:
     """測試優化後的風險分析器."""

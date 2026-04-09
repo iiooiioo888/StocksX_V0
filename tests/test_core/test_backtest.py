@@ -1,10 +1,7 @@
 """backtest.py 單元測試 — BacktestEngine, TradeRecord, compute_performance_metrics."""
 
 import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.backtest import (
     BacktestConfig,
@@ -15,9 +12,7 @@ from src.core.backtest import (
 )
 from src.core.pipeline import Pipeline
 
-
 # ─── TradeRecord 測試 ───
-
 
 class TestTradeRecord:
     """測試 TradeRecord 資料類別."""
@@ -65,9 +60,7 @@ class TestTradeRecord:
         assert d["profit"] == pytest.approx(100.0)
         assert d["fee"] == pytest.approx(0.0)
 
-
 # ─── BacktestReport 測試 ───
-
 
 class TestBacktestReport:
     """測試 BacktestReport 資料類別."""
@@ -98,9 +91,7 @@ class TestBacktestReport:
         assert d["trades"][0]["entry_price"] == pytest.approx(100.0)
         assert d["metrics"]["total_return_pct"] == 10
 
-
 # ─── BacktestEngine.run 測試 ───
-
 
 class TestBacktestEngine:
     """測試 BacktestEngine 回測引擎."""
@@ -189,9 +180,7 @@ class TestBacktestEngine:
         assert "max_drawdown_pct" in report.metrics
         assert "num_trades" in report.metrics
 
-
 # ─── compute_performance_metrics 測試 ───
-
 
 class TestComputePerformanceMetrics:
     """測試 compute_performance_metrics 函式."""
@@ -265,9 +254,7 @@ class TestComputePerformanceMetrics:
         result = compute_performance_metrics(curve, [], 10000, 100, 100)
         assert result["annual_return_pct"] == pytest.approx(0.0)
 
-
 # ─── BacktestEngine._close_position 測試 ───
-
 
 class TestClosePosition:
     """測試 _close_position 輔助方法."""
@@ -378,9 +365,7 @@ class TestClosePosition:
         )
         assert trade.exit_reason == "tp"
 
-
 # ─── BacktestEngine TP/SL 測試 ───
-
 
 class TestBacktestTPSL:
     """測試止盈止損邏輯."""

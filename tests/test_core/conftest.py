@@ -1,13 +1,9 @@
 """conftest.py — 共用 fixtures."""
 
 import os
-import sys
 import tempfile
 
 import pytest
-
-# 確保 src 在路徑中
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 @pytest.fixture

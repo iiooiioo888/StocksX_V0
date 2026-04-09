@@ -17,9 +17,6 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-
-
 def generate_test_data(n=300):
     """生成測試數據"""
     np.random.seed(42)
@@ -41,7 +38,6 @@ def generate_test_data(n=300):
     }, index=pd.date_range('2025-01-01', periods=n, freq='D'))
     
     return data
-
 
 def validate_strategy_instance(name, strategy, data):
     """驗證單一策略實例"""
@@ -83,7 +79,6 @@ def validate_strategy_instance(name, strategy, data):
             'status': '❌',
             'error': str(e)
         }
-
 
 def main():
     print("=" * 80)
@@ -308,7 +303,6 @@ def main():
     print("=" * 80)
     
     return 0 if fail == 0 else 1
-
 
 if __name__ == '__main__':
     sys.exit(main())

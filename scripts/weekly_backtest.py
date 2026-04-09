@@ -23,8 +23,6 @@ import yfinance as yf
 
 # ── 添加項目路徑 ──
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 # ── 使用 importlib 直接加載，避免 __init__.py 循環依賴 ──
 def _load_module(name: str, filepath: str):
     spec = importlib.util.spec_from_file_location(name, filepath)
@@ -53,7 +51,6 @@ mean_reversion_zscore = _strategies_mod.mean_reversion_zscore
 momentum_roc = _strategies_mod.momentum_roc
 keltner_channel = _strategies_mod.keltner_channel
 
-
 # ════════════════════════════════════════════════════════════
 # 獨立回測引擎（避免 import 依賴）
 # ════════════════════════════════════════════════════════════
@@ -61,7 +58,6 @@ keltner_channel = _strategies_mod.keltner_channel
 import math
 from dataclasses import dataclass, field
 from typing import Any
-
 
 @dataclass(frozen=True, slots=True)
 class BacktestConfig:
@@ -71,7 +67,6 @@ class BacktestConfig:
     slippage_pct: float = 0.05
     take_profit_pct: float | None = 10.0
     stop_loss_pct: float | None = 5.0
-
 
 @dataclass(slots=True)
 class TradeRecord:
@@ -94,7 +89,6 @@ class TradeRecord:
             "fee": round(self.fee, 2), "liquidation": self.liquidation,
             "exit_reason": self.exit_reason,
         }
-
 
 def compute_performance_metrics(equity_curve, trades, initial_equity, since_ms, until_ms, leverage=1.0):
     if not equity_curve:
@@ -163,7 +157,6 @@ def compute_performance_metrics(equity_curve, trades, initial_equity, since_ms, 
         "avg_loss": round(sum(t.profit for t in loss_trades) / len(loss_trades), 2) if loss_trades else 0,
         "period_bars": len(equity_curve),
     }
-
 
 class BacktestEngine:
     def __init__(self, config: BacktestConfig | None = None):
@@ -252,7 +245,6 @@ class BacktestEngine:
         metrics["total_fees"] = round(total_fees, 2)
         return type("R", (), {"equity_curve": equity_curve, "trades": trades, "metrics": metrics, "error": None})()
 
-
 # ════════════════════════════════════════════════════════════
 # 策略分類目錄
 # ════════════════════════════════════════════════════════════
@@ -297,7 +289,6 @@ DEFAULT_SYMBOLS = [
     "TSM",        # 台積電 ADR
 ]
 
-
 # ════════════════════════════════════════════════════════════
 # 數據下載
 # ════════════════════════════════════════════════════════════
@@ -327,7 +318,6 @@ def fetch_market_data(symbol: str, period: str = "1y") -> list[dict] | None:
         print(f"  ❌ {symbol}: 下載失敗 — {e}")
         return None
 
-
 # ════════════════════════════════════════════════════════════
 # 回測執行
 # ════════════════════════════════════════════════════════════
@@ -354,7 +344,6 @@ def run_single_backtest(
 
     report = engine.run(rows, signals, since_ms, until_ms)
     return report.metrics if report.metrics else {"error": report.error or "未知錯誤"}
-
 
 def run_all_backtests(symbols: list[str], period: str = "1y") -> dict:
     """對所有策略 × 所有標的執行回測。"""
@@ -414,7 +403,6 @@ def run_all_backtests(symbols: list[str], period: str = "1y") -> dict:
         print()
 
     return all_results
-
 
 # ════════════════════════════════════════════════════════════
 # 報告生成
@@ -525,7 +513,6 @@ def generate_report(results: dict, output_dir: Path) -> tuple[Path, Path]:
 
     return json_path, md_path
 
-
 # ════════════════════════════════════════════════════════════
 # 主流程
 # ════════════════════════════════════════════════════════════
@@ -586,7 +573,6 @@ def main():
 
     print(f"{'='*60}")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

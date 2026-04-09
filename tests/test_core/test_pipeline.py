@@ -1,16 +1,11 @@
 """pipeline.py 單元測試 — Pipeline, PipelineStep, ohlcv_clean_pipeline."""
 
 import os
-import sys
 import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.core.pipeline import Pipeline, PipelineStep, ohlcv_clean_pipeline
 
-
 # ─── PipelineStep 測試 ───
-
 
 class TestPipelineStep:
     """測試 PipelineStep 基本功能."""
@@ -39,9 +34,7 @@ class TestPipelineStep:
         step = PipelineStep(func=lambda x: x, skip_on_error=True)
         assert step.skip_on_error is True
 
-
 # ─── Pipeline 測試 ───
-
 
 class TestPipeline:
     """測試 Pipeline 管道功能."""
@@ -102,9 +95,7 @@ class TestPipeline:
         p = Pipeline(name="my_pipe")
         assert p.name == "my_pipe"
 
-
 # ─── ohlcv_clean_pipeline 測試 ───
-
 
 class TestOhlcvCleanPipeline:
     """測試 OHLCV 資料清洗管道."""
