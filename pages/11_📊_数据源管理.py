@@ -5,16 +5,12 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
-st.set_page_config(
-    page_title="数据源管理 - StocksX",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="数据源管理 - StocksX", page_icon="📊", layout="wide")
 
 # 自定义 CSS
-st.markdown("""
+st.markdown(
+    """
 <style>
     .data-source-card {
         background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
@@ -35,7 +31,9 @@ st.markdown("""
     .status-inactive { background: rgba(107, 114, 128, 0.2); color: #6b7280; }
     .status-error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ════════════════════════════════════════════════════════════
 # 侧边栏配置
@@ -45,8 +43,7 @@ st.sidebar.title("⚙️ 数据源配置")
 
 # 选择数据源类别
 category = st.sidebar.selectbox(
-    "选择数据源类别",
-    ["📈 传统市场", "₿ 加密货币", "📊 宏观经济", "🔗 链上数据", "📰 新闻舆情", "📱 社交媒体"]
+    "选择数据源类别", ["📈 传统市场", "₿ 加密货币", "📊 宏观经济", "🔗 链上数据", "📰 新闻舆情", "📱 社交媒体"]
 )
 
 # API Key 配置
@@ -71,11 +68,7 @@ DATA_SOURCES = {
             "update_freq": "实时（5 秒延迟）",
             "coverage": "台股 2000+ 支股票",
             "api_required": False,
-            "config": {
-                "base_url": "https://www.twse.com.tw",
-                "timeout": 10,
-                "cache_ttl": 60
-            }
+            "config": {"base_url": "https://www.twse.com.tw", "timeout": 10, "cache_ttl": 60},
         },
         {
             "name": "Yahoo Finance",
@@ -85,10 +78,7 @@ DATA_SOURCES = {
             "update_freq": "实时（15 分钟延迟）",
             "coverage": "全球 100,000+ 标的",
             "api_required": False,
-            "config": {
-                "base_url": "https://finance.yahoo.com",
-                "timeout": 15
-            }
+            "config": {"base_url": "https://finance.yahoo.com", "timeout": 15},
         },
         {
             "name": "Alpha Vantage",
@@ -98,11 +88,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "美股 8,000+ 支股票",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://www.alphavantage.co",
-                "rate_limit": "5 次/分钟"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://www.alphavantage.co", "rate_limit": "5 次/分钟"},
         },
         {
             "name": "IEX Cloud",
@@ -112,10 +98,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "美股完整数据",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://cloud.iexapis.com"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://cloud.iexapis.com"},
         },
     ],
     "₿ 加密货币": [
@@ -127,10 +110,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "10,000+ 交易对",
             "api_required": False,
-            "config": {
-                "exchanges": ["binance", "okx", "bybit", "gate"],
-                "rate_limit": True
-            }
+            "config": {"exchanges": ["binance", "okx", "bybit", "gate"], "rate_limit": True},
         },
         {
             "name": "CoinGecko",
@@ -140,10 +120,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "10,000+ 币种",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://api.coingecko.com"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://api.coingecko.com"},
         },
         {
             "name": "Glassnode",
@@ -153,10 +130,7 @@ DATA_SOURCES = {
             "update_freq": "每小时",
             "coverage": "BTC/ETH 链上指标",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://api.glassnode.com"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://api.glassnode.com"},
         },
     ],
     "📊 宏观经济": [
@@ -168,10 +142,7 @@ DATA_SOURCES = {
             "update_freq": "每日",
             "coverage": "800,000+ 经济指标",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://api.stlouisfed.org"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://api.stlouisfed.org"},
         },
         {
             "name": "Trading Economics",
@@ -181,10 +152,7 @@ DATA_SOURCES = {
             "update_freq": "每日",
             "coverage": "196 个国家经济数据",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://api.tradingeconomics.com"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://api.tradingeconomics.com"},
         },
     ],
     "🔗 链上数据": [
@@ -196,10 +164,7 @@ DATA_SOURCES = {
             "update_freq": "每小时",
             "coverage": "以太坊为主",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://api.dune.com"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://api.dune.com"},
         },
         {
             "name": "Uniswap Subgraph",
@@ -209,9 +174,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "Uniswap V2/V3",
             "api_required": False,
-            "config": {
-                "endpoint": "https://api.thegraph.com/subgraphs/name/uniswap"
-            }
+            "config": {"endpoint": "https://api.thegraph.com/subgraphs/name/uniswap"},
         },
     ],
     "📰 新闻舆情": [
@@ -223,9 +186,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "全球加密新闻",
             "api_required": False,
-            "config": {
-                "rss_url": "https://www.coindesk.com/arc/outboundfeeds/rss/"
-            }
+            "config": {"rss_url": "https://www.coindesk.com/arc/outboundfeeds/rss/"},
         },
         {
             "name": "NewsAPI",
@@ -235,10 +196,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "50,000+ 新闻源",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "base_url": "https://newsapi.org"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "base_url": "https://newsapi.org"},
         },
     ],
     "📱 社交媒体": [
@@ -250,11 +208,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "Twitter 全平台",
             "api_required": True,
-            "config": {
-                "api_key": "YOUR_API_KEY",
-                "api_secret": "YOUR_SECRET",
-                "bearer_token": "YOUR_TOKEN"
-            }
+            "config": {"api_key": "YOUR_API_KEY", "api_secret": "YOUR_SECRET", "bearer_token": "YOUR_TOKEN"},
         },
         {
             "name": "Reddit API",
@@ -264,10 +218,7 @@ DATA_SOURCES = {
             "update_freq": "实时",
             "coverage": "r/cryptocurrency 等",
             "api_required": True,
-            "config": {
-                "client_id": "YOUR_ID",
-                "client_secret": "YOUR_SECRET"
-            }
+            "config": {"client_id": "YOUR_ID", "client_secret": "YOUR_SECRET"},
         },
     ],
 }
@@ -280,43 +231,48 @@ sources = DATA_SOURCES.get(category, [])
 if sources:
     for source in sources:
         status_class = f"status-{source['status']}"
-        status_text = "✅ 活跃" if source['status'] == 'active' else "⏸️ 未启用" if source['status'] == 'inactive' else "❌ 错误"
-        
+        status_text = (
+            "✅ 活跃" if source["status"] == "active" else "⏸️ 未启用" if source["status"] == "inactive" else "❌ 错误"
+        )
+
         with st.container():
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="data-source-card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <h3 style="margin: 0 0 8px 0;">{source['name']}</h3>
-                        <p style="margin: 0 0 8px 0; color: #9ca3af;">{source['description']}</p>
+                        <h3 style="margin: 0 0 8px 0;">{source["name"]}</h3>
+                        <p style="margin: 0 0 8px 0; color: #9ca3af;">{source["description"]}</p>
                         <div style="font-size: 0.9rem; color: #6b7280;">
                             <span class="status-badge {status_class}">{status_text}</span>
-                            <span style="margin-right: 12px;">🕐 {source['update_freq']}</span>
-                            <span style="margin-right: 12px;">📊 {source['coverage']}</span>
-                            {"🔑 需要 API Key" if source['api_required'] else "🆓 免费"}
+                            <span style="margin-right: 12px;">🕐 {source["update_freq"]}</span>
+                            <span style="margin-right: 12px;">📊 {source["coverage"]}</span>
+                            {"🔑 需要 API Key" if source["api_required"] else "🆓 免费"}
                         </div>
                     </div>
                     <div>
-                        {"⚙️ 配置" if source['status'] == 'active' else "🔧 启用"}
+                        {"⚙️ 配置" if source["status"] == "active" else "🔧 启用"}
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             # 展开配置详情
             with st.expander("⚙️ 配置详情"):
                 col1, col2 = st.columns([2, 1])
-                
+
                 with col1:
-                    st.json(source['config'])
-                
+                    st.json(source["config"])
+
                 with col2:
-                    if source['status'] == 'active':
+                    if source["status"] == "active":
                         if st.button("⏸️ 停用", key=f"disable_{source['id']}"):
                             st.success(f"已停用 {source['name']}")
                     else:
                         if st.button("✅ 启用", key=f"enable_{source['id']}"):
-                            if source['api_required']:
+                            if source["api_required"]:
                                 st.warning("请先配置 API Key")
                             else:
                                 st.success(f"已启用 {source['name']}")
@@ -328,17 +284,17 @@ if sources:
 if show_api_config:
     st.divider()
     st.subheader("🔑 API Key 配置")
-    
+
     st.markdown("""
     **已配置的 API Keys:**
-    
+
     | 数据源 | API Key | 状态 | 剩余额度 |
     |--------|---------|------|----------|
     | Alpha Vantage | `abc...123` | ✅ 正常 | 450/500 |
     | CoinGecko | `xyz...789` | ✅ 正常 | 95/100 |
     | Glassnode | (未配置) | ❌ 缺失 | - |
     """)
-    
+
     # 添加新的 API Key
     with st.form("add_api_key"):
         col1, col2, col3 = st.columns(3)
@@ -360,10 +316,11 @@ st.subheader("🏥 数据源健康检查")
 if st.button("🔍 运行健康检查"):
     with st.spinner("正在检查所有数据源..."):
         import time
+
         time.sleep(2)
-        
+
         st.success("✅ 健康检查完成！")
-        
+
         # 检查结果
         check_results = {
             "TWSE": {"status": "✅ 正常", "latency": "120ms", "last_update": "2 秒前"},
@@ -371,12 +328,12 @@ if st.button("🔍 运行健康检查"):
             "CCXT": {"status": "✅ 正常", "latency": "80ms", "last_update": "1 秒前"},
             "CoinGecko": {"status": "⚠️ 延迟", "latency": "1200ms", "last_update": "30 秒前"},
         }
-        
+
         # 显示检查结果
         for name, result in check_results.items():
             cols = st.columns(4)
             cols[0].write(f"**{name}**")
-            cols[1].write(result['status'])
+            cols[1].write(result["status"])
             cols[2].write(f"⏱️ {result['latency']}")
             cols[3].write(f"🕐 {result['last_update']}")
 

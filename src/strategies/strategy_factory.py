@@ -5,7 +5,7 @@ StocksX 策略工廠
 優化：使用延遲加載（Lazy Loading），避免 import 時載入全部策略模組。
 """
 
-from typing import Dict, Type, Optional
+from typing import Optional
 from .base_strategy import BaseStrategy
 
 
@@ -28,66 +28,30 @@ _name_to_category: dict[str, str] = {}
 
 
 class StrategyFactory:
-    """策略工廠類（支持延遲加載）"""
+    """策略工廠類"""
 
-    _strategies: Dict[str, Type[BaseStrategy]] = {}
-    _loaded_categories: set[str] = set()
-
-    @classmethod
-    def _ensure_category_loaded(cls, category: str) -> None:
-        """確保某分類的策略已加載。"""
-        if category in cls._loaded_categories:
-            return
-        mod_path = _CATEGORY_MODULES.get(category)
-        if not mod_path:
-            return
-        try:
-            import importlib
-            mod = importlib.import_module(mod_path, package="src.strategies")
-            all_cls_name = f"ALL_{category.upper()}_STRATEGIES"
-            all_strategies = getattr(mod, all_cls_name, None)
-            if all_strategies:
-                for name, strategy_cls in all_strategies.items():
-                    cls._strategies[name.lower()] = strategy_cls
-                    _name_to_category[name.lower()] = category
-            cls._loaded_categories.add(category)
-        except Exception:
-            pass
+    _strategies: dict[str, type[BaseStrategy]] = {}
 
     @classmethod
-    def _ensure_all_loaded(cls) -> None:
-        """確保所有策略已加載。"""
-        for cat in _CATEGORY_MODULES:
-            cls._ensure_category_loaded(cat)
-
-    @classmethod
-    def register(cls, name: str, strategy_class: Type[BaseStrategy]) -> None:
+    def register(cls, name: str, strategy_class: type[BaseStrategy]) -> None:
         """註冊策略"""
         cls._strategies[name.lower()] = strategy_class
 
     @classmethod
-    def create(cls, name: str, params: Optional[Dict] = None) -> BaseStrategy:
-        """創建策略實例（自動加載所需分類）"""
-        name_lower = name.lower()
-        # 若尚未加載，嘗試按分類加載
-        if name_lower not in cls._strategies:
-            for cat in _CATEGORY_MODULES:
-                cls._ensure_category_loaded(cat)
-                if name_lower in cls._strategies:
-                    break
-        strategy_class = cls._strategies.get(name_lower)
+    def create(cls, name: str, params: Optional[dict] = None) -> BaseStrategy:
+        """創建策略實例"""
+        strategy_class = cls._strategies.get(name.lower())
         if not strategy_class:
             raise ValueError(f"未知策略：{name}")
         return strategy_class(params=params)
 
     @classmethod
-    def list_strategies(cls) -> Dict[str, Type[BaseStrategy]]:
-        """列出所有已註冊策略（確保全量加載）"""
-        cls._ensure_all_loaded()
+    def list_strategies(cls) -> dict[str, type[BaseStrategy]]:
+        """列出所有已註冊策略"""
         return cls._strategies.copy()
 
     @classmethod
-    def get_strategy_info(cls, name: str) -> Optional[Dict]:
+    def get_strategy_info(cls, name: str) -> Optional[dict]:
         """獲取策略信息"""
         name_lower = name.lower()
         if name_lower not in cls._strategies:
@@ -96,38 +60,64 @@ class StrategyFactory:
         if not strategy_class:
             return None
 
+        # 創建臨時實例獲取信息
         try:
             instance = strategy_class()
             return {
-                'name': instance.name,
-                'category': instance.category,
-                'params': instance.get_params(),
-                'class': strategy_class.__name__
+                "name": instance.name,
+                "category": instance.category,
+                "params": instance.get_params(),
+                "class": strategy_class.__name__,
             }
         except Exception:
-            return {
-                'name': name,
-                'category': 'unknown',
-                'params': {},
-                'class': strategy_class.__name__
-            }
+            return {"name": name, "category": "unknown", "params": {}, "class": strategy_class.__name__}
 
 
 def load_all_strategies():
-    """加載所有策略（向後兼容）"""
-    StrategyFactory._ensure_all_loaded()
+    """加載所有策略"""
+    from .trend import ALL_TREND_STRATEGIES
+    from .oscillator import ALL_OSCILLATOR_STRATEGIES
+    from .breakout import ALL_BREAKOUT_STRATEGIES
+    from .ai_ml import ALL_AI_ML_STRATEGIES
+    from .risk_management import ALL_RISK_STRATEGIES
+    from .microstructure import ALL_MICRO_STRATEGIES
+    from .macro import ALL_MACRO_STRATEGIES
+    from .statistical import ALL_STAT_STRATEGIES
+    from .pattern import ALL_PATTERN_STRATEGIES
+    from .execution import ALL_EXECUTION_STRATEGIES
+
+    # 註冊所有策略
+    all_strategies = {
+        **ALL_TREND_STRATEGIES,
+        **ALL_OSCILLATOR_STRATEGIES,
+        **ALL_BREAKOUT_STRATEGIES,
+        **ALL_AI_ML_STRATEGIES,
+        **ALL_RISK_STRATEGIES,
+        **ALL_MICRO_STRATEGIES,
+        **ALL_MACRO_STRATEGIES,
+        **ALL_STAT_STRATEGIES,
+        **ALL_PATTERN_STRATEGIES,
+        **ALL_EXECUTION_STRATEGIES,
+    }
+
+    for name, cls in all_strategies.items():
+        StrategyFactory.register(name, cls)
 
 
-def get_strategy(name: str, params: Optional[Dict] = None) -> BaseStrategy:
+# 自動加載策略
+load_all_strategies()
+
+
+def get_strategy(name: str, params: Optional[dict] = None) -> BaseStrategy:
     """便捷函數：創建策略"""
     return StrategyFactory.create(name, params)
 
 
-def list_all_strategies() -> Dict:
+def list_all_strategies() -> dict:
     """便捷函數：列出所有策略"""
     strategies = StrategyFactory.list_strategies()
     result = {}
-    for name, cls in strategies.items():
+    for name in strategies.keys():
         info = StrategyFactory.get_strategy_info(name)
         if info:
             result[name] = info

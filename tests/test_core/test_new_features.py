@@ -27,14 +27,16 @@ class TestVectorizedStrategies:
 
         rows = []
         for i, p in enumerate(prices):
-            rows.append({
-                "timestamp": i * 3600000,
-                "open": float(p),
-                "high": float(p + abs(np.random.randn() * 0.3)),
-                "low": float(p - abs(np.random.randn() * 0.3)),
-                "close": float(p + np.random.randn() * 0.1),
-                "volume": float(abs(np.random.randn() * 1000) + 100),
-            })
+            rows.append(
+                {
+                    "timestamp": i * 3600000,
+                    "open": float(p),
+                    "high": float(p + abs(np.random.randn() * 0.3)),
+                    "low": float(p - abs(np.random.randn() * 0.3)),
+                    "close": float(p + np.random.randn() * 0.1),
+                    "volume": float(abs(np.random.randn() * 1000) + 100),
+                }
+            )
         return rows
 
     def test_sma_cross_returns_correct_length(self, sample_rows):
@@ -333,7 +335,7 @@ class TestRegimeDetection:
         result = RegimeDetector(trending_returns).detect()
 
         # 每行的轉移概率之和應該為 1
-        for from_name, transitions in result.transition_matrix.items():
+        for transitions in result.transition_matrix.values():
             total = sum(transitions.values())
             if total > 0:
                 assert abs(total - 1.0) < 0.05
