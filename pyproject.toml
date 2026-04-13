@@ -55,7 +55,7 @@ dependencies = [
     "yfinance>=0.2.36",
     # HTTP 客戶端
     "requests>=2.31.0",
-    "aiohttp>=3.9.0",
+    "aiohttp>=3.13.5",
     # 環境變數
     "python-dotenv>=1.0.0",
     # 任務隊列與快取
