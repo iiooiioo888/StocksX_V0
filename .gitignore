@@ -1,94 +1,135 @@
-# ════════════════════════════════════════════════════════════
-# 數據與緩存
-# ════════════════════════════════════════════════════════════
-/data/
-cache/
-!src/data/
-*.db
-*.sqlite
-*.sqlite3
-*.sqlite-wal
-*.sqlite-shm
-
-# ════════════════════════════════════════════════════════════
-# 環境變數（⚠️ 絕不能提交）
-# ════════════════════════════════════════════════════════════
-.env
-.env.*
-!.env.example
-.venv/
-venv/
-
-# ════════════════════════════════════════════════════════════
-# Python 編譯檔
-# ════════════════════════════════════════════════════════════
+```
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
+MANIFEST
 
-# ════════════════════════════════════════════════════════════
-# IDE
-# ════════════════════════════════════════════════════════════
-.idea/
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE and editor files
 .vscode/
+.idea/
 *.swp
 *.swo
-*.sublime-*
+*.tmp
 
-# ════════════════════════════════════════════════════════════
-# 日誌（⚠️ 可能含敏感資訊）
-# ════════════════════════════════════════════════════════════
-logs/
+# Logs
 *.log
 
-# ════════════════════════════════════════════════════════════
-# 回測結果與優化輸出
-# ════════════════════════════════════════════════════════════
-*_results.json
-*_results.csv
-*_optimization_results.json
-*_details.json
-*_details_sample.json
-*_stats.csv
-ultra_backtest_results/
+# Environment variables
+.env
+.env.local
+*.env.*
 
-# ════════════════════════════════════════════════════════════
-# 系統文件
-# ════════════════════════════════════════════════════════════
+# Coverage reports
+.coverage
+htmlcov/
+.coverage.*
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# System files
 .DS_Store
 Thumbs.db
 
-# ════════════════════════════════════════════════════════════
-# 模型檔案（ML / AI）
-# ════════════════════════════════════════════════════════════
-*.h5
-*.pkl
-*.joblib
-*.onnx
-*.pt
-*.pth
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 
-# ════════════════════════════════════════════════════════════
-# Docker
-# ════════════════════════════════════════════════════════════
-docker-compose.override.yml
+# Monitoring and metrics
+monitoring/__pycache__/
 
-# ════════════════════════════════════════════════════════════
-# 安全掃描報告
-# ════════════════════════════════════════════════════════════
-bandit-report.json
-safety-report.json
+# Pipeline and scripts cache
+pipeline/__pycache__/
+scripts/__pycache__/
 
-# ════════════════════════════════════════════════════════════
-# Node / OS
-# ════════════════════════════════════════════════════════════
-node_modules/
-npm-debug.log*
+# Portfolio and trading modules cache
+portfolio/__pycache__/
+trading/__pycache__/
+
+# Source modules cache
+src/analytics/__pycache__/
+src/backtest/__pycache__/
+src/core/__pycache__/
+src/data/__pycache__/
+src/strategies/__pycache__/
+src/trading/__pycache__/
+src/utils/__pycache__/
+
+# Backend modules cache
+backend/__pycache__/
+backend/api/__pycache__/
+backend/database/__pycache__/
+backend/models/__pycache__/
+backend/schemas/__pycache__/
+
+# Tests cache
+tests/__pycache__/
+tests/**/__pycache__/
+```

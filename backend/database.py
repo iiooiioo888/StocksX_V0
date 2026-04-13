@@ -22,7 +22,7 @@ SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 # 創建引擎
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False}  # SQLite 需要
+    connect_args={"check_same_thread": False},  # SQLite 需要
 )
 
 # 會話工廠
@@ -30,6 +30,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 基類
 Base = declarative_base()
+
 
 # 依賴注入
 def get_db():
@@ -40,13 +41,14 @@ def get_db():
     finally:
         db.close()
 
+
 # 初始化數據庫
 def init_db():
     """創建所有表"""
-    from models import Strategy, Signal, Portfolio, Score
-    
+
     Base.metadata.create_all(bind=engine)
     print(f"✅ 數據庫已創建：{DB_PATH}")
+
 
 if __name__ == "__main__":
     init_db()

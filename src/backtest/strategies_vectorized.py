@@ -129,9 +129,7 @@ def supertrend_vec(
     close = df["close"].values
 
     # ATR 計算（Wilder's smoothing）
-    tr = np.maximum(high[1:] - low[1:],
-                    np.maximum(np.abs(high[1:] - close[:-1]),
-                               np.abs(low[1:] - close[:-1])))
+    tr = np.maximum(high[1:] - low[1:], np.maximum(np.abs(high[1:] - close[:-1]), np.abs(low[1:] - close[:-1])))
 
     atr = np.full(len(rows), np.nan)
     atr[period] = np.mean(tr[:period])
@@ -184,9 +182,7 @@ def adx_trend_vec(
     minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
 
     # True Range
-    tr = np.maximum(high[1:] - low[1:],
-                    np.maximum(np.abs(high[1:] - close[:-1]),
-                               np.abs(low[1:] - close[:-1])))
+    tr = np.maximum(high[1:] - low[1:], np.maximum(np.abs(high[1:] - close[:-1]), np.abs(low[1:] - close[:-1])))
 
     # Wilder's smoothed
     def wilders(data, p):
@@ -206,9 +202,9 @@ def adx_trend_vec(
 
     # DX and ADX
     dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-10)
-    adx = wilders(dx[period - 1:], period)
+    adx = wilders(dx[period - 1 :], period)
     adx_full = np.full(len(rows), np.nan)
-    adx_full[period * 2 - 1:] = adx[~np.isnan(adx)][:len(rows) - period * 2 + 1]
+    adx_full[period * 2 - 1 :] = adx[~np.isnan(adx)][: len(rows) - period * 2 + 1]
 
     # 信號生成
     signals = np.zeros(len(rows), dtype=int)

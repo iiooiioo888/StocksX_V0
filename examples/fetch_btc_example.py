@@ -3,6 +3,7 @@
 簡單範例：使用 CryptoDataFetcher 拉取 Binance BTC/USDT 永續 K 線與資金費率，
 並示範緩存優先讀取。
 """
+
 import logging
 import sys
 import time

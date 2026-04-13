@@ -5,6 +5,7 @@
 
 v6.0 新增功能
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

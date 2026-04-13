@@ -104,7 +104,7 @@ class FactorModel:
         p = n_params
 
         # 殘差標準誤
-        ss_res = np.sum(residuals ** 2)
+        ss_res = np.sum(residuals**2)
         ss_tot = np.sum((self._y - np.mean(self._y)) ** 2)
         mse = ss_res / (n - p) if n > p else 0
 
@@ -150,8 +150,8 @@ class FactorModel:
         result["alpha"] = []
 
         for i in range(window, self._n_days):
-            y_window = self._y[i - window:i]
-            X_window = self._X[i - window:i]
+            y_window = self._y[i - window : i]
+            X_window = self._X[i - window : i]
             X_aug = np.column_stack([np.ones(window), X_window])
 
             try:
@@ -253,19 +253,19 @@ def generate_factor_features(
         # 動量 (Momentum): 過去 w 天累積報酬
         momentum = np.full(n, np.nan)
         for i in range(w, n):
-            momentum[i] = np.prod(1 + returns[i - w:i]) - 1
+            momentum[i] = np.prod(1 + returns[i - w : i]) - 1
         features[f"momentum_{w}d"] = momentum
 
         # 波動率 (Volatility): 過去 w 天報酬標準差
         vol = np.full(n, np.nan)
         for i in range(w, n):
-            vol[i] = np.std(returns[i - w:i], ddof=1)
+            vol[i] = np.std(returns[i - w : i], ddof=1)
         features[f"volatility_{w}d"] = vol
 
         # 偏度 (Skewness)
         skew = np.full(n, np.nan)
         for i in range(w, n):
-            r = returns[i - w:i]
+            r = returns[i - w : i]
             m = np.mean(r)
             s = np.std(r, ddof=1)
             if s > 0:
@@ -275,7 +275,7 @@ def generate_factor_features(
         # 峰度 (Kurtosis)
         kurt = np.full(n, np.nan)
         for i in range(w, n):
-            r = returns[i - w:i]
+            r = returns[i - w : i]
             m = np.mean(r)
             s = np.std(r, ddof=1)
             if s > 0:
@@ -285,7 +285,7 @@ def generate_factor_features(
         # 最大回撤
         max_dd = np.full(n, np.nan)
         for i in range(w, n):
-            cum = np.cumprod(1 + returns[i - w:i])
+            cum = np.cumprod(1 + returns[i - w : i])
             peak = np.maximum.accumulate(cum)
             dd = (peak - cum) / peak
             max_dd[i] = np.max(dd)
@@ -294,7 +294,7 @@ def generate_factor_features(
         # 正報酬天數佔比
         pos_ratio = np.full(n, np.nan)
         for i in range(w, n):
-            pos_ratio[i] = np.mean(returns[i - w:i] > 0)
+            pos_ratio[i] = np.mean(returns[i - w : i] > 0)
         features[f"positive_ratio_{w}d"] = pos_ratio
 
     return features

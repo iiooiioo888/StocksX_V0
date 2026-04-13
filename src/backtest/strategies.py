@@ -193,7 +193,7 @@ def bollinger_signal(
 
     # 向量化滾動均值和標準差
     cumsum = np.cumsum(closes)
-    cumsum2 = np.cumsum(closes ** 2)
+    cumsum2 = np.cumsum(closes**2)
     rolling_mean = np.zeros(n, dtype=np.float64)
     rolling_std = np.zeros(n, dtype=np.float64)
 
@@ -649,9 +649,7 @@ def parabolic_sar(
 # ─── 新增現代策略 ───
 
 
-def mean_reversion_zscore(
-    rows: list[dict[str, Any]], period: int = 20, threshold: float = 2.0
-) -> list[int]:
+def mean_reversion_zscore(rows: list[dict[str, Any]], period: int = 20, threshold: float = 2.0) -> list[int]:
     """
     Z-Score 均值回歸（向量化）：
     - Z-Score < -threshold → 做多（超賣）
@@ -665,7 +663,7 @@ def mean_reversion_zscore(
 
     # 向量化滾動均值和標準差
     cumsum = np.cumsum(closes)
-    cumsum2 = np.cumsum(closes ** 2)
+    cumsum2 = np.cumsum(closes**2)
     rolling_mean = np.zeros(n, dtype=np.float64)
     rolling_std = np.zeros(n, dtype=np.float64)
     rolling_mean[period:] = (cumsum[period:] - cumsum[:-period]) / period
@@ -716,9 +714,7 @@ def momentum_roc(rows: list[dict[str, Any]], period: int = 10, threshold: float 
     return signals.tolist()
 
 
-def keltner_channel(
-    rows: list[dict[str, Any]], period: int = 20, atr_mult: float = 2.0
-) -> list[int]:
+def keltner_channel(rows: list[dict[str, Any]], period: int = 20, atr_mult: float = 2.0) -> list[int]:
     """
     Keltner Channel：
     - 收盤價跌破下軌（EMA - ATR*mult）→ 做多
