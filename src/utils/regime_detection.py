@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
@@ -34,10 +34,11 @@ import numpy as np
 
 class Regime(IntEnum):
     """市場狀態."""
-    BULL = 0       # 牛市
-    BEAR = 1       # 熊市
-    HIGH_VOL = 2   # 高波動
-    LOW_VOL = 3    # 低波動/震盪
+
+    BULL = 0  # 牛市
+    BEAR = 1  # 熊市
+    HIGH_VOL = 2  # 高波動
+    LOW_VOL = 3  # 低波動/震盪
 
 
 REGIME_NAMES = {
@@ -58,6 +59,7 @@ REGIME_EMOJIS = {
 @dataclass(slots=True)
 class RegimeStats:
     """狀態統計."""
+
     regime: Regime
     name: str
     count: int
@@ -70,6 +72,7 @@ class RegimeStats:
 @dataclass(slots=True)
 class RegimeResult:
     """檢測結果."""
+
     regimes: list[Regime]  # 每日狀態
     transition_matrix: dict[str, dict[str, float]]  # 狀態轉移概率
     stats: list[RegimeStats]
@@ -135,7 +138,7 @@ class RegimeDetector:
         volatility = np.full(n, np.nan)
 
         for i in range(self._lookback, n):
-            window = self._returns[i - self._lookback:i]
+            window = self._returns[i - self._lookback : i]
             momentum[i] = np.prod(1 + window) - 1
             volatility[i] = np.std(window, ddof=1) * math.sqrt(self._ann)
 
@@ -195,10 +198,12 @@ class RegimeDetector:
         if np.sum(valid_mask) < 10:
             return self._detect_rule()
 
-        features = np.column_stack([
-            momentum[valid_mask],
-            volatility[valid_mask],
-        ])
+        features = np.column_stack(
+            [
+                momentum[valid_mask],
+                volatility[valid_mask],
+            ]
+        )
 
         # 標準化
         mean_f = np.mean(features, axis=0)
@@ -212,14 +217,11 @@ class RegimeDetector:
         centroids = features_norm[rng.choice(len(features_norm), k, replace=False)]
 
         for _ in range(50):
-            distances = np.array([
-                np.linalg.norm(features_norm - c, axis=1) for c in centroids
-            ])
+            distances = np.array([np.linalg.norm(features_norm - c, axis=1) for c in centroids])
             labels = np.argmin(distances, axis=0)
-            new_centroids = np.array([
-                features_norm[labels == i].mean(axis=0) if np.any(labels == i) else centroids[i]
-                for i in range(k)
-            ])
+            new_centroids = np.array(
+                [features_norm[labels == i].mean(axis=0) if np.any(labels == i) else centroids[i] for i in range(k)]
+            )
             if np.allclose(centroids, new_centroids, atol=1e-6):
                 break
             centroids = new_centroids
@@ -236,7 +238,9 @@ class RegimeDetector:
 
         remaining = [c for c in range(k) if c not in [low_vol_cluster, high_vol_cluster]]
         if len(remaining) >= 2:
-            bull_cluster = remaining[0] if centroid_momentum[remaining[0]] > centroid_momentum[remaining[1]] else remaining[1]
+            bull_cluster = (
+                remaining[0] if centroid_momentum[remaining[0]] > centroid_momentum[remaining[1]] else remaining[1]
+            )
             bear_cluster = remaining[1] if bull_cluster == remaining[0] else remaining[0]
         elif len(remaining) == 1:
             bull_cluster = remaining[0]
@@ -253,12 +257,12 @@ class RegimeDetector:
         }
 
         # 預測所有點
-        all_distances = np.array([
-            np.linalg.norm(
-                ((np.column_stack([momentum, volatility]) - mean_f) / std_f) - c,
-                axis=1
-            ) for c in centroids
-        ])
+        all_distances = np.array(
+            [
+                np.linalg.norm(((np.column_stack([momentum, volatility]) - mean_f) / std_f) - c, axis=1)
+                for c in centroids
+            ]
+        )
         all_labels = np.argmin(all_distances, axis=0)
 
         regimes = np.array([cluster_to_regime.get(l, Regime.LOW_VOL.value) for l in all_labels])
@@ -316,12 +320,17 @@ class RegimeDetector:
             mask = regimes == regime_val
             count = int(np.sum(mask))
             if count == 0:
-                stats.append(RegimeStats(
-                    regime=Regime(regime_val),
-                    name=REGIME_NAMES[Regime(regime_val)],
-                    count=0, pct=0.0, avg_duration=0.0,
-                    avg_return=0.0, avg_volatility=0.0,
-                ))
+                stats.append(
+                    RegimeStats(
+                        regime=Regime(regime_val),
+                        name=REGIME_NAMES[Regime(regime_val)],
+                        count=0,
+                        pct=0.0,
+                        avg_duration=0.0,
+                        avg_return=0.0,
+                        avg_volatility=0.0,
+                    )
+                )
                 continue
 
             pct = count / n
@@ -343,12 +352,17 @@ class RegimeDetector:
                 durations.append(cur_dur)
             avg_dur = float(np.mean(durations)) if durations else 0
 
-            stats.append(RegimeStats(
-                regime=Regime(regime_val),
-                name=REGIME_NAMES[Regime(regime_val)],
-                count=count, pct=pct, avg_duration=avg_dur,
-                avg_return=avg_ret, avg_volatility=avg_vol,
-            ))
+            stats.append(
+                RegimeStats(
+                    regime=Regime(regime_val),
+                    name=REGIME_NAMES[Regime(regime_val)],
+                    count=count,
+                    pct=pct,
+                    avg_duration=avg_dur,
+                    avg_return=avg_ret,
+                    avg_volatility=avg_vol,
+                )
+            )
 
         # 轉移概率矩陣
         transition_counts: dict[int, dict[int, int]] = {r.value: {} for r in Regime}
@@ -370,7 +384,7 @@ class RegimeDetector:
         current = Regime(int(regimes[-1])) if n > 0 else Regime.LOW_VOL
 
         # 信心度：最近 window 中當前狀態的佔比
-        recent = regimes[-self._lookback:]
+        recent = regimes[-self._lookback :]
         confidence = float(np.mean(recent == current.value)) if len(recent) > 0 else 0
 
         return RegimeResult(

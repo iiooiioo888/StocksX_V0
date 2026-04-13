@@ -68,7 +68,7 @@ class AppSettings:
 
             _logging.getLogger(__name__).error(
                 "❌ SECRET_KEY 未設定！JWT 認證將無法正常工作。"
-                "請在 .env 中設定：python -c \"import secrets; print(secrets.token_hex(32))\""
+                '請在 .env 中設定：python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return cls(
             env=_env("APP_ENV", "production") or "production",
