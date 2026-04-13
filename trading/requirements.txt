@@ -4,7 +4,7 @@
 # 核心
 aiohttp==3.9.1
 websockets==12.0
-pyyaml==6.0.1
+pyyaml==6.0.3
 
 # 券商 API（可選）
 # alpaca-py==0.23.0  # 美股
