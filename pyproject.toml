@@ -45,7 +45,7 @@ dependencies = [
     # Web UI
     "streamlit>=1.32.0",
     # 數據處理
-    "pandas>=2.0.0",
+    "pandas>=2.3.3",
     "numpy>=1.24.0",
     # 圖表可視化
     "plotly>=5.18.0",
