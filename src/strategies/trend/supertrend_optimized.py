@@ -169,17 +169,26 @@ class SupertrendOptimized(TrendFollowingStrategy):
             upper_band = hl2 + multiplier * atr
             lower_band = hl2 - multiplier * atr
 
-        # Supertrend 值和趨勢方向
-        supertrend = pd.Series(0.0, index=data.index)
-        trend = pd.Series(1, index=data.index)  # 1=上升趨勢，-1=下降趨勢
+        # 轉為 numpy array 加速循環
+        close_arr = close.values
+        upper_arr = upper_band.values
+        lower_arr = lower_band.values
+        n = len(close_arr)
 
-        for i in range(1, len(data)):
-            if close.iloc[i] > (supertrend.iloc[i - 1] if i > 0 else lower_band.iloc[i]):
-                trend.iloc[i] = 1
-                supertrend.iloc[i] = lower_band.iloc[i]
+        supertrend_arr = np.zeros(n)
+        trend_arr = np.ones(n)  # 1=上升趨勢，-1=下降趨勢
+        supertrend_arr[0] = lower_arr[0]
+
+        for i in range(1, n):
+            if close_arr[i] > supertrend_arr[i - 1]:
+                trend_arr[i] = 1
+                supertrend_arr[i] = lower_arr[i]
             else:
-                trend.iloc[i] = -1
-                supertrend.iloc[i] = upper_band.iloc[i]
+                trend_arr[i] = -1
+                supertrend_arr[i] = upper_arr[i]
+
+        supertrend = pd.Series(supertrend_arr, index=data.index)
+        trend = pd.Series(trend_arr, index=data.index)
 
         return {
             "supertrend": supertrend,

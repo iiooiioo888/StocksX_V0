@@ -73,8 +73,60 @@ class StrategyFactory:
             return {"name": name, "category": "unknown", "params": {}, "class": strategy_class.__name__}
 
 
+def _auto_discover_strategies() -> dict[str, type[BaseStrategy]]:
+    """
+    自動發現所有策略類
+    掃描 src/strategies/ 下所有 .py 文件，找到繼承 BaseStrategy 的類
+    """
+    import importlib
+    import inspect
+    import re
+    from pathlib import Path
+
+    strategies = {}
+    strategies_dir = Path(__file__).parent
+
+    # 掃描所有子目錄中的 .py 文件
+    for py_file in strategies_dir.rglob("*.py"):
+        if py_file.name.startswith("_") or py_file.name in ("base_strategy.py", "strategy_factory.py"):
+            continue
+
+        # 計算模組名
+        rel_path = py_file.relative_to(strategies_dir.parent.parent)
+        module_name = str(rel_path).replace("/", ".").replace("\\", ".").removesuffix(".py")
+
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+
+        # 找到所有 BaseStrategy 子類
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if (issubclass(obj, BaseStrategy) and
+                obj is not BaseStrategy and
+                not name.startswith("_") and
+                hasattr(obj, '__init__') and
+                obj.__module__ == module_name):
+
+                # 用類名作為 key
+                strategies[name] = obj
+                # 也註冊下劃線形式
+                snake = re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+                strategies[snake] = obj
+
+    return strategies
+
+
 def load_all_strategies():
-    """加載所有策略"""
+    """加載所有策略（優先自動發現，回退到手動導入）"""
+    auto_strategies = _auto_discover_strategies()
+
+    if auto_strategies:
+        for name, cls in auto_strategies.items():
+            StrategyFactory.register(name, cls)
+        return
+
+    # 回退：手動導入（兼容舊代碼）
     from .trend import ALL_TREND_STRATEGIES
     from .oscillator import ALL_OSCILLATOR_STRATEGIES
     from .breakout import ALL_BREAKOUT_STRATEGIES
@@ -86,7 +138,6 @@ def load_all_strategies():
     from .pattern import ALL_PATTERN_STRATEGIES
     from .execution import ALL_EXECUTION_STRATEGIES
 
-    # 註冊所有策略
     all_strategies = {
         **ALL_TREND_STRATEGIES,
         **ALL_OSCILLATOR_STRATEGIES,

@@ -24,24 +24,31 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from base_strategy import TrendFollowingStrategy
 
-from src.strategies.base_strategy import TrendFollowingStrategy
+from src.strategies.base_strategy import TrendFollowingStrategy, StopLossMixin
 
 # ============================================================================
 # 1. SMA Cross 均線交叉策略
 # ============================================================================
 
 
-class SMACross(TrendFollowingStrategy):
+class SMACross(StopLossMixin, TrendFollowingStrategy):
     """
     簡單移動平均線交叉策略
 
     經典趨勢跟隨策略：
     - 短周期均線上穿長周期均線 → 買入
     - 短周期均線下穿長周期均線 → 賣出
+
+    支持止損/止盈機制（通過 StopLossMixin）
     """
 
-    def __init__(self, short_period: int = 10, long_period: int = 30):
-        super().__init__("SMA Cross", {"short_period": short_period, "long_period": long_period})
+    def __init__(self, short_period: int = 10, long_period: int = 30, stop_loss_pct: float = 0.05, take_profit_pct: float = 0.10):
+        super().__init__(
+            name="SMA Cross",
+            params={"short_period": short_period, "long_period": long_period},
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+        )
 
     def generate_signals(self, data: pd.DataFrame) -> pd.Series:
         short = self.params["short_period"]
@@ -61,13 +68,8 @@ class SMACross(TrendFollowingStrategy):
         signals[golden_cross] = 1
         signals[death_cross] = -1
 
-        return signals
-
-    def calculate_position_size(self, signal: int, capital: float, price: float, volatility: float) -> float:
-        if signal == 0:
-            return 0
-        risk = capital * 0.02
-        return risk / (price * volatility)
+        # 應用止損止盈
+        return self.apply_stop_loss_to_signals(signals, data)
 
 # ============================================================================
 # 2. EMA Cross 指數均線交叉策略
@@ -268,17 +270,26 @@ class Supertrend(TrendFollowingStrategy):
         upper_band = hl2 + mult * atr
         lower_band = hl2 - mult * atr
 
-        # Supertrend 值
-        supertrend = pd.Series(0.0, index=data.index)
-        trend = pd.Series(1, index=data.index)  # 1=上升趨勢，-1=下降趨勢
+        # 轉為 numpy array 加速循環
+        close_arr = close.values
+        upper_arr = upper_band.values
+        lower_arr = lower_band.values
+        n = len(close_arr)
 
-        for i in range(1, len(data)):
-            if close.iloc[i] > supertrend.iloc[i - 1] if i > 0 else lower_band.iloc[i]:
-                trend.iloc[i] = 1
-                supertrend.iloc[i] = lower_band.iloc[i]
+        supertrend_arr = np.zeros(n)
+        trend_arr = np.ones(n)  # 1=上升趨勢，-1=下降趨勢
+        supertrend_arr[0] = lower_arr[0]
+
+        for i in range(1, n):
+            if close_arr[i] > supertrend_arr[i - 1]:
+                trend_arr[i] = 1
+                supertrend_arr[i] = lower_arr[i]
             else:
-                trend.iloc[i] = -1
-                supertrend.iloc[i] = upper_band.iloc[i]
+                trend_arr[i] = -1
+                supertrend_arr[i] = upper_arr[i]
+
+        supertrend = pd.Series(supertrend_arr, index=data.index)
+        trend = pd.Series(trend_arr, index=data.index)
 
         signals = pd.Series(0, index=data.index)
 
