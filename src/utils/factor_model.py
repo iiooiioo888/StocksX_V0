@@ -146,25 +146,38 @@ class FactorModel:
         Returns:
             {factor_name: [beta_t1, beta_t2, ...]}
         """
-        result: dict[str, list[float]] = {name: [] for name in self._names}
-        result["alpha"] = []
+        n_rolls = self._n_days - window
+        if n_rolls <= 0:
+            result: dict[str, list[float]] = {name: [] for name in self._names}
+            result["alpha"] = []
+            return result
 
-        for i in range(window, self._n_days):
-            y_window = self._y[i - window : i]
-            X_window = self._X[i - window : i]
-            X_aug = np.column_stack([np.ones(window), X_window])
+        # 預分配結果數組
+        alpha_arr = np.empty(n_rolls)
+        beta_arrs = {name: np.empty(n_rolls) for name in self._names}
+
+        # 預分配 X_aug 的截距列（每行相同）
+        ones_col = np.ones(window)
+
+        for i in range(n_rolls):
+            y_window = self._y[i : i + window]
+            X_window = self._X[i : i + window]
+            # 使用預分配的 ones 列，避免每次 column_stack
+            X_aug = np.column_stack([ones_col, X_window])
 
             try:
                 XtX_inv = np.linalg.pinv(X_aug.T @ X_aug)
                 beta_hat = XtX_inv @ X_aug.T @ y_window
-                result["alpha"].append(float(beta_hat[0]))
+                alpha_arr[i] = beta_hat[0]
                 for j, name in enumerate(self._names):
-                    result[name].append(float(beta_hat[j + 1]))
+                    beta_arrs[name][i] = beta_hat[j + 1]
             except np.linalg.LinAlgError:
-                result["alpha"].append(0.0)
+                alpha_arr[i] = 0.0
                 for name in self._names:
-                    result[name].append(0.0)
+                    beta_arrs[name][i] = 0.0
 
+        result = {name: beta_arrs[name].tolist() for name in self._names}
+        result["alpha"] = alpha_arr.tolist()
         return result
 
 
@@ -231,7 +244,7 @@ def generate_factor_features(
     lookback_windows: list[int] | None = None,
 ) -> dict[str, np.ndarray]:
     """
-    自動生成因子特徵.
+    自動生成因子特徵（向量化版本）.
 
     Args:
         returns: 日報酬率 (n_days,)
@@ -250,51 +263,56 @@ def generate_factor_features(
         if w >= n:
             continue
 
-        # 動量 (Momentum): 過去 w 天累積報酬
+        # 動量 (Momentum): cumprod 技巧
+        cumret = np.cumprod(1 + returns)
         momentum = np.full(n, np.nan)
-        for i in range(w, n):
-            momentum[i] = np.prod(1 + returns[i - w : i]) - 1
+        momentum[w:] = cumret[w:] / cumret[:-w] - 1
         features[f"momentum_{w}d"] = momentum
 
-        # 波動率 (Volatility): 過去 w 天報酬標準差
+        # 波動率 (Volatility): cumsum 技巧
+        cumsum = np.cumsum(returns)
+        cumsum2 = np.cumsum(returns ** 2)
+        mean_w = np.zeros(n)
+        var_w = np.zeros(n)
+        mean_w[w:] = (cumsum[w:] - cumsum[:-w]) / w
+        var_w[w:] = (cumsum2[w:] - cumsum2[:-w]) / w - mean_w[w:] ** 2
         vol = np.full(n, np.nan)
-        for i in range(w, n):
-            vol[i] = np.std(returns[i - w : i], ddof=1)
+        vol[w:] = np.sqrt(np.maximum(var_w[w:], 0) * w / (w - 1))  # ddof=1
         features[f"volatility_{w}d"] = vol
 
-        # 偏度 (Skewness)
+        # 偏度 (Skewness): 利用已計算的 mean_w 和 vol
         skew = np.full(n, np.nan)
         for i in range(w, n):
-            r = returns[i - w : i]
-            m = np.mean(r)
-            s = np.std(r, ddof=1)
+            r = returns[i - w:i]
+            m = mean_w[i]
+            s = vol[i]
             if s > 0:
                 skew[i] = np.mean(((r - m) / s) ** 3)
         features[f"skewness_{w}d"] = skew
 
-        # 峰度 (Kurtosis)
+        # 峰度 (Kurtosis): 利用已計算的 mean_w 和 vol
         kurt = np.full(n, np.nan)
         for i in range(w, n):
-            r = returns[i - w : i]
-            m = np.mean(r)
-            s = np.std(r, ddof=1)
+            r = returns[i - w:i]
+            m = mean_w[i]
+            s = vol[i]
             if s > 0:
                 kurt[i] = np.mean(((r - m) / s) ** 4) - 3
         features[f"kurtosis_{w}d"] = kurt
 
-        # 最大回撤
+        # 最大回撤: 仍需窗口內循環（每個窗口的累積收益路徑不同）
         max_dd = np.full(n, np.nan)
         for i in range(w, n):
-            cum = np.cumprod(1 + returns[i - w : i])
+            cum = np.cumprod(1 + returns[i - w:i])
             peak = np.maximum.accumulate(cum)
             dd = (peak - cum) / peak
             max_dd[i] = np.max(dd)
         features[f"max_drawdown_{w}d"] = max_dd
 
-        # 正報酬天數佔比
+        # 正報酬天數佔比: 完全向量化
         pos_ratio = np.full(n, np.nan)
-        for i in range(w, n):
-            pos_ratio[i] = np.mean(returns[i - w : i] > 0)
+        cumpos = np.cumsum(returns > 0)
+        pos_ratio[w:] = (cumpos[w:] - cumpos[:-w]) / w
         features[f"positive_ratio_{w}d"] = pos_ratio
 
     return features

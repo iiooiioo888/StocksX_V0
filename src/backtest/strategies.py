@@ -55,6 +55,29 @@ def _ema(arr: np.ndarray, period: int) -> np.ndarray:
     return result
 
 
+def _rolling_max(arr: np.ndarray, period: int) -> np.ndarray:
+    """向量化滚动最大值（使用 sliding_window_view）。"""
+    n = len(arr)
+    if n < period:
+        return np.full(n, np.nan, dtype=np.float64)
+    result = np.full(n, np.nan, dtype=np.float64)
+    # sliding_window_view 创建无复制的滑动窗口视图
+    windows = np.lib.stride_tricks.sliding_window_view(arr, period)
+    result[period - 1 :] = windows.max(axis=1)
+    return result
+
+
+def _rolling_min(arr: np.ndarray, period: int) -> np.ndarray:
+    """向量化滚动最小值（使用 sliding_window_view）。"""
+    n = len(arr)
+    if n < period:
+        return np.full(n, np.nan, dtype=np.float64)
+    result = np.full(n, np.nan, dtype=np.float64)
+    windows = np.lib.stride_tricks.sliding_window_view(arr, period)
+    result[period - 1 :] = windows.min(axis=1)
+    return result
+
+
 def _forward_fill_signals(signals: np.ndarray, n: int) -> np.ndarray:
     """向量化前向填充：將 0 替換為上一個非零值（numpy 掃描優化）。"""
     mask = signals != 0
@@ -150,13 +173,11 @@ def rsi_signal(
             rsi_vals[i + 1] = 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
 
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(period + 1, n):
-        if rsi_vals[i] < oversold:
-            signals[i] = 1
-        elif rsi_vals[i] > overbought:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    buy = rsi_vals < oversold
+    sell = rsi_vals > overbought
+    signals[buy] = 1
+    signals[sell] = -1
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -250,13 +271,9 @@ def donchian_channel(
     closes = _get_closes(rows)
     signals = np.zeros(n, dtype=np.int64)
 
-    # 向量化預計算滾動最高/最低（使用 numpy 累積和技巧）
-    # 對於固定窗口的 rolling max/min，使用 numpy 的 sliding window view
-    roll_max = np.full(n, np.nan, dtype=np.float64)
-    roll_min = np.full(n, np.nan, dtype=np.float64)
-    for i in range(period, n):
-        roll_max[i] = highs[i - period : i].max()
-        roll_min[i] = lows[i - period : i].min()
+    # 向量化預計算滾動最高/最低
+    roll_max = _rolling_max(highs, period)
+    roll_min = _rolling_min(lows, period)
 
     # 向量化信號生成
     if breakout_mode:
@@ -301,32 +318,45 @@ def supertrend(
     for i in range(period + 1, n):
         atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
 
+    # Pre-extract numpy arrays to avoid repeated dict lookups
+    closes_arr = closes
+    highs_arr = highs
+    lows_arr = lows
     upper_band = np.zeros(n, dtype=np.float64)
     lower_band = np.zeros(n, dtype=np.float64)
     direction = np.ones(n, dtype=np.int64)
     signals = np.zeros(n, dtype=np.int64)
+    atr_arr = atr
+    mult = multiplier
 
     for i in range(period, n):
-        hl2 = (highs[i] + lows[i]) / 2
-        basic_upper = hl2 + multiplier * atr[i]
-        basic_lower = hl2 - multiplier * atr[i]
-        if upper_band[i - 1] != 0 and closes[i - 1] <= upper_band[i - 1]:
-            upper_band[i] = min(basic_upper, upper_band[i - 1])
+        hi, lo, cl = highs_arr[i], lows_arr[i], closes_arr[i]
+        prev_cl = closes_arr[i - 1]
+        hl2 = (hi + lo) * 0.5
+        basic_upper = hl2 + mult * atr_arr[i]
+        basic_lower = hl2 - mult * atr_arr[i]
+        prev_ub = upper_band[i - 1]
+        if prev_ub != 0 and prev_cl <= prev_ub:
+            upper_band[i] = min(basic_upper, prev_ub)
         else:
             upper_band[i] = basic_upper
-        if lower_band[i - 1] != 0 and closes[i - 1] >= lower_band[i - 1]:
-            lower_band[i] = max(basic_lower, lower_band[i - 1])
+        prev_lb = lower_band[i - 1]
+        if prev_lb != 0 and prev_cl >= prev_lb:
+            lower_band[i] = max(basic_lower, prev_lb)
         else:
             lower_band[i] = basic_lower
 
-        if closes[i] > upper_band[i]:
+        ub_i = upper_band[i]
+        lb_i = lower_band[i]
+        if cl > ub_i:
             direction[i] = 1
-        elif closes[i] < lower_band[i]:
+        elif cl < lb_i:
             direction[i] = -1
         else:
             direction[i] = direction[i - 1]
 
-        signals[i] = direction[i] if direction[i] != direction[i - 1] else signals[i - 1]
+        dir_i = direction[i]
+        signals[i] = dir_i if dir_i != direction[i - 1] else signals[i - 1]
     return signals.tolist()
 
 
@@ -343,27 +373,31 @@ def dual_thrust(
     n = len(rows)
     if n < period + 1:
         return [0] * n
-    signals = np.zeros(n, dtype=np.int64)
     highs = _get_highs(rows)
     lows = _get_lows(rows)
     closes = _get_closes(rows)
     opens = np.array([r["open"] for r in rows], dtype=np.float64)
 
-    # 向量化：使用 numpy 累積和計算滾動 max/min
-    for i in range(period + 1, n):
-        hh = highs[i - period : i].max()
-        ll = lows[i - period : i].min()
-        hc = closes[i - period : i].max()
-        lc = closes[i - period : i].min()
-        range_val = max(hh - lc, hc - ll)
-        upper = opens[i] + k1 * range_val
-        lower = opens[i] - k2 * range_val
-        if closes[i] > upper:
-            signals[i] = 1
-        elif closes[i] < lower:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    # 向量化滚动 max/min
+    hh = _rolling_max(highs, period)
+    ll = _rolling_min(lows, period)
+    hc = _rolling_max(closes, period)
+    lc = _rolling_min(closes, period)
+
+    # range_val = max(hh - lc, hc - ll)
+    range_val = np.maximum(hh - lc, hc - ll)
+    upper = opens + k1 * range_val
+    lower = opens - k2 * range_val
+
+    signals = np.zeros(n, dtype=np.int64)
+    # 只从 period+1 开始有效
+    start = period + 1
+    if start < n:
+        buy = closes[start:] > upper[start:]
+        sell = closes[start:] < lower[start:]
+        signals[start:][buy] = 1
+        signals[start:][sell] = -1
+        signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -381,15 +415,27 @@ def vwap_reversion(
         return [0] * n
     closes = _get_closes(rows)
     volumes = _get_volumes(rows)
-    signals = np.zeros(n, dtype=np.int64)
 
+    # 预计算 cumsum 用于滚动窗口
+    pv = closes * volumes  # price * volume
+    cum_pv = np.cumsum(pv)
+    cum_v = np.cumsum(volumes)
+    cum_c = np.cumsum(closes)
+    cum_c2 = np.cumsum(closes ** 2)
+
+    signals = np.zeros(n, dtype=np.int64)
     for i in range(period, n):
-        window_c = closes[i - period : i + 1]
-        window_v = volumes[i - period : i + 1]
-        cum_vol = window_v.sum() or 1.0
-        vwap = (window_c * window_v).sum() / cum_vol
-        mean_p = window_c.mean()
-        std_p = window_c.std() or 1.0
+        s = i - period
+        win_pv = cum_pv[i] - (cum_pv[s - 1] if s > 0 else 0)
+        win_v = cum_v[i] - (cum_v[s - 1] if s > 0 else 0)
+        win_c = cum_c[i] - (cum_c[s - 1] if s > 0 else 0)
+        win_c2 = cum_c2[i] - (cum_c2[s - 1] if s > 0 else 0)
+        w = period + 1  # window size
+        cum_vol = win_v if win_v != 0 else 1.0
+        vwap = win_pv / cum_vol
+        mean_p = win_c / w
+        var_p = win_c2 / w - mean_p ** 2
+        std_p = np.sqrt(max(var_p, 0.0)) or 1.0
         z = (closes[i] - vwap) / std_p if std_p > 0 else 0
         if z < -threshold:
             signals[i] = 1
@@ -506,20 +552,31 @@ def ichimoku(rows: list[dict[str, Any]], tenkan: int = 9, kijun: int = 26, senko
     lows = _get_lows(rows)
     closes = _get_closes(rows)
 
+    # 向量化滚动 max/min
+    hh_t = _rolling_max(highs, tenkan)
+    ll_t = _rolling_min(lows, tenkan)
+    hh_k = _rolling_max(highs, kijun)
+    ll_k = _rolling_min(lows, kijun)
+    hh_s = _rolling_max(highs, senkou_b)
+    ll_s = _rolling_min(lows, senkou_b)
+
+    tenkan_val = (hh_t + ll_t) * 0.5
+    kijun_val = (hh_k + ll_k) * 0.5
+    senkou_a = (tenkan_val + kijun_val) * 0.5
+    senkou_b_val = (hh_s + ll_s) * 0.5
+    cloud_top = np.maximum(senkou_a, senkou_b_val)
+    cloud_bot = np.minimum(senkou_a, senkou_b_val)
+
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(senkou_b, n):
-        tenkan_val = (highs[i - tenkan + 1 : i + 1].max() + lows[i - tenkan + 1 : i + 1].min()) / 2
-        kijun_val = (highs[i - kijun + 1 : i + 1].max() + lows[i - kijun + 1 : i + 1].min()) / 2
-        senkou_a = (tenkan_val + kijun_val) / 2
-        senkou_b_val = (highs[i - senkou_b + 1 : i + 1].max() + lows[i - senkou_b + 1 : i + 1].min()) / 2
-        cloud_top = max(senkou_a, senkou_b_val)
-        cloud_bot = min(senkou_a, senkou_b_val)
-        if tenkan_val > kijun_val and closes[i] > cloud_top:
-            signals[i] = 1
-        elif tenkan_val < kijun_val and closes[i] < cloud_bot:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    tk_above_kj = tenkan_val > kijun_val
+    tk_below_kj = tenkan_val < kijun_val
+    above_cloud = closes > cloud_top
+    below_cloud = closes < cloud_bot
+    buy_mask = tk_above_kj & above_cloud
+    sell_mask = tk_below_kj & below_cloud
+    signals[senkou_b:][buy_mask[senkou_b:]] = 1
+    signals[senkou_b:][sell_mask[senkou_b:]] = -1
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -534,24 +591,47 @@ def stochastic(
     lows = _get_lows(rows)
     closes = _get_closes(rows)
 
+    # 向量化滚动 max/min
+    hh = _rolling_max(highs, k_period)
+    ll = _rolling_min(lows, k_period)
+    denom = hh - ll
+    safe_denom = np.where(denom == 0, 1.0, denom)
     k_vals = np.full(n, 50.0, dtype=np.float64)
-    for i in range(k_period - 1, n):
-        hh = highs[i - k_period + 1 : i + 1].max()
-        ll = lows[i - k_period + 1 : i + 1].min()
-        k_vals[i] = ((closes[i] - ll) / (hh - ll) * 100) if hh != ll else 50
+    k_vals[k_period - 1 :] = np.where(
+        denom[k_period - 1 :] != 0,
+        (closes[k_period - 1 :] - ll[k_period - 1 :]) / safe_denom[k_period - 1 :] * 100,
+        50.0,
+    )
 
+    # 向量化 D 值（SMA of K）— 用 cumsum 一次性计算
     d_vals = np.zeros(n, dtype=np.float64)
-    for i in range(k_period + d_period - 2, n):
-        d_vals[i] = k_vals[i - d_period + 1 : i + 1].mean()
+    k_cumsum = np.zeros(n + 1, dtype=np.float64)
+    k_cumsum[1:] = np.cumsum(k_vals)
+    start_d = k_period + d_period - 2
+    if start_d < n:
+        end = min(n, start_d + 1)  # at least one value
+        # For all i >= start_d: d_vals[i] = (k_cumsum[i+1] - k_cumsum[i+1-d_period]) / d_period
+        indices = np.arange(start_d, n)
+        d_vals[start_d:] = (k_cumsum[indices + 1] - k_cumsum[indices + 1 - d_period]) / d_period
 
+    # 向量化信号生成
     signals = np.zeros(n, dtype=np.int64)
-    for i in range(k_period + d_period, n):
-        if k_vals[i] > d_vals[i] and k_vals[i - 1] <= d_vals[i - 1] and k_vals[i] < oversold + 20:
-            signals[i] = 1
-        elif k_vals[i] < d_vals[i] and k_vals[i - 1] >= d_vals[i - 1] and k_vals[i] > overbought - 20:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    start_sig = k_period + d_period
+    if start_sig < n:
+        s = start_sig
+        k_above_d = k_vals[s:] > d_vals[s:]
+        k_prev_below_d = k_vals[s - 1 : n - 1] <= d_vals[s - 1 : n - 1]
+        k_low = k_vals[s:] < oversold + 20
+        buy_cross = k_above_d & k_prev_below_d & k_low
+
+        k_below_d = k_vals[s:] < d_vals[s:]
+        k_prev_above_d = k_vals[s - 1 : n - 1] >= d_vals[s - 1 : n - 1]
+        k_high = k_vals[s:] > overbought - 20
+        sell_cross = k_below_d & k_prev_above_d & k_high
+
+        signals[s:][buy_cross] = 1
+        signals[s:][sell_cross] = -1
+        signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -565,18 +645,26 @@ def williams_r(
     highs = _get_highs(rows)
     lows = _get_lows(rows)
     closes = _get_closes(rows)
-    signals = np.zeros(n, dtype=np.int64)
 
-    for i in range(period, n):
-        hh = highs[i - period + 1 : i + 1].max()
-        ll = lows[i - period + 1 : i + 1].min()
-        wr = ((hh - closes[i]) / (hh - ll) * -100) if hh != ll else -50
-        if wr < oversold:
-            signals[i] = 1
-        elif wr > overbought:
-            signals[i] = -1
-        else:
-            signals[i] = signals[i - 1]
+    # 向量化滚动 max/min
+    hh = _rolling_max(highs, period)
+    ll = _rolling_min(lows, period)
+    denom = hh - ll
+    safe_denom = np.where(denom == 0, 1.0, denom)
+    wr = np.full(n, -50.0, dtype=np.float64)
+    wr[period - 1 :] = np.where(
+        denom[period - 1 :] != 0,
+        (hh[period - 1 :] - closes[period - 1 :]) / safe_denom[period - 1 :] * -100,
+        -50.0,
+    )
+
+    # 向量化信号生成
+    signals = np.zeros(n, dtype=np.int64)
+    buy = wr < oversold
+    sell = wr > overbought
+    signals[buy] = 1
+    signals[sell] = -1
+    signals = _forward_fill_signals(signals, n)
     return signals.tolist()
 
 
@@ -615,17 +703,29 @@ def adx_trend(rows: list[dict[str, Any]], period: int = 14, threshold: float = 2
         sp[i] = (sp[i - 1] * (period - 1) + plus_dm[i]) / period
         sm[i] = (sm[i - 1] * (period - 1) + minus_dm[i]) / period
 
+    # 向量化 ADX 和信號生成
+    # 首先計算 DI+ 和 DI- (向量化)
+    pdi = np.zeros(n, dtype=np.float64)
+    mdi = np.zeros(n, dtype=np.float64)
+    safe_atr = np.where(atr > 0, atr, 1.0)
+    pdi[period:] = np.where(atr[period:] > 0, sp[period:] / safe_atr[period:] * 100, 0)
+    mdi[period:] = np.where(atr[period:] > 0, sm[period:] / safe_atr[period:] * 100, 0)
+
+    # 向量化 DX
+    di_sum = pdi + mdi
+    safe_sum = np.where(di_sum > 0, di_sum, 1.0)
+    dx = np.where(di_sum > 0, np.abs(pdi - mdi) / safe_sum * 100, 0)
+
+    # ADX (Wilder 遞迴，無法完全向量化但用 numpy array 索引)
+    adx = np.zeros(n, dtype=np.float64)
+    adx[period * 2] = dx[period + 1 : period * 2 + 1].mean()
+    for i in range(period * 2 + 1, n):
+        adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
+
+    # 向量化信號
     signals = np.zeros(n, dtype=np.int64)
-    adx_val = 0.0
-    for i in range(period * 2, n):
-        pdi = (sp[i] / atr[i] * 100) if atr[i] > 0 else 0
-        mdi = (sm[i] / atr[i] * 100) if atr[i] > 0 else 0
-        dx = abs(pdi - mdi) / (pdi + mdi) * 100 if (pdi + mdi) > 0 else 0
-        adx_val = (adx_val * (period - 1) + dx) / period
-        if adx_val > threshold:
-            signals[i] = 1 if pdi > mdi else -1
-        else:
-            signals[i] = 0
+    strong = adx > threshold
+    signals[period * 2 :][strong[period * 2 :]] = np.where(pdi[period * 2 :][strong[period * 2 :]] > mdi[period * 2 :][strong[period * 2 :]], 1, -1)
     return signals.tolist()
 
 
@@ -639,27 +739,42 @@ def parabolic_sar(
     highs = _get_highs(rows)
     lows = _get_lows(rows)
 
+    # 预提取 numpy arrays 到局部变量
+    highs_arr = highs
+    lows_arr = lows
+
     trend = 1
-    sar = lows[0]
-    ep = highs[0]
+    sar = lows_arr[0]
+    ep = highs_arr[0]
     af = af_start
     signals = np.zeros(n, dtype=np.int64)
+    min_func = min
+    max_func = max
+    af_step_local = af_step
+    af_max_local = af_max
 
     for i in range(2, n):
         prev_sar = sar
         sar = prev_sar + af * (ep - prev_sar)
+        hi, lo = highs_arr[i], lows_arr[i]
         if trend == 1:
-            sar = min(sar, lows[i - 1], lows[i - 2])
-            if lows[i] < sar:
-                trend, sar, ep, af = -1, ep, lows[i], af_start
-            elif highs[i] > ep:
-                ep, af = highs[i], min(af + af_step, af_max)
+            sar = min_func(sar, lows_arr[i - 1], lows_arr[i - 2])
+            if lo < sar:
+                trend, sar, ep, af = -1, ep, lo, af_start
+            elif hi > ep:
+                ep = hi
+                af = af + af_step_local
+                if af > af_max_local:
+                    af = af_max_local
         else:
-            sar = max(sar, highs[i - 1], highs[i - 2])
-            if highs[i] > sar:
-                trend, sar, ep, af = 1, ep, highs[i], af_start
-            elif lows[i] < ep:
-                ep, af = lows[i], min(af + af_step, af_max)
+            sar = max_func(sar, highs_arr[i - 1], highs_arr[i - 2])
+            if hi > sar:
+                trend, sar, ep, af = 1, ep, hi, af_start
+            elif lo < ep:
+                ep = lo
+                af = af + af_step_local
+                if af > af_max_local:
+                    af = af_max_local
         signals[i] = trend
     return signals.tolist()
 

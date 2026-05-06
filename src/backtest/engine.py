@@ -113,15 +113,17 @@ def _compute_metrics(
     # 最大連續虧損（向量化）
     if len(profit_arr) > 0:
         is_loss = (profit_arr < 0).astype(np.int32)
-        # 找到連續虧損的最大長度
-        max_consec_loss = 0
-        cur = 0
-        for v in is_loss:
-            if v:
-                cur += 1
-                max_consec_loss = max(max_consec_loss, cur)
+        if np.any(is_loss):
+            padded = np.concatenate([[0], is_loss, [0]])
+            diff = np.diff(padded)
+            starts = np.where(diff == 1)[0]
+            ends = np.where(diff == -1)[0]
+            if len(starts) > 0 and len(ends) > 0:
+                max_consec_loss = int(np.max(ends - starts))
             else:
-                cur = 0
+                max_consec_loss = 0
+        else:
+            max_consec_loss = 0
     else:
         max_consec_loss = 0
 
@@ -139,7 +141,7 @@ def _compute_metrics(
         "omega_ratio": omega,
         "tail_ratio": tail_ratio,
         "num_trades": len(trades),
-        "win_rate_pct": round(100 * len(win_trades) / len(trades), 1) if trades else 0,
+        "win_rate_pct": round(100 * win_trades_count / len(trades), 1) if trades else 0,
         "avg_win": avg_win,
         "avg_loss": avg_loss,
         "max_consec_loss": max_consec_loss,
