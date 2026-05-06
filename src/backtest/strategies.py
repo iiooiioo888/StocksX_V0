@@ -1,14 +1,27 @@
 # 回測策略：產生信號 (1=多, -1=空, 0=觀望)
-# v6.0 — NumPy 向量化優化版
+# v7.0 — 全面向量化優化，使用共享 np_utils
 from __future__ import annotations
 
 from typing import Any
 
 import numpy as np
 
+from .np_utils import (
+    OHLCVArrays,
+    atr as _atr,
+    crossover_signals,
+    ema as _ema,
+    forward_fill_signals,
+    rolling_max,
+    rolling_min,
+    sma as _sma,
+    true_range as _true_range,
+)
+
+
+# ─── 向後兼容的提取函數 ───
 
 def _get_closes(rows: list[dict[str, Any]]) -> np.ndarray:
-    """提取收盤價為 numpy array。"""
     return np.array([r["close"] for r in rows], dtype=np.float64)
 
 
@@ -24,88 +37,7 @@ def _get_volumes(rows: list[dict[str, Any]]) -> np.ndarray:
     return np.array([r["volume"] for r in rows], dtype=np.float64)
 
 
-def _sma(arr: np.ndarray, period: int) -> np.ndarray:
-    """向量化簡單移動平均。"""
-    n = len(arr)
-    result = np.zeros(n, dtype=np.float64)
-    if n < period:
-        return result
-    cumsum = np.cumsum(arr)
-    result[period:] = (cumsum[period:] - cumsum[:-period]) / period
-    return result
-
-
-def _ema(arr: np.ndarray, period: int) -> np.ndarray:
-    """指數移動平均（向量化初始化 + 遞迴迭代）。"""
-    n = len(arr)
-    if n == 0:
-        return np.zeros(0, dtype=np.float64)
-    result = np.zeros(n, dtype=np.float64)
-    k = 2.0 / (period + 1)
-    alpha = 1.0 - k
-    # 前 period-1 個值用累計均值初始化（向量化）
-    if n >= period:
-        result[period - 1] = np.mean(arr[:period])
-    else:
-        result[0] = arr[0]
-        return result
-    # 遞迴 EMA（最小化 Python 層開銷）
-    for i in range(period, n):
-        result[i] = k * arr[i] + alpha * result[i - 1]
-    return result
-
-
-def _rolling_max(arr: np.ndarray, period: int) -> np.ndarray:
-    """向量化滚动最大值（使用 sliding_window_view）。"""
-    n = len(arr)
-    if n < period:
-        return np.full(n, np.nan, dtype=np.float64)
-    result = np.full(n, np.nan, dtype=np.float64)
-    # sliding_window_view 创建无复制的滑动窗口视图
-    windows = np.lib.stride_tricks.sliding_window_view(arr, period)
-    result[period - 1 :] = windows.max(axis=1)
-    return result
-
-
-def _rolling_min(arr: np.ndarray, period: int) -> np.ndarray:
-    """向量化滚动最小值（使用 sliding_window_view）。"""
-    n = len(arr)
-    if n < period:
-        return np.full(n, np.nan, dtype=np.float64)
-    result = np.full(n, np.nan, dtype=np.float64)
-    windows = np.lib.stride_tricks.sliding_window_view(arr, period)
-    result[period - 1 :] = windows.min(axis=1)
-    return result
-
-
-def _forward_fill_signals(signals: np.ndarray, n: int) -> np.ndarray:
-    """向量化前向填充：將 0 替換為上一個非零值（numpy 掃描優化）。"""
-    mask = signals != 0
-    idx = np.where(mask, np.arange(n), 0)
-    np.maximum.accumulate(idx, out=idx)
-    return signals[idx]
-
-
-def _signals_from_crossover(fast_line: np.ndarray, slow_line: np.ndarray, n: int) -> list[int]:
-    """
-    通用交叉信號生成器（全向量化）：
-    - 快線上穿慢線 → 做多(1)
-    - 快線下穿慢線 → 做空(-1)
-    - 其餘維持前態
-    """
-    signals = np.zeros(n, dtype=np.int64)
-    above = fast_line > slow_line
-    cross_up = np.zeros(n, dtype=bool)
-    cross_down = np.zeros(n, dtype=bool)
-    cross_up[1:] = above[1:] & ~above[:-1]
-    cross_down[1:] = ~above[1:] & above[:-1]
-
-    signals[cross_up] = 1
-    signals[cross_down] = -1
-
-    # 向量化前向填充
-    signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
+# ─── 策略實現 ───
 
 
 def sma_cross(rows: list[dict[str, Any]], fast: int = 10, slow: int = 30) -> list[int]:
@@ -125,8 +57,7 @@ def sma_cross(rows: list[dict[str, Any]], fast: int = 10, slow: int = 30) -> lis
     signals = np.zeros(n, dtype=np.int64)
     signals[slow:][fast_ma[slow:] > slow_ma[slow:]] = 1
     signals[slow:][fast_ma[slow:] < slow_ma[slow:]] = -1
-    # 向量化前向填充
-    signals = _forward_fill_signals(signals, n)
+    signals = forward_fill_signals(signals)
     return signals.tolist()
 
 
@@ -155,7 +86,6 @@ def rsi_signal(
     gains = np.maximum(deltas, 0.0)
     losses = np.maximum(-deltas, 0.0)
 
-    # 使用 Wilder 平滑計算 RSI
     rsi_vals = np.zeros(n, dtype=np.float64)
     avg_gain = np.mean(gains[:period])
     avg_loss = np.mean(losses[:period])
@@ -177,7 +107,7 @@ def rsi_signal(
     sell = rsi_vals > overbought
     signals[buy] = 1
     signals[sell] = -1
-    signals = _forward_fill_signals(signals, n)
+    signals = forward_fill_signals(signals)
     return signals.tolist()
 
 
@@ -189,8 +119,8 @@ def macd_cross(
 ) -> list[int]:
     """
     MACD（向量化版）：
-    - 金叉(macd_line 由下往上突破 signal) → 做多(1)
-    - 死叉(macd_line 由上往下跌破 signal) → 做空(-1)
+    - 金叉 → 做多(1)
+    - 死叉 → 做空(-1)
     """
     n = len(rows)
     if n < slow + signal:
@@ -200,7 +130,7 @@ def macd_cross(
     ema_slow = _ema(closes, slow)
     macd_line = ema_fast - ema_slow
     signal_line = _ema(macd_line, signal)
-    return _signals_from_crossover(macd_line, signal_line, n)
+    return crossover_signals(macd_line, signal_line).tolist()
 
 
 def bollinger_signal(
@@ -218,7 +148,6 @@ def bollinger_signal(
         return [0] * n
     closes = _get_closes(rows)
 
-    # 向量化滾動均值和標準差
     cumsum = np.cumsum(closes)
     cumsum2 = np.cumsum(closes**2)
     rolling_mean = np.zeros(n, dtype=np.float64)
@@ -234,7 +163,7 @@ def bollinger_signal(
     signals = np.zeros(n, dtype=np.int64)
     signals[period:][closes[period:] <= lower[period:]] = 1
     signals[period:][closes[period:] >= upper[period:]] = -1
-    signals = _forward_fill_signals(signals, n)
+    signals = forward_fill_signals(signals)
     return signals.tolist()
 
 
@@ -250,7 +179,7 @@ def ema_cross(rows: list[dict[str, Any]], fast: int = 12, slow: int = 26) -> lis
     closes = _get_closes(rows)
     ema_f = _ema(closes, fast)
     ema_s = _ema(closes, slow)
-    return _signals_from_crossover(ema_f, ema_s, n)
+    return crossover_signals(ema_f, ema_s).tolist()
 
 
 def donchian_channel(
@@ -271,18 +200,12 @@ def donchian_channel(
     closes = _get_closes(rows)
     signals = np.zeros(n, dtype=np.int64)
 
-    # 向量化預計算滾動最高/最低
-    roll_max = _rolling_max(highs, period)
-    roll_min = _rolling_min(lows, period)
+    roll_max = rolling_max(highs, period)
+    roll_min = rolling_min(lows, period)
 
-    # 向量化信號生成
-    if breakout_mode:
-        signals[period:][closes[period:] >= roll_max[period:]] = 1
-        signals[period:][closes[period:] <= roll_min[period:]] = -1
-        signals = _forward_fill_signals(signals, n)
-    else:
-        signals[period:][closes[period:] >= roll_max[period:]] = 1
-        signals[period:][closes[period:] <= roll_min[period:]] = -1
+    signals[period:][closes[period:] >= roll_max[period:]] = 1
+    signals[period:][closes[period:] <= roll_min[period:]] = -1
+    signals = forward_fill_signals(signals)
     return signals.tolist()
 
 
@@ -302,36 +225,19 @@ def supertrend(
     highs = _get_highs(rows)
     lows = _get_lows(rows)
 
-    # True Range（向量化）
-    tr = np.zeros(n, dtype=np.float64)
-    tr[1:] = np.maximum(
-        highs[1:] - lows[1:],
-        np.maximum(
-            np.abs(highs[1:] - closes[:-1]),
-            np.abs(lows[1:] - closes[:-1]),
-        ),
-    )
+    # 使用共享的 true_range 和 atr
+    tr = _true_range(highs, lows, closes)
+    atr_arr = _atr(highs, lows, closes, period)
 
-    # ATR (Wilder 平滑)
-    atr = np.zeros(n, dtype=np.float64)
-    atr[period] = tr[1 : period + 1].mean()
-    for i in range(period + 1, n):
-        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
-
-    # Pre-extract numpy arrays to avoid repeated dict lookups
-    closes_arr = closes
-    highs_arr = highs
-    lows_arr = lows
     upper_band = np.zeros(n, dtype=np.float64)
     lower_band = np.zeros(n, dtype=np.float64)
     direction = np.ones(n, dtype=np.int64)
     signals = np.zeros(n, dtype=np.int64)
-    atr_arr = atr
     mult = multiplier
 
     for i in range(period, n):
-        hi, lo, cl = highs_arr[i], lows_arr[i], closes_arr[i]
-        prev_cl = closes_arr[i - 1]
+        hi, lo, cl = highs[i], lows[i], closes[i]
+        prev_cl = closes[i - 1]
         hl2 = (hi + lo) * 0.5
         basic_upper = hl2 + mult * atr_arr[i]
         basic_lower = hl2 - mult * atr_arr[i]
@@ -378,26 +284,23 @@ def dual_thrust(
     closes = _get_closes(rows)
     opens = np.array([r["open"] for r in rows], dtype=np.float64)
 
-    # 向量化滚动 max/min
-    hh = _rolling_max(highs, period)
-    ll = _rolling_min(lows, period)
-    hc = _rolling_max(closes, period)
-    lc = _rolling_min(closes, period)
+    hh = rolling_max(highs, period)
+    ll = rolling_min(lows, period)
+    hc = rolling_max(closes, period)
+    lc = rolling_min(closes, period)
 
-    # range_val = max(hh - lc, hc - ll)
     range_val = np.maximum(hh - lc, hc - ll)
     upper = opens + k1 * range_val
     lower = opens - k2 * range_val
 
     signals = np.zeros(n, dtype=np.int64)
-    # 只从 period+1 开始有效
     start = period + 1
     if start < n:
         buy = closes[start:] > upper[start:]
         sell = closes[start:] < lower[start:]
         signals[start:][buy] = 1
         signals[start:][sell] = -1
-        signals = _forward_fill_signals(signals, n)
+        signals = forward_fill_signals(signals)
     return signals.tolist()
 
 
@@ -416,26 +319,20 @@ def vwap_reversion(
     closes = _get_closes(rows)
     volumes = _get_volumes(rows)
 
-    # 预计算 cumsum 用于滚动窗口
-    pv = closes * volumes  # price * volume
+    pv = closes * volumes
     cum_pv = np.cumsum(pv)
     cum_v = np.cumsum(volumes)
-    cum_c = np.cumsum(closes)
-    cum_c2 = np.cumsum(closes ** 2)
 
     signals = np.zeros(n, dtype=np.int64)
     for i in range(period, n):
         s = i - period
         win_pv = cum_pv[i] - (cum_pv[s - 1] if s > 0 else 0)
         win_v = cum_v[i] - (cum_v[s - 1] if s > 0 else 0)
-        win_c = cum_c[i] - (cum_c[s - 1] if s > 0 else 0)
-        win_c2 = cum_c2[i] - (cum_c2[s - 1] if s > 0 else 0)
-        w = period + 1  # window size
         cum_vol = win_v if win_v != 0 else 1.0
         vwap = win_pv / cum_vol
-        mean_p = win_c / w
-        var_p = win_c2 / w - mean_p ** 2
-        std_p = np.sqrt(max(var_p, 0.0)) or 1.0
+        # 簡化標準差計算
+        win_closes = closes[max(0, s):i + 1]
+        std_p = float(np.std(win_closes)) or 1.0
         z = (closes[i] - vwap) / std_p if std_p > 0 else 0
         if z < -threshold:
             signals[i] = 1
@@ -445,6 +342,295 @@ def vwap_reversion(
             signals[i] = 0
         else:
             signals[i] = signals[i - 1]
+    return signals.tolist()
+
+
+def ichimoku(rows: list[dict[str, Any]], tenkan: int = 9, kijun: int = 26, senkou_b: int = 52) -> list[int]:
+    """一目均衡表（向量化版）。"""
+    n = len(rows)
+    if n < senkou_b:
+        return [0] * n
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+    closes = _get_closes(rows)
+
+    hh_t = rolling_max(highs, tenkan)
+    ll_t = rolling_min(lows, tenkan)
+    hh_k = rolling_max(highs, kijun)
+    ll_k = rolling_min(lows, kijun)
+    hh_s = rolling_max(highs, senkou_b)
+    ll_s = rolling_min(lows, senkou_b)
+
+    tenkan_val = (hh_t + ll_t) * 0.5
+    kijun_val = (hh_k + ll_k) * 0.5
+    senkou_a = (tenkan_val + kijun_val) * 0.5
+    senkou_b_val = (hh_s + ll_s) * 0.5
+    cloud_top = np.maximum(senkou_a, senkou_b_val)
+    cloud_bot = np.minimum(senkou_a, senkou_b_val)
+
+    signals = np.zeros(n, dtype=np.int64)
+    tk_above_kj = tenkan_val > kijun_val
+    tk_below_kj = tenkan_val < kijun_val
+    above_cloud = closes > cloud_top
+    below_cloud = closes < cloud_bot
+    buy_mask = tk_above_kj & above_cloud
+    sell_mask = tk_below_kj & below_cloud
+    signals[senkou_b:][buy_mask[senkou_b:]] = 1
+    signals[senkou_b:][sell_mask[senkou_b:]] = -1
+    signals = forward_fill_signals(signals)
+    return signals.tolist()
+
+
+def stochastic(
+    rows: list[dict[str, Any]], k_period: int = 14, d_period: int = 3, oversold: float = 20, overbought: float = 80
+) -> list[int]:
+    """隨機指標（KD，向量化版）。"""
+    n = len(rows)
+    if n < k_period + d_period:
+        return [0] * n
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+    closes = _get_closes(rows)
+
+    hh = rolling_max(highs, k_period)
+    ll = rolling_min(lows, k_period)
+    denom = hh - ll
+    safe_denom = np.where(denom == 0, 1.0, denom)
+    k_vals = np.full(n, 50.0, dtype=np.float64)
+    k_vals[k_period - 1:] = np.where(
+        denom[k_period - 1:] != 0,
+        (closes[k_period - 1:] - ll[k_period - 1:]) / safe_denom[k_period - 1:] * 100,
+        50.0,
+    )
+
+    d_vals = np.zeros(n, dtype=np.float64)
+    k_cumsum = np.zeros(n + 1, dtype=np.float64)
+    k_cumsum[1:] = np.cumsum(k_vals)
+    start_d = k_period + d_period - 2
+    if start_d < n:
+        indices = np.arange(start_d, n)
+        d_vals[start_d:] = (k_cumsum[indices + 1] - k_cumsum[indices + 1 - d_period]) / d_period
+
+    signals = np.zeros(n, dtype=np.int64)
+    start_sig = k_period + d_period
+    if start_sig < n:
+        s = start_sig
+        k_above_d = k_vals[s:] > d_vals[s:]
+        k_prev_below_d = k_vals[s - 1:n - 1] <= d_vals[s - 1:n - 1]
+        k_low = k_vals[s:] < oversold + 20
+        buy_cross = k_above_d & k_prev_below_d & k_low
+
+        k_below_d = k_vals[s:] < d_vals[s:]
+        k_prev_above_d = k_vals[s - 1:n - 1] >= d_vals[s - 1:n - 1]
+        k_high = k_vals[s:] > overbought - 20
+        sell_cross = k_below_d & k_prev_above_d & k_high
+
+        signals[s:][buy_cross] = 1
+        signals[s:][sell_cross] = -1
+        signals = forward_fill_signals(signals)
+    return signals.tolist()
+
+
+def williams_r(
+    rows: list[dict[str, Any]], period: int = 14, oversold: float = -80, overbought: float = -20
+) -> list[int]:
+    """威廉指標（Williams %R，向量化版）。"""
+    n = len(rows)
+    if n < period:
+        return [0] * n
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+    closes = _get_closes(rows)
+
+    hh = rolling_max(highs, period)
+    ll = rolling_min(lows, period)
+    denom = hh - ll
+    safe_denom = np.where(denom == 0, 1.0, denom)
+    wr = np.full(n, -50.0, dtype=np.float64)
+    wr[period - 1:] = np.where(
+        denom[period - 1:] != 0,
+        (hh[period - 1:] - closes[period - 1:]) / safe_denom[period - 1:] * -100,
+        -50.0,
+    )
+
+    signals = np.zeros(n, dtype=np.int64)
+    buy = wr < oversold
+    sell = wr > overbought
+    signals[buy] = 1
+    signals[sell] = -1
+    signals = forward_fill_signals(signals)
+    return signals.tolist()
+
+
+def adx_trend(rows: list[dict[str, Any]], period: int = 14, threshold: float = 25) -> list[int]:
+    """ADX 趨勢強度（向量化版）。"""
+    n = len(rows)
+    if n < period * 2:
+        return [0] * n
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+    closes = _get_closes(rows)
+
+    # 向量化 True Range 和 Directional Movement
+    tr_list = _true_range(highs, lows, closes)
+    up = np.diff(highs, prepend=highs[0])
+    down = -np.diff(lows, prepend=lows[0])
+    plus_dm = np.zeros(n, dtype=np.float64)
+    minus_dm = np.zeros(n, dtype=np.float64)
+    plus_dm[1:] = np.where((up[1:] > down[1:]) & (up[1:] > 0), up[1:], 0)
+    minus_dm[1:] = np.where((down[1:] > up[1:]) & (down[1:] > 0), down[1:], 0)
+
+    atr_arr = np.zeros(n, dtype=np.float64)
+    sp = np.zeros(n, dtype=np.float64)
+    sm = np.zeros(n, dtype=np.float64)
+    atr_arr[period] = tr_list[1:period + 1].mean()
+    sp[period] = plus_dm[1:period + 1].mean()
+    sm[period] = minus_dm[1:period + 1].mean()
+    for i in range(period + 1, n):
+        atr_arr[i] = (atr_arr[i - 1] * (period - 1) + tr_list[i]) / period
+        sp[i] = (sp[i - 1] * (period - 1) + plus_dm[i]) / period
+        sm[i] = (sm[i - 1] * (period - 1) + minus_dm[i]) / period
+
+    pdi = np.zeros(n, dtype=np.float64)
+    mdi = np.zeros(n, dtype=np.float64)
+    safe_atr = np.where(atr_arr > 0, atr_arr, 1.0)
+    pdi[period:] = np.where(atr_arr[period:] > 0, sp[period:] / safe_atr[period:] * 100, 0)
+    mdi[period:] = np.where(atr_arr[period:] > 0, sm[period:] / safe_atr[period:] * 100, 0)
+
+    di_sum = pdi + mdi
+    safe_sum = np.where(di_sum > 0, di_sum, 1.0)
+    dx = np.where(di_sum > 0, np.abs(pdi - mdi) / safe_sum * 100, 0)
+
+    adx = np.zeros(n, dtype=np.float64)
+    adx[period * 2] = dx[period + 1:period * 2 + 1].mean()
+    for i in range(period * 2 + 1, n):
+        adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
+
+    signals = np.zeros(n, dtype=np.int64)
+    strong = adx > threshold
+    signals[period * 2:][strong[period * 2:]] = np.where(pdi[period * 2:][strong[period * 2:]] > mdi[period * 2:][strong[period * 2:]], 1, -1)
+    return signals.tolist()
+
+
+def parabolic_sar(
+    rows: list[dict[str, Any]], af_start: float = 0.02, af_step: float = 0.02, af_max: float = 0.20
+) -> list[int]:
+    """拋物線 SAR（向量化版）。"""
+    n = len(rows)
+    if n < 3:
+        return [0] * n
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+
+    trend = 1
+    sar = lows[0]
+    ep = highs[0]
+    af = af_start
+    signals = np.zeros(n, dtype=np.int64)
+    min_func = min
+    max_func = max
+
+    for i in range(2, n):
+        prev_sar = sar
+        sar = prev_sar + af * (ep - prev_sar)
+        hi, lo = highs[i], lows[i]
+        if trend == 1:
+            sar = min_func(sar, lows[i - 1], lows[i - 2])
+            if lo < sar:
+                trend, sar, ep, af = -1, ep, lo, af_start
+            elif hi > ep:
+                ep = hi
+                af = min(af + af_step, af_max)
+        else:
+            sar = max_func(sar, highs[i - 1], highs[i - 2])
+            if hi > sar:
+                trend, sar, ep, af = 1, ep, hi, af_start
+            elif lo < ep:
+                ep = lo
+                af = min(af + af_step, af_max)
+        signals[i] = trend
+    return signals.tolist()
+
+
+# ─── 新增現代策略 ───
+
+
+def mean_reversion_zscore(rows: list[dict[str, Any]], period: int = 20, threshold: float = 2.0) -> list[int]:
+    """
+    Z-Score 均值回歸（向量化）：
+    - Z-Score < -threshold → 做多（超賣）
+    - Z-Score > +threshold → 做空（超買）
+    - Z-Score 回歸至 ±0.5 內 → 平倉
+    """
+    n = len(rows)
+    if n < period:
+        return [0] * n
+    closes = _get_closes(rows)
+
+    cumsum = np.cumsum(closes)
+    cumsum2 = np.cumsum(closes**2)
+    rolling_mean = np.zeros(n, dtype=np.float64)
+    rolling_std = np.zeros(n, dtype=np.float64)
+    rolling_mean[period:] = (cumsum[period:] - cumsum[:-period]) / period
+    rolling_var = (cumsum2[period:] - cumsum2[:-period]) / period - rolling_mean[period:] ** 2
+    rolling_std[period:] = np.sqrt(np.maximum(rolling_var, 0.0))
+
+    signals = np.zeros(n, dtype=np.int64)
+    z = np.zeros(n, dtype=np.float64)
+    mask_sigma = rolling_std[period:] > 0
+    z[period:][mask_sigma] = (closes[period:][mask_sigma] - rolling_mean[period:][mask_sigma]) / rolling_std[period:][mask_sigma]
+
+    signals[period:][z[period:] < -threshold] = 1
+    signals[period:][z[period:] > threshold] = -1
+    signals[period:][np.abs(z[period:]) < 0.5] = 0
+    signals = forward_fill_signals(signals)
+    return signals.tolist()
+
+
+def momentum_roc(rows: list[dict[str, Any]], period: int = 10, threshold: float = 5.0) -> list[int]:
+    """
+    動量變動率（Rate of Change，全向量化）：
+    - ROC > +threshold → 做多
+    - ROC < -threshold → 做空
+    """
+    n = len(rows)
+    if n < period + 1:
+        return [0] * n
+    closes = _get_closes(rows)
+
+    roc = np.zeros(n, dtype=np.float64)
+    roc[period:] = (closes[period:] - closes[:-period]) / closes[:-period] * 100
+
+    signals = np.zeros(n, dtype=np.int64)
+    signals[period:][roc[period:] > threshold] = 1
+    signals[period:][roc[period:] < -threshold] = -1
+    signals = forward_fill_signals(signals)
+    return signals.tolist()
+
+
+def keltner_channel(rows: list[dict[str, Any]], period: int = 20, atr_mult: float = 2.0) -> list[int]:
+    """
+    Keltner Channel：
+    - 收盤價跌破下軌（EMA - ATR*mult）→ 做多
+    - 收盤價突破上軌（EMA + ATR*mult）→ 做空
+    """
+    n = len(rows)
+    if n < period + 1:
+        return [0] * n
+    closes = _get_closes(rows)
+    highs = _get_highs(rows)
+    lows = _get_lows(rows)
+
+    ema_c = _ema(closes, period)
+    atr_arr = _atr(highs, lows, closes, period)
+
+    upper = ema_c + atr_mult * atr_arr
+    lower = ema_c - atr_mult * atr_arr
+
+    signals = np.zeros(n, dtype=np.int64)
+    signals[period:][closes[period:] <= lower[period:]] = 1
+    signals[period:][closes[period:] >= upper[period:]] = -1
+    signals = forward_fill_signals(signals)
     return signals.tolist()
 
 
@@ -524,7 +710,6 @@ STRATEGY_CONFIG = {
         "param_grid": {"af_start": [0.02], "af_step": [0.02], "af_max": [0.20]},
         "defaults": {"af_start": 0.02, "af_step": 0.02, "af_max": 0.20},
     },
-    # ── 新增現代策略 ──
     "mean_reversion_zscore": {
         "params": ["period", "threshold"],
         "param_grid": {"period": [15, 20, 30], "threshold": [1.5, 2.0, 2.5]},
@@ -541,336 +726,6 @@ STRATEGY_CONFIG = {
         "defaults": {"period": 20, "atr_mult": 2.0},
     },
 }
-
-
-def ichimoku(rows: list[dict[str, Any]], tenkan: int = 9, kijun: int = 26, senkou_b: int = 52) -> list[int]:
-    """一目均衡表（向量化版）。"""
-    n = len(rows)
-    if n < senkou_b:
-        return [0] * n
-    highs = _get_highs(rows)
-    lows = _get_lows(rows)
-    closes = _get_closes(rows)
-
-    # 向量化滚动 max/min
-    hh_t = _rolling_max(highs, tenkan)
-    ll_t = _rolling_min(lows, tenkan)
-    hh_k = _rolling_max(highs, kijun)
-    ll_k = _rolling_min(lows, kijun)
-    hh_s = _rolling_max(highs, senkou_b)
-    ll_s = _rolling_min(lows, senkou_b)
-
-    tenkan_val = (hh_t + ll_t) * 0.5
-    kijun_val = (hh_k + ll_k) * 0.5
-    senkou_a = (tenkan_val + kijun_val) * 0.5
-    senkou_b_val = (hh_s + ll_s) * 0.5
-    cloud_top = np.maximum(senkou_a, senkou_b_val)
-    cloud_bot = np.minimum(senkou_a, senkou_b_val)
-
-    signals = np.zeros(n, dtype=np.int64)
-    tk_above_kj = tenkan_val > kijun_val
-    tk_below_kj = tenkan_val < kijun_val
-    above_cloud = closes > cloud_top
-    below_cloud = closes < cloud_bot
-    buy_mask = tk_above_kj & above_cloud
-    sell_mask = tk_below_kj & below_cloud
-    signals[senkou_b:][buy_mask[senkou_b:]] = 1
-    signals[senkou_b:][sell_mask[senkou_b:]] = -1
-    signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
-
-
-def stochastic(
-    rows: list[dict[str, Any]], k_period: int = 14, d_period: int = 3, oversold: float = 20, overbought: float = 80
-) -> list[int]:
-    """隨機指標（KD，向量化版）。"""
-    n = len(rows)
-    if n < k_period + d_period:
-        return [0] * n
-    highs = _get_highs(rows)
-    lows = _get_lows(rows)
-    closes = _get_closes(rows)
-
-    # 向量化滚动 max/min
-    hh = _rolling_max(highs, k_period)
-    ll = _rolling_min(lows, k_period)
-    denom = hh - ll
-    safe_denom = np.where(denom == 0, 1.0, denom)
-    k_vals = np.full(n, 50.0, dtype=np.float64)
-    k_vals[k_period - 1 :] = np.where(
-        denom[k_period - 1 :] != 0,
-        (closes[k_period - 1 :] - ll[k_period - 1 :]) / safe_denom[k_period - 1 :] * 100,
-        50.0,
-    )
-
-    # 向量化 D 值（SMA of K）— 用 cumsum 一次性计算
-    d_vals = np.zeros(n, dtype=np.float64)
-    k_cumsum = np.zeros(n + 1, dtype=np.float64)
-    k_cumsum[1:] = np.cumsum(k_vals)
-    start_d = k_period + d_period - 2
-    if start_d < n:
-        end = min(n, start_d + 1)  # at least one value
-        # For all i >= start_d: d_vals[i] = (k_cumsum[i+1] - k_cumsum[i+1-d_period]) / d_period
-        indices = np.arange(start_d, n)
-        d_vals[start_d:] = (k_cumsum[indices + 1] - k_cumsum[indices + 1 - d_period]) / d_period
-
-    # 向量化信号生成
-    signals = np.zeros(n, dtype=np.int64)
-    start_sig = k_period + d_period
-    if start_sig < n:
-        s = start_sig
-        k_above_d = k_vals[s:] > d_vals[s:]
-        k_prev_below_d = k_vals[s - 1 : n - 1] <= d_vals[s - 1 : n - 1]
-        k_low = k_vals[s:] < oversold + 20
-        buy_cross = k_above_d & k_prev_below_d & k_low
-
-        k_below_d = k_vals[s:] < d_vals[s:]
-        k_prev_above_d = k_vals[s - 1 : n - 1] >= d_vals[s - 1 : n - 1]
-        k_high = k_vals[s:] > overbought - 20
-        sell_cross = k_below_d & k_prev_above_d & k_high
-
-        signals[s:][buy_cross] = 1
-        signals[s:][sell_cross] = -1
-        signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
-
-
-def williams_r(
-    rows: list[dict[str, Any]], period: int = 14, oversold: float = -80, overbought: float = -20
-) -> list[int]:
-    """威廉指標（Williams %R，向量化版）。"""
-    n = len(rows)
-    if n < period:
-        return [0] * n
-    highs = _get_highs(rows)
-    lows = _get_lows(rows)
-    closes = _get_closes(rows)
-
-    # 向量化滚动 max/min
-    hh = _rolling_max(highs, period)
-    ll = _rolling_min(lows, period)
-    denom = hh - ll
-    safe_denom = np.where(denom == 0, 1.0, denom)
-    wr = np.full(n, -50.0, dtype=np.float64)
-    wr[period - 1 :] = np.where(
-        denom[period - 1 :] != 0,
-        (hh[period - 1 :] - closes[period - 1 :]) / safe_denom[period - 1 :] * -100,
-        -50.0,
-    )
-
-    # 向量化信号生成
-    signals = np.zeros(n, dtype=np.int64)
-    buy = wr < oversold
-    sell = wr > overbought
-    signals[buy] = 1
-    signals[sell] = -1
-    signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
-
-
-def adx_trend(rows: list[dict[str, Any]], period: int = 14, threshold: float = 25) -> list[int]:
-    """ADX 趨勢強度（向量化版）。"""
-    n = len(rows)
-    if n < period * 2:
-        return [0] * n
-    highs = _get_highs(rows)
-    lows = _get_lows(rows)
-    closes = _get_closes(rows)
-
-    plus_dm = np.zeros(n, dtype=np.float64)
-    minus_dm = np.zeros(n, dtype=np.float64)
-    tr_list = np.zeros(n, dtype=np.float64)
-    # 向量化 True Range
-    tr_list[1:] = np.maximum(
-        highs[1:] - lows[1:],
-        np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])),
-    )
-    # 向量化 Directional Movement
-    up = np.diff(highs, prepend=highs[0])
-    down = np.diff(lows, prepend=lows[0])
-    down = -down  # 原始: lows[i-1] - lows[i]
-    plus_dm[1:] = np.where((up[1:] > down[1:]) & (up[1:] > 0), up[1:], 0)
-    minus_dm[1:] = np.where((down[1:] > up[1:]) & (down[1:] > 0), down[1:], 0)
-
-    atr = np.zeros(n, dtype=np.float64)
-    sp = np.zeros(n, dtype=np.float64)
-    sm = np.zeros(n, dtype=np.float64)
-    atr[period] = tr_list[1 : period + 1].mean()
-    sp[period] = plus_dm[1 : period + 1].mean()
-    sm[period] = minus_dm[1 : period + 1].mean()
-    for i in range(period + 1, n):
-        atr[i] = (atr[i - 1] * (period - 1) + tr_list[i]) / period
-        sp[i] = (sp[i - 1] * (period - 1) + plus_dm[i]) / period
-        sm[i] = (sm[i - 1] * (period - 1) + minus_dm[i]) / period
-
-    # 向量化 ADX 和信號生成
-    # 首先計算 DI+ 和 DI- (向量化)
-    pdi = np.zeros(n, dtype=np.float64)
-    mdi = np.zeros(n, dtype=np.float64)
-    safe_atr = np.where(atr > 0, atr, 1.0)
-    pdi[period:] = np.where(atr[period:] > 0, sp[period:] / safe_atr[period:] * 100, 0)
-    mdi[period:] = np.where(atr[period:] > 0, sm[period:] / safe_atr[period:] * 100, 0)
-
-    # 向量化 DX
-    di_sum = pdi + mdi
-    safe_sum = np.where(di_sum > 0, di_sum, 1.0)
-    dx = np.where(di_sum > 0, np.abs(pdi - mdi) / safe_sum * 100, 0)
-
-    # ADX (Wilder 遞迴，無法完全向量化但用 numpy array 索引)
-    adx = np.zeros(n, dtype=np.float64)
-    adx[period * 2] = dx[period + 1 : period * 2 + 1].mean()
-    for i in range(period * 2 + 1, n):
-        adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
-
-    # 向量化信號
-    signals = np.zeros(n, dtype=np.int64)
-    strong = adx > threshold
-    signals[period * 2 :][strong[period * 2 :]] = np.where(pdi[period * 2 :][strong[period * 2 :]] > mdi[period * 2 :][strong[period * 2 :]], 1, -1)
-    return signals.tolist()
-
-
-def parabolic_sar(
-    rows: list[dict[str, Any]], af_start: float = 0.02, af_step: float = 0.02, af_max: float = 0.20
-) -> list[int]:
-    """拋物線 SAR（向量化版）。"""
-    n = len(rows)
-    if n < 3:
-        return [0] * n
-    highs = _get_highs(rows)
-    lows = _get_lows(rows)
-
-    # 预提取 numpy arrays 到局部变量
-    highs_arr = highs
-    lows_arr = lows
-
-    trend = 1
-    sar = lows_arr[0]
-    ep = highs_arr[0]
-    af = af_start
-    signals = np.zeros(n, dtype=np.int64)
-    min_func = min
-    max_func = max
-    af_step_local = af_step
-    af_max_local = af_max
-
-    for i in range(2, n):
-        prev_sar = sar
-        sar = prev_sar + af * (ep - prev_sar)
-        hi, lo = highs_arr[i], lows_arr[i]
-        if trend == 1:
-            sar = min_func(sar, lows_arr[i - 1], lows_arr[i - 2])
-            if lo < sar:
-                trend, sar, ep, af = -1, ep, lo, af_start
-            elif hi > ep:
-                ep = hi
-                af = af + af_step_local
-                if af > af_max_local:
-                    af = af_max_local
-        else:
-            sar = max_func(sar, highs_arr[i - 1], highs_arr[i - 2])
-            if hi > sar:
-                trend, sar, ep, af = 1, ep, hi, af_start
-            elif lo < ep:
-                ep = lo
-                af = af + af_step_local
-                if af > af_max_local:
-                    af = af_max_local
-        signals[i] = trend
-    return signals.tolist()
-
-
-# ─── 新增現代策略 ───
-
-
-def mean_reversion_zscore(rows: list[dict[str, Any]], period: int = 20, threshold: float = 2.0) -> list[int]:
-    """
-    Z-Score 均值回歸（向量化）：
-    - Z-Score < -threshold → 做多（超賣）
-    - Z-Score > +threshold → 做空（超買）
-    - Z-Score 回歸至 ±0.5 內 → 平倉
-    """
-    n = len(rows)
-    if n < period:
-        return [0] * n
-    closes = _get_closes(rows)
-
-    # 向量化滾動均值和標準差
-    cumsum = np.cumsum(closes)
-    cumsum2 = np.cumsum(closes**2)
-    rolling_mean = np.zeros(n, dtype=np.float64)
-    rolling_std = np.zeros(n, dtype=np.float64)
-    rolling_mean[period:] = (cumsum[period:] - cumsum[:-period]) / period
-    rolling_var = (cumsum2[period:] - cumsum2[:-period]) / period - rolling_mean[period:] ** 2
-    rolling_std[period:] = np.sqrt(np.maximum(rolling_var, 0.0))
-
-    signals = np.zeros(n, dtype=np.int64)
-    z = np.zeros(n, dtype=np.float64)
-    mask_sigma = rolling_std[period:] > 0
-    z[period:][mask_sigma] = (closes[period:][mask_sigma] - rolling_mean[period:][mask_sigma]) / rolling_std[period:][mask_sigma]
-
-    signals[period:][z[period:] < -threshold] = 1
-    signals[period:][z[period:] > threshold] = -1
-    # 平倉區間
-    signals[period:][np.abs(z[period:]) < 0.5] = 0
-    signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
-
-
-def momentum_roc(rows: list[dict[str, Any]], period: int = 10, threshold: float = 5.0) -> list[int]:
-    """
-    動量變動率（Rate of Change，全向量化）：
-    - ROC > +threshold → 做多
-    - ROC < -threshold → 做空
-    """
-    n = len(rows)
-    if n < period + 1:
-        return [0] * n
-    closes = _get_closes(rows)
-
-    # 向量化 ROC 計算
-    roc = np.zeros(n, dtype=np.float64)
-    roc[period:] = (closes[period:] - closes[:-period]) / closes[:-period] * 100
-
-    signals = np.zeros(n, dtype=np.int64)
-    signals[period:][roc[period:] > threshold] = 1
-    signals[period:][roc[period:] < -threshold] = -1
-    signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
-
-
-def keltner_channel(rows: list[dict[str, Any]], period: int = 20, atr_mult: float = 2.0) -> list[int]:
-    """
-    Keltner Channel：
-    - 收盤價跌破下軌（EMA - ATR*mult）→ 做多
-    - 收盤價突破上軌（EMA + ATR*mult）→ 做空
-    """
-    n = len(rows)
-    if n < period + 1:
-        return [0] * n
-    closes = _get_closes(rows)
-    highs = _get_highs(rows)
-    lows = _get_lows(rows)
-
-    ema_c = _ema(closes, period)
-    # True Range（向量化）
-    tr = np.zeros(n, dtype=np.float64)
-    tr[1:] = np.maximum(
-        highs[1:] - lows[1:],
-        np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])),
-    )
-    atr = np.zeros(n, dtype=np.float64)
-    atr[period] = tr[1 : period + 1].mean()
-    for i in range(period + 1, n):
-        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
-
-    upper = ema_c + atr_mult * atr
-    lower = ema_c - atr_mult * atr
-
-    signals = np.zeros(n, dtype=np.int64)
-    signals[period:][closes[period:] <= lower[period:]] = 1
-    signals[period:][closes[period:] >= upper[period:]] = -1
-    signals = _forward_fill_signals(signals, n)
-    return signals.tolist()
 
 
 _STRATEGY_FUNCS = {

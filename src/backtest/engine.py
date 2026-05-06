@@ -1,4 +1,6 @@
-# 回測引擎：取得 K 線、跑策略、計算權益曲線與績效指標
+# 回測引擎 v2.0 — 統一高性能版
+# 合併 engine.py 和 engine_vec.py，消除重複代碼
+# 使用 OHLCVArrays 避免重複數組創建
 from __future__ import annotations
 
 import math
@@ -7,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from src.data.crypto import CryptoDataFetcher
+from .np_utils import OHLCVArrays
 
 from . import strategies
 
@@ -68,7 +70,6 @@ def _compute_metrics(
         mean_r = float(np.mean(bar_returns))
         std_r = float(np.std(bar_returns))
         sharpe = (mean_r / std_r * math.sqrt(252)) if std_r > 0 else 0.0
-        # Sortino：只考慮負報酬
         neg = bar_returns[bar_returns < 0]
         std_neg = float(np.sqrt(np.mean(neg ** 2))) if len(neg) > 0 else 0.0
         sortino = (mean_r / std_neg * math.sqrt(252)) if std_neg > 0 else 0.0
@@ -165,14 +166,32 @@ def _run_backtest_on_rows(
     fee_rate: float = 0.0,
     slippage: float = 0.0,
 ) -> BacktestResult:
-    """核心回測邏輯。fee_rate 和 slippage 為百分比（如 0.05 = 0.05%）。"""
+    """
+    核心回測邏輯 — 高性能版。
+
+    優化：
+    1. 使用 OHLCVArrays 預提取所有數組，消除循環內 dict 查找
+    2. 信號一次性計算
+    3. 權益曲線最後批量構建
+    """
     out = BacktestResult()
     if not rows:
         out.error = "無 K 線資料，請先拉取數據或調整時間範圍。"
         return out
 
     out.raw_ohlcv = rows
+
+    # 預提取所有數組（一次性，避免循環內重複 dict 查找）
+    arr = OHLCVArrays.from_rows(rows)
+    timestamps = arr.timestamps
+    highs = arr.highs
+    lows = arr.lows
+    closes = arr.closes
+    n = arr.n
+
+    # 一次性計算所有信號
     sig = strategies.get_signal(strategy, rows, **strategy_params)
+    signals = np.array(sig, dtype=np.int32) if len(sig) == n else np.zeros(n, dtype=np.int32)
 
     cost_pct = (fee_rate + slippage) / 100
     total_fees = 0.0
@@ -181,48 +200,46 @@ def _run_backtest_on_rows(
     position = 0
     entry_price = 0.0
     entry_ts_prev = since_ms
-    equity_curve = []
     trades = []
     liquidated = False
 
-    for i, r in enumerate(rows):
-        ts = r["timestamp"]
-        _o = r["open"]
-        h = r["high"]
-        l = r["low"]
-        close = r["close"]
-        target = sig[i] if i < len(sig) else 0
+    # 權益曲線用 numpy 構建，最後批量轉換
+    equity_arr = np.empty(n, dtype=np.float64)
+    position_arr = np.empty(n, dtype=np.int32)
+
+    for i in range(n):
+        ts = timestamps[i]
+        h = highs[i]
+        l = lows[i]
+        close = closes[i]
+        target = signals[i]
 
         if liquidated:
-            equity_curve.append({"timestamp": ts, "equity": 0.0, "position": 0})
+            equity_arr[i] = 0.0
+            position_arr[i] = 0
             continue
 
-        # 先檢查本 bar 是否觸發止盈 / 止損（依 high/low 判斷是否觸價）
+        # TP/SL 檢查
         if position != 0 and entry_price and (take_profit_pct or stop_loss_pct):
-            direction = position  # 1 = 多，-1 = 空
+            direction = position
             tp_price = None
             sl_price = None
             if take_profit_pct and take_profit_pct > 0:
-                if direction == 1:
-                    tp_price = entry_price * (1 + take_profit_pct / 100.0)
-                else:
-                    tp_price = entry_price * (1 - take_profit_pct / 100.0)
+                tp_price = entry_price * (1 + take_profit_pct / 100.0) if direction == 1 else entry_price * (1 - take_profit_pct / 100.0)
             if stop_loss_pct and stop_loss_pct > 0:
-                if direction == 1:
-                    sl_price = entry_price * (1 - stop_loss_pct / 100.0)
-                else:
-                    sl_price = entry_price * (1 + stop_loss_pct / 100.0)
+                sl_price = entry_price * (1 - stop_loss_pct / 100.0) if direction == 1 else entry_price * (1 + stop_loss_pct / 100.0)
+
             touched_sl = sl_price is not None and l <= sl_price <= h
             touched_tp = tp_price is not None and l <= tp_price <= h
             exit_price = None
             exit_reason = None
-            # 保守假設：同一根同時觸達 TP 與 SL 時，先觸發止損
             if touched_sl:
                 exit_price = sl_price
                 exit_reason = "sl"
             elif touched_tp:
                 exit_price = tp_price
                 exit_reason = "tp"
+
             if exit_price is not None:
                 price_return = (exit_price - entry_price) / entry_price * direction
                 round_trip_cost = cost_pct * 2
@@ -237,26 +254,19 @@ def _run_backtest_on_rows(
                     profit = -equity_before
                     pnl_pct = -1.0
                     liquidated = True
-                trades.append(
-                    {
-                        "entry_ts": entry_ts_prev,
-                        "exit_ts": ts,
-                        "side": direction,
-                        "entry_price": entry_price,
-                        "exit_price": exit_price,
-                        "pnl_pct": round(pnl_pct * 100, 4),
-                        "profit": round(profit, 2),
-                        "fee": round(fee_amount, 2),
-                        "liquidation": liquidated,
-                        "exit_reason": exit_reason,
-                    }
-                )
+                trades.append({
+                    "entry_ts": entry_ts_prev, "exit_ts": ts, "side": direction,
+                    "entry_price": entry_price, "exit_price": exit_price,
+                    "pnl_pct": round(pnl_pct * 100, 4), "profit": round(profit, 2),
+                    "fee": round(fee_amount, 2), "liquidation": liquidated, "exit_reason": exit_reason,
+                })
                 position = 0
                 entry_price = 0.0
-                equity_curve.append({"timestamp": ts, "equity": round(equity, 2), "position": position})
-                # 爆倉或本 bar 已 TP/SL 平倉後，不再處理本 bar 其他訊號
+                equity_arr[i] = equity
+                position_arr[i] = 0
                 continue
 
+        # 信號變化平倉
         if position != 0 and target != position and entry_price:
             direction = position
             price_return = (close - entry_price) / entry_price * direction
@@ -272,38 +282,34 @@ def _run_backtest_on_rows(
                 profit = -equity_before
                 pnl_pct = -1.0
                 liquidated = True
-            trades.append(
-                {
-                    "entry_ts": entry_ts_prev,
-                    "exit_ts": ts,
-                    "side": direction,
-                    "entry_price": entry_price,
-                    "exit_price": close,
-                    "pnl_pct": round(pnl_pct * 100, 4),
-                    "profit": round(profit, 2),
-                    "fee": round(fee_amount, 2),
-                    "liquidation": liquidated,
-                }
-            )
+            trades.append({
+                "entry_ts": entry_ts_prev, "exit_ts": ts, "side": direction,
+                "entry_price": entry_price, "exit_price": close,
+                "pnl_pct": round(pnl_pct * 100, 4), "profit": round(profit, 2),
+                "fee": round(fee_amount, 2), "liquidation": liquidated,
+            })
             position = 0
             entry_price = 0.0
 
+        # 開倉
         if not liquidated and target != 0 and position == 0:
             position = target
             entry_price = close
             entry_ts_prev = ts
 
-        # Mark-to-market：持倉期間按當前收盤價計算未實現盈虧
+        # Mark-to-market
         if position != 0 and entry_price:
-            direction = position
-            unrealized_return = (close - entry_price) / entry_price * direction
+            unrealized_return = (close - entry_price) / entry_price * position
             mtm_equity = equity * (1 + unrealized_return * leverage)
         else:
             mtm_equity = equity
-        equity_curve.append({"timestamp": ts, "equity": round(mtm_equity, 2), "position": position})
 
-    if not liquidated and position != 0 and entry_price and rows:
-        last_close = rows[-1]["close"]
+        equity_arr[i] = mtm_equity
+        position_arr[i] = position
+
+    # 強制平倉
+    if not liquidated and position != 0 and entry_price and n > 0:
+        last_close = closes[-1]
         direction = position
         price_return = (last_close - entry_price) / entry_price * direction
         round_trip_cost = cost_pct * 2
@@ -317,27 +323,22 @@ def _run_backtest_on_rows(
             equity = 0.0
             profit = -equity_before
             pnl_pct = -1.0
-        trades.append(
-            {
-                "entry_ts": entry_ts_prev,
-                "exit_ts": rows[-1]["timestamp"],
-                "side": direction,
-                "entry_price": entry_price,
-                "fee": round(fee_amount, 2),
-                "exit_price": last_close,
-                "pnl_pct": round(pnl_pct * 100, 4),
-                "profit": round(profit, 2),
-                "liquidation": equity == 0,
-            }
-        )
-        # 更新最後一筆權益曲線為平倉後的實際權益
-        if equity_curve:
-            equity_curve[-1]["equity"] = round(equity, 2)
-            equity_curve[-1]["position"] = 0
+        trades.append({
+            "entry_ts": entry_ts_prev, "exit_ts": timestamps[-1], "side": direction,
+            "entry_price": entry_price, "fee": round(fee_amount, 2),
+            "exit_price": last_close, "pnl_pct": round(pnl_pct * 100, 4),
+            "profit": round(profit, 2), "liquidation": equity == 0,
+        })
+        equity_arr[-1] = equity
+        position_arr[-1] = 0
 
-    out.equity_curve = equity_curve
+    # 批量構建權益曲線（避免逐條 dict 構建）
+    out.equity_curve = [
+        {"timestamp": int(timestamps[i]), "equity": round(float(equity_arr[i]), 2), "position": int(position_arr[i])}
+        for i in range(n)
+    ]
     out.trades = trades
-    out.metrics = _compute_metrics(equity_curve, trades, initial_equity, since_ms, until_ms, leverage=leverage)
+    out.metrics = _compute_metrics(out.equity_curve, trades, initial_equity, since_ms, until_ms, leverage=leverage)
     out.metrics["total_fees"] = round(total_fees, 2)
     out.metrics["fee_rate_pct"] = fee_rate
     out.metrics["slippage_pct"] = slippage
@@ -365,6 +366,7 @@ def run_backtest(
     strategy_params = strategy_params or {}
     out = BacktestResult()
     try:
+        from src.data.crypto import CryptoDataFetcher
         fetcher = CryptoDataFetcher(exchange_id)
         rows = fetcher.get_ohlcv(
             symbol, timeframe, since_ms, until_ms, fill_gaps=True, exclude_outliers=exclude_outliers

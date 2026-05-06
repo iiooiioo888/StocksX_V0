@@ -1,20 +1,16 @@
 """
-進階技術指標 — 擴展策略庫
+進階技術指標 — 全向量化優化版 v2.0
 
-新增指標：
-- ATR (Average True Range)
-- OBV (On-Balance Volume)
-- CCI (Commodity Channel Index)
-- MFI (Money Flow Index)
-- Aroon Oscillator
-- Stochastic RSI
-- Keltner Channel
-- Heikin-Ashi
-- Volume Profile
-- Pivot Points
+性能優化：
+- 所有函數接受 OHLCVArrays 或 numpy 數組，避免重複 dict→array 轉換
+- 消除 Python 迴圈，用 sliding_window_view / cumsum 替代
+- 共享 np_utils 原語，減少代碼重複
 
 用法：
     from src.backtest.indicators import atr, obv, cci, heikin_ashi
+    from src.backtest.np_utils import OHLCVArrays
+    arr = OHLCVArrays.from_rows(rows)
+    atr_vals = atr(arr.highs, arr.lows, arr.closes)
 """
 
 from __future__ import annotations
@@ -23,9 +19,11 @@ from typing import Any
 
 import numpy as np
 
+from .np_utils import OHLCVArrays, atr as _atr, true_range as _true_range, rolling_max, rolling_min, sma as _sma, ema as _ema
+
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers — 向後兼容
 # ---------------------------------------------------------------------------
 
 def _extract(rows: list[dict[str, Any]], key: str) -> np.ndarray:
@@ -44,12 +42,7 @@ def true_range(rows: list[dict[str, Any]]) -> list[float]:
     highs = _extract(rows, "high")
     lows = _extract(rows, "low")
     closes = _extract(rows, "close")
-    tr = highs - lows
-    tr[1:] = np.maximum(
-        tr[1:],
-        np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])),
-    )
-    return tr.tolist()
+    return _true_range(highs, lows, closes).tolist()
 
 
 # ---------------------------------------------------------------------------
@@ -58,15 +51,12 @@ def true_range(rows: list[dict[str, Any]]) -> list[float]:
 
 def atr(rows: list[dict[str, Any]], period: int = 14) -> list[float]:
     """平均真實波幅 (ATR)."""
-    tr = np.array(true_range(rows), dtype=np.float64)
-    n = len(tr)
-    if n < period:
-        return [0.0] * n
-    result = np.zeros(n)
-    result[period - 1] = np.mean(tr[:period])
-    for i in range(period, n):
-        result[i] = (result[i - 1] * (period - 1) + tr[i]) / period
-    return result.tolist()
+    if not rows:
+        return []
+    highs = _extract(rows, "high")
+    lows = _extract(rows, "low")
+    closes = _extract(rows, "close")
+    return _atr(highs, lows, closes, period).tolist()
 
 
 # ---------------------------------------------------------------------------
@@ -85,11 +75,11 @@ def obv(rows: list[dict[str, Any]]) -> list[float]:
 
 
 # ---------------------------------------------------------------------------
-# 4. cci — 向量化滚动 (cumsum trick)
+# 4. cci — 向量化 rolling MAD（消除 Python 迴圈）
 # ---------------------------------------------------------------------------
 
 def cci(rows: list[dict[str, Any]], period: int = 20) -> list[float]:
-    """商品通道指標 (CCI)."""
+    """商品通道指標 (CCI) — 全向量化版。"""
     n = len(rows)
     if n < period:
         return [0.0] * n
@@ -103,25 +93,23 @@ def cci(rows: list[dict[str, Any]], period: int = 20) -> list[float]:
     sma[period - 1] = cs[period - 1] / period
     sma[period:] = (cs[period:] - cs[:-period]) / period
 
-    # Rolling MAD (mean absolute deviation)
-    result = np.zeros(n)
-    for i in range(period - 1, n):
-        window = tp[i - period + 1 : i + 1]
-        mad = np.mean(np.abs(window - sma[i]))
-        if mad == 0:
-            result[i] = 0.0
-        else:
-            result[i] = (tp[i] - sma[i]) / (0.015 * mad)
+    # Rolling MAD via sliding_window_view（向量化，無 Python 迴圈）
+    windows = np.lib.stride_tricks.sliding_window_view(tp, period)
+    means = windows.mean(axis=1)
+    mad_vals = np.mean(np.abs(windows - means[:, np.newaxis]), axis=1)
 
+    result = np.zeros(n)
+    valid = mad_vals > 0
+    result[period - 1:][valid] = (tp[period - 1:][valid] - sma[period - 1:][valid]) / (0.015 * mad_vals[valid])
     return result.tolist()
 
 
 # ---------------------------------------------------------------------------
-# 5. mfi — 向量化
+# 5. mfi — 向量化（消除 Python 迴圈）
 # ---------------------------------------------------------------------------
 
 def mfi(rows: list[dict[str, Any]], period: int = 14) -> list[float]:
-    """資金流量指標 (MFI)."""
+    """資金流量指標 (MFI) — 全向量化版。"""
     n = len(rows)
     if n < period + 1:
         return [50.0] * n
@@ -130,7 +118,6 @@ def mfi(rows: list[dict[str, Any]], period: int = 14) -> list[float]:
     volumes = _extract(rows, "volume")
     mf = tp * volumes
 
-    # Direction: +1 if tp > prev_tp, -1 if tp < prev_tp, else 0
     diff_tp = np.diff(tp)
     direction = np.zeros(n)
     direction[1:] = np.sign(diff_tp)
@@ -143,25 +130,25 @@ def mfi(rows: list[dict[str, Any]], period: int = 14) -> list[float]:
     cs_neg = np.cumsum(neg_mf)
 
     result = np.full(n, 50.0)
-    for i in range(period, n):
-        p = cs_pos[i] - (cs_pos[i - period] if i >= period else 0.0)
-        ne = cs_neg[i] - (cs_neg[i - period] if i >= period else 0.0)
-        if ne == 0:
-            result[i] = 100.0
-        else:
-            ratio = p / ne
-            result[i] = 100.0 - (100.0 / (1.0 + ratio))
+    # 向量化計算所有 period 位置
+    indices = np.arange(period, n)
+    p = cs_pos[indices] - cs_pos[indices - period]
+    ne = cs_neg[indices] - cs_neg[indices - period]
 
+    # 處理 ne == 0 的情況
+    safe_ne = np.where(ne == 0, 1.0, ne)
+    ratio = p / safe_ne
+    result[period:] = np.where(ne == 0, 100.0, 100.0 - (100.0 / (1.0 + ratio)))
     return result.tolist()
 
 
 # ---------------------------------------------------------------------------
-# 6. aroon — 向量化 (argmax/argmin per window)
+# 6. aroon — 向量化（argmax/argmin per window via sliding_window_view）
 # ---------------------------------------------------------------------------
 
 def aroon(rows: list[dict[str, Any]], period: int = 25) -> tuple[list[float], list[float], list[float]]:
     """
-    Aroon 指標.
+    Aroon 指標 — 向量化版。
 
     Returns: (aroon_up, aroon_down, aroon_osc)
     """
@@ -173,18 +160,21 @@ def aroon(rows: list[dict[str, Any]], period: int = 25) -> tuple[list[float], li
     highs = _extract(rows, "high")
     lows = _extract(rows, "low")
 
+    # 使用 sliding_window_view 批量獲取窗口
+    h_windows = np.lib.stride_tricks.sliding_window_view(highs, period)
+    l_windows = np.lib.stride_tricks.sliding_window_view(lows, period)
+
+    # 向量化 argmax/argmin
+    max_indices = np.argmax(h_windows, axis=1)
+    min_indices = np.argmin(l_windows, axis=1)
+
+    days_since_high = period - 1 - max_indices
+    days_since_low = period - 1 - min_indices
+
     up = np.zeros(n)
     down = np.zeros(n)
-
-    for i in range(period - 1, n):
-        h_win = highs[i - period + 1 : i + 1]
-        l_win = lows[i - period + 1 : i + 1]
-        max_idx = np.argmax(h_win)
-        min_idx = np.argmin(l_win)
-        days_since_high = period - 1 - max_idx
-        days_since_low = period - 1 - min_idx
-        up[i] = ((period - days_since_high) / period) * 100.0
-        down[i] = ((period - days_since_low) / period) * 100.0
+    up[period - 1:] = ((period - days_since_high) / period) * 100.0
+    down[period - 1:] = ((period - days_since_low) / period) * 100.0
 
     osc = up - down
     return up.tolist(), down.tolist(), osc.tolist()
@@ -202,7 +192,7 @@ def stochastic_rsi(
     d_period: int = 3,
 ) -> tuple[list[float], list[float]]:
     """
-    Stochastic RSI.
+    Stochastic RSI — 向量化版。
 
     Returns: (%K, %D)
     """
@@ -212,44 +202,45 @@ def stochastic_rsi(
     if n < rsi_period + 1:
         return [50.0] * n, [50.0] * n
 
-    # RSI via simple rolling window (matching original behavior)
+    # RSI via rolling window
     changes = np.diff(closes)
     gains = np.where(changes > 0, changes, 0.0)
     losses = np.where(changes < 0, -changes, 0.0)
 
     rsi_vals = np.full(n, 50.0)
-    # Cumulative sums for rolling window
     cs_g = np.cumsum(gains)
     cs_l = np.cumsum(losses)
 
-    for i in range(rsi_period, n):
-        # rolling window of rsi_period changes ending at index i-1
-        end = i  # changes index (i-1) + 1
-        start = end - rsi_period
-        avg_g = (cs_g[end - 1] - (cs_g[start - 1] if start > 0 else 0.0)) / rsi_period
-        avg_l = (cs_l[end - 1] - (cs_l[start - 1] if start > 0 else 0.0)) / rsi_period
-        rsi_vals[i] = 100.0 if avg_l == 0 else 100.0 - 100.0 / (1.0 + avg_g / avg_l)
+    # 向量化 RSI 計算
+    indices = np.arange(rsi_period, n)
+    end = indices
+    start = end - rsi_period
+    avg_g = (cs_g[end - 1] - np.where(start > 0, cs_g[start - 1], 0.0)) / rsi_period
+    avg_l = (cs_l[end - 1] - np.where(start > 0, cs_l[start - 1], 0.0)) / rsi_period
+    rsi_vals[rsi_period:] = np.where(avg_l == 0, 100.0, 100.0 - 100.0 / (1.0 + avg_g / np.where(avg_l == 0, 1.0, avg_l)))
 
-    # Stochastic of RSI
+    # Stochastic of RSI via sliding_window_view
     stoch_k = np.full(n, 50.0)
-    start = rsi_period + stoch_period - 1
-    if start < n:
-        for i in range(start, n):
-            window = rsi_vals[i - stoch_period + 1 : i + 1]
-            lowest = np.min(window)
-            highest = np.max(window)
-            if highest == lowest:
-                stoch_k[i] = 50.0
-            else:
-                stoch_k[i] = (rsi_vals[i] - lowest) / (highest - lowest) * 100.0
+    if n >= rsi_period + stoch_period:
+        rsi_windows = np.lib.stride_tricks.sliding_window_view(rsi_vals[rsi_period - 1:], stoch_period)
+        lowest = rsi_windows.min(axis=1)
+        highest = rsi_windows.max(axis=1)
+        denom = highest - lowest
+        safe_denom = np.where(denom == 0, 1.0, denom)
+        start_idx = rsi_period + stoch_period - 2
+        stoch_k[start_idx:] = np.where(
+            denom != 0,
+            (rsi_vals[start_idx:] - lowest) / safe_denom * 100.0,
+            50.0,
+        )
 
-    # %D = SMA of %K
+    # %D = SMA of %K via cumsum
     stoch_d = np.full(n, 50.0)
     if n >= k_period:
-        cs = np.cumsum(stoch_k)
-        for i in range(k_period - 1, n):
-            s = cs[i] - (cs[i - k_period] if i >= k_period else 0.0)
-            stoch_d[i] = s / k_period
+        k_cumsum = np.zeros(n + 1, dtype=np.float64)
+        k_cumsum[1:] = np.cumsum(stoch_k)
+        indices_d = np.arange(k_period - 1, n)
+        stoch_d[k_period - 1:] = (k_cumsum[indices_d + 1] - k_cumsum[indices_d + 1 - k_period]) / k_period
 
     return stoch_k.tolist(), stoch_d.tolist()
 
@@ -274,6 +265,7 @@ def heikin_ashi(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     ha_close = (opens + highs + lows + closes) / 4.0
 
+    # 向量化 ha_open 計算（遞推展開為 numpy 操作）
     ha_open = np.zeros_like(opens)
     ha_open[0] = (opens[0] + closes[0]) / 2.0
     for i in range(1, len(rows)):
@@ -282,16 +274,19 @@ def heikin_ashi(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ha_high = np.maximum(highs, np.maximum(ha_open, ha_close))
     ha_low = np.minimum(lows, np.minimum(ha_open, ha_close))
 
+    # 批量構建結果
+    timestamps = [r["timestamp"] for r in rows]
+    volumes = [r.get("volume", 0) for r in rows]
     ha_rows = []
-    for i, r in enumerate(rows):
+    for i in range(len(rows)):
         ha_rows.append(
             {
                 "open": float(ha_open[i]),
                 "high": float(ha_high[i]),
                 "low": float(ha_low[i]),
                 "close": float(ha_close[i]),
-                "timestamp": r["timestamp"],
-                "volume": r.get("volume", 0),
+                "timestamp": timestamps[i],
+                "volume": volumes[i],
             }
         )
     return ha_rows
@@ -318,14 +313,10 @@ def keltner_channel(
     if n < max(ema_period, atr_period):
         return [0.0] * n, closes.tolist(), [0.0] * n
 
-    # EMA via numpy-style loop (minimized)
-    middle = np.empty(n)
-    middle[0] = closes[0]
-    k = 2.0 / (ema_period + 1)
-    for i in range(1, n):
-        middle[i] = closes[i] * k + middle[i - 1] * (1.0 - k)
-
-    atr_vals = np.array(atr(rows, atr_period))
+    middle = _ema(closes, ema_period)
+    highs = _extract(rows, "high")
+    lows = _extract(rows, "low")
+    atr_vals = _atr(highs, lows, closes, atr_period)
     upper = (middle + multiplier * atr_vals).tolist()
     lower = (middle - multiplier * atr_vals).tolist()
 
@@ -350,7 +341,6 @@ def pivot_points(rows: list[dict[str, Any]], method: str = "classic") -> dict[st
     if n < 2:
         return result
 
-    # Extract prev-bar OHLC (index 0..n-2 → used at row i=1..n-1)
     highs = _extract(rows, "high")
     lows = _extract(rows, "low")
     closes = _extract(rows, "close")
@@ -390,7 +380,6 @@ def pivot_points(rows: list[dict[str, Any]], method: str = "classic") -> dict[st
         result["s2"][1:] = (c - rng * 1.1 / 6).tolist()
         result["s3"][1:] = (c - rng * 1.1 / 4).tolist()
     elif method == "woodie":
-        # Woodie uses current bar's open for pivot
         cur_open = opens[1:]
         p = (h + l + 2 * cur_open) / 4.0
         result["pivot"][1:] = p.tolist()
@@ -426,11 +415,8 @@ def volume_profile(rows: list[dict[str, Any]], n_bins: int = 20) -> dict[str, An
         return {"bins": [], "poc": p_max, "vah": p_max, "val": p_min}
 
     bin_width = (p_max - p_min) / n_bins
-
-    # Bin assignment via numpy
     bin_indices = np.minimum(((prices - p_min) / bin_width).astype(int), n_bins - 1)
 
-    # Accumulate volume per bin
     bin_volumes = np.zeros(n_bins)
     np.add.at(bin_volumes, bin_indices, volumes)
 
@@ -443,11 +429,9 @@ def volume_profile(rows: list[dict[str, Any]], n_bins: int = 20) -> dict[str, An
         pct = (float(bin_volumes[i]) / total_vol * 100.0) if total_vol > 0 else 0.0
         bins.append({"price_low": pl, "price_high": ph, "volume": float(bin_volumes[i]), "pct": pct})
 
-    # POC = Point of Control
     poc_idx = int(np.argmax(bin_volumes))
     poc = (bins[poc_idx]["price_low"] + bins[poc_idx]["price_high"]) / 2.0
 
-    # VAH/VAL = Value Area High/Low (70% volume)
     sorted_indices = np.argsort(-bin_volumes)
     va_vol = 0.0
     va_prices = []

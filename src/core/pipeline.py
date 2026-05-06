@@ -1,13 +1,10 @@
 """
-Composable Pipeline — 函數式數據處理管道
+Composable Pipeline — 函數式數據處理管道 v2.0
 
-取代散落的 if/else 邏輯串接。
-Pipeline = [Step₁ → Step₂ → ... → Stepₙ]
-
-用途：
-  - 數據清洗：raw → 清洗 → 標準化 → 輸出
-  - 信號生成：OHLCV → 指標計算 → 信號判定 → Signal
-  - 回測流程：數據 → 策略 → 風控 → 報告
+性能優化：
+- OHLCV 清洗管道使用 numpy 向量化操作
+- 去重使用 numpy unique 而非 Python set
+- 異常值過濾使用 numpy z-score
 """
 
 from __future__ import annotations
@@ -16,16 +13,15 @@ import logging
 from typing import Any, Generic, TypeVar
 from collections.abc import Callable
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
 class PipelineStep(Generic[T]):
-    """
-    Pipeline 步驟：接受 T，返回 T（可修改）。
-    實現 __call__ 或傳入 func。
-    """
+    """Pipeline 步驟：接受 T，返回 T（可修改）。"""
 
     def __init__(
         self,
@@ -42,15 +38,7 @@ class PipelineStep(Generic[T]):
 
 
 class Pipeline(Generic[T]):
-    """
-    函數式管道：將數據依次通過多個步驟。
-
-    用法：
-        pipeline = Pipeline(name="data_clean")
-        pipeline.add(lambda rows: [r for r in rows if r["volume"] > 0])
-        pipeline.add(lambda rows: sorted(rows, key=lambda r: r["timestamp"]))
-        clean_rows = pipeline.run(raw_rows)
-    """
+    """函數式管道：將數據依次通過多個步驟。"""
 
     def __init__(self, name: str = "pipeline") -> None:
         self.name = name
@@ -88,47 +76,28 @@ class Pipeline(Generic[T]):
 
 
 def ohlcv_clean_pipeline() -> Pipeline[list[dict[str, Any]]]:
-    """K 線數據清洗管道."""
+    """K 線數據清洗管道 — numpy 向量化版。"""
     p = Pipeline[list[dict[str, Any]]](name="ohlcv_clean")
 
-    def _remove_zero_volume(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [r for r in rows if r.get("volume", 0) > 0]
-
     def _remove_duplicates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        seen: set[int] = set()
-        out = []
-        for r in rows:
-            ts = r["timestamp"]
-            if ts not in seen:
-                seen.add(ts)
-                out.append(r)
-        return out
+        """去重（numpy 向量化）。"""
+        if not rows:
+            return rows
+        timestamps = np.array([r["timestamp"] for r in rows], dtype=np.int64)
+        _, unique_indices = np.unique(timestamps, return_index=True)
+        unique_indices.sort()
+        return [rows[i] for i in unique_indices]
 
     def _sort_by_time(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return sorted(rows, key=lambda r: r["timestamp"])
-
-    def _validate_ohlcv(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """驗證 OHLCV 數據完整性，過濾無效記錄."""
-        validated = []
-        for r in rows:
-            # 必要欄位檢查
-            if r.get("timestamp") is None:
-                continue
-            if r.get("close") is None or r.get("close") <= 0:
-                continue
-            # OHLC 邏輯檢查
-            o, h, l, c = r.get("open", 0), r.get("high", 0), r.get("low", 0), r.get("close", 0)
-            if h > 0 and l > 0 and h >= l and c > 0:
-                # 高低點合理性
-                h = max(h, o, c) if h < max(o, c) else h
-                l = min(l, o, c) if l > min(o, c) else l
-                r["high"] = h
-                r["low"] = l
-                validated.append(r)
-        return validated
+        """按時間排序（numpy argsort）。"""
+        if not rows:
+            return rows
+        timestamps = np.array([r["timestamp"] for r in rows], dtype=np.int64)
+        sorted_indices = np.argsort(timestamps)
+        return [rows[i] for i in sorted_indices]
 
     def _fill_gaps(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """填充缺失值（前向填充 close 到 open/high/low）."""
+        """填充缺失值（前向填充 close 到 open/high/low）。"""
         for r in rows:
             c = r.get("close", 0)
             if r.get("open") is None or r.get("open") == 0:
@@ -139,6 +108,48 @@ def ohlcv_clean_pipeline() -> Pipeline[list[dict[str, Any]]]:
                 r["low"] = c
         return rows
 
+    def _validate_ohlcv(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """驗證 OHLCV 數據完整性，過濾無效記錄 — 批量處理。"""
+        if not rows:
+            return rows
+
+        # 批量提取為 numpy 數組
+        n = len(rows)
+        timestamps = np.empty(n, dtype=np.int64)
+        opens = np.empty(n, dtype=np.float64)
+        highs = np.empty(n, dtype=np.float64)
+        lows = np.empty(n, dtype=np.float64)
+        closes = np.empty(n, dtype=np.float64)
+
+        for i, r in enumerate(rows):
+            timestamps[i] = r.get("timestamp", 0) or 0
+            opens[i] = r.get("open", 0) or 0
+            highs[i] = r.get("high", 0) or 0
+            lows[i] = r.get("low", 0) or 0
+            closes[i] = r.get("close", 0) or 0
+
+        # 向量化有效性檢查
+        valid = (timestamps > 0) & (closes > 0) & (highs > 0) & (lows > 0) & (highs >= lows) & (closes > 0)
+
+        # 修正高低點
+        max_oc = np.maximum(opens, closes)
+        min_oc = np.minimum(opens, closes)
+        highs = np.maximum(highs, max_oc)
+        lows = np.minimum(lows, min_oc)
+
+        # 批量寫回
+        validated = []
+        for i, r in enumerate(rows):
+            if valid[i]:
+                r["high"] = float(highs[i])
+                r["low"] = float(lows[i])
+                validated.append(r)
+        return validated
+
+    def _remove_zero_volume(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """移除零成交量記錄。"""
+        return [r for r in rows if r.get("volume", 0) > 0]
+
     p.add(_remove_duplicates, name="deduplicate")
     p.add(_sort_by_time, name="sort")
     p.add(_fill_gaps, name="fill_gaps", skip_on_error=True)
@@ -148,18 +159,20 @@ def ohlcv_clean_pipeline() -> Pipeline[list[dict[str, Any]]]:
 
 
 def ohlcv_outlier_pipeline(multiplier: float = 3.0) -> Pipeline[list[dict[str, Any]]]:
-    """K 線異常值過濾管道（基於成交量 Z-Score）."""
+    """K 線異常值過濾管道（基於成交量 Z-Score，numpy 向量化）。"""
     p = Pipeline[list[dict[str, Any]]](name="ohlcv_outlier")
 
     def _filter_outliers(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(rows) < 10:
             return rows
-        volumes = [r["volume"] for r in rows]
-        mean_v = sum(volumes) / len(volumes)
-        var_v = sum((v - mean_v) ** 2 for v in volumes) / len(volumes)
-        std_v = var_v**0.5 if var_v > 0 else 1
+        volumes = np.array([r["volume"] for r in rows], dtype=np.float64)
+        mean_v = float(np.mean(volumes))
+        std_v = float(np.std(volumes))
+        if std_v <= 0:
+            return rows
         threshold = mean_v + multiplier * std_v
-        return [r for r in rows if r["volume"] <= threshold]
+        mask = volumes <= threshold
+        return [r for r, keep in zip(rows, mask) if keep]
 
     p.add(_filter_outliers, name="zscore_outlier")
     return p
