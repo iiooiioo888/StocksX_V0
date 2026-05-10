@@ -2,7 +2,7 @@
 # 安裝：pip install -r trading/requirements.txt
 
 # 核心
-aiohttp==3.9.1
+aiohttp==3.13.5
 websockets==12.0
 pyyaml==6.0.1
 
