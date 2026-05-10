@@ -52,7 +52,7 @@ dependencies = [
     # 加密貨幣交易所 API
     "ccxt>=4.2.0",
     # 股票數據
-    "yfinance>=0.2.36",
+    "yfinance>=1.2.2",
     # HTTP 客戶端
     "requests>=2.31.0",
     "aiohttp>=3.9.0",
